@@ -19,3 +19,4 @@
 {"t":"2026-06-28T08:08:44.743Z","ev":"verify.attempt","id":"cd \"c:/users/ennvoy.lin/documents/我的終端機\" && echo \"=== vitest run ===\" && npx vitest run 2>&1 | tail echo \"exit:${pipestatus[0]}\"","sig":"ok","exit":0}
 {"t":"2026-06-28T08:09:25.849Z","ev":"checkpoint","id":"P-1","phase":"green","note":"scaffold complete: tsc/build/7 vitest tests all green; IPC contract + StateStore + single-instance + security baseline + perf hooks in place"}
 {"t":"2026-06-28T08:09:26.513Z","ev":"verify.attempt","id":"node \"$userprofile/.claude/skills/flow-toolkit/flow-state.mjs\" checkpoint p-1 green \"scaffold complete: tsc/build/7 vitest tests all green; ipc contract + statestore + single-instance + security basel","sig":"ok","exit":0}
+{"t":"2026-06-28T08:19:25.280Z","ev":"task.transition","id":"P-1","from":"delivered","to":"delivered"}
