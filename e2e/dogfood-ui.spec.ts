@@ -7,7 +7,7 @@ import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { launchApp, stubFolderPicker, addWorkspaceViaUI } from './electronApp';
 
-const shotDir = process.env.PD_SHOT_DIR || process.cwd();
+const shotDir = process.env.PD_SHOT_DIR || join(process.cwd(), 'test-results'); // gitignored，避免截圖污染 repo
 const shot = (n: string): string => join(shotDir, n);
 
 test('dogfood：自訂標題列 + 編輯器切換鈕 + git 線圖', async () => {

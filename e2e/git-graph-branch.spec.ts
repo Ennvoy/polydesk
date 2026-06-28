@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchApp, stubFolderPicker, addWorkspaceViaUI } from './electronApp';
 
-const shotDir = process.env.PD_SHOT_DIR || process.cwd();
+const shotDir = process.env.PD_SHOT_DIR || join(process.cwd(), 'test-results'); // gitignored，避免截圖污染 repo
 const git = (cwd: string, ...args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' });
 function commit(cwd: string, file: string, content: string, msg: string): void {
   writeFileSync(join(cwd, file), content);
