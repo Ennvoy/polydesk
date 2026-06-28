@@ -28,6 +28,7 @@ import {
   withPathspecs,
 } from './gitSafeArgs';
 import { enqueue } from './gitSerialQueue';
+import { buildSpawnEnv } from '../security/spawnEnv';
 
 const GIT_BIN = 'git';
 const MAX_BUFFER = 64 * 1024 * 1024;
@@ -196,7 +197,9 @@ export class GitService {
     return new Promise((resolve, reject) => {
       const options: ExecFileOptionsWithBufferEncoding = {
         cwd: opts.cwd,
-        env: { ...process.env, ...(opts.env ?? {}) },
+        // REQ-SEC-002：白名單最小 env（不漏繼承的 GIT_EXTERNAL_DIFF/GIT_SSH_COMMAND/GIT_ASKPASS/
+        // GIT_CONFIG_*/機密——其中 GIT_EXTERNAL_DIFF 在 diff 可達 RCE），再疊 readEnv/writeEnv 的 GIT_* 硬化。
+        env: { ...buildSpawnEnv(), ...(opts.env ?? {}) },
         timeout: opts.timeoutMs ?? GIT_LOCAL_TIMEOUT_MS,
         windowsHide: true,
         maxBuffer: MAX_BUFFER,

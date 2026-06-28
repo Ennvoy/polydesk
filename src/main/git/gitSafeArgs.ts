@@ -86,6 +86,13 @@ export function writeEnv(): NodeJS.ProcessEnv {
   return {
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_TERMINAL_PROMPT: '0',
+    // X-4/REQ-SCM-009：關 fsmonitor。惡意 repo-local .git/config 的 core.fsmonitor=<cmd> 會在 index
+    // refresh（stage/commit/checkout/stash…）時被 git 執行＝一鍵 RCE；GIT_CONFIG_NOSYSTEM/GLOBAL 管不到
+    // repo-local，唯 -c 或 env-config 能覆蓋。用 env-config（與 -c 同最高優先序）覆蓋，免改各 write 方法 argv。
+    // 不關 hooks：工作區加入＝已信任（decision TRUST-MODEL），commit/checkout 跑 repo hooks 屬預期行為。
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'core.fsmonitor',
+    GIT_CONFIG_VALUE_0: 'false',
   };
 }
 

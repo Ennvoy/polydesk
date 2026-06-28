@@ -125,7 +125,7 @@
       conflictZone：src/renderer/a11y/、tests/a11y/
       verify：Playwright 純鍵盤走完新增工作區→開檔→存檔主路徑，焦點順序與 aria 正確（對齊 REQ-E2E-011）；axe 掃描無嚴重違規。
 
-- [ ] **X-4 安全硬化 pass（spawnEnv 白名單 + CSP/window 旗標稽核 + 終端機/git env 機密衛生）**
+- [x] **X-4 安全硬化 pass（spawnEnv 白名單 + CSP/window 旗標稽核 + 終端機/git env 機密衛生）**
       story：稽核並補齊——spawn 子程序傳白名單最小環境（剔除無關 `GIT_*`/無關機密）；複核 renderer contextIsolation/sandbox/CSP/攔外開連結；複核終端機 escape 硬化（OSC 52/8、標題、回灌）與 git argv 硬化確實生效；明文威脅模型對齊。（app 不做 Playwright 接線，故無「接線 env 衛生」項。）
       reqRefs：REQ-SEC-001/002/003、REQ-TERM-008、REQ-SCM-009
       blockedBy：F-3、F-7

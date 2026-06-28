@@ -19,6 +19,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { Transform, type TransformCallback } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { buildSpawnEnv } from '../security/spawnEnv';
 import {
   createMessageConnection,
   StreamMessageReader,
@@ -258,7 +259,8 @@ function defaultRunInstall(file: string, args: string[]): Promise<void> {
     nodeExecFile(
       file,
       args,
-      { cwd: homedir(), windowsHide: true, timeout: INSTALL_TIMEOUT_MS, shell: false },
+      // REQ-SEC-002：安裝器（npm/pip/go）會跑 postinstall 任意腳本 → 給白名單最小 env，不漏機密/注入向量。
+      { cwd: homedir(), env: buildSpawnEnv(), windowsHide: true, timeout: INSTALL_TIMEOUT_MS, shell: false },
       (err) => (err ? rej(err) : res()),
     );
   });
@@ -486,7 +488,8 @@ export class LspManager {
     try {
       child = this.spawn(info.command, desc.args, {
         cwd: wsPath,
-        env: { ...process.env, GOTOOLCHAIN: 'local' }, // A1：降低 go toolchain 自動下載執行副作用
+        // A1 + REQ-SEC-002：白名單最小 env（不漏繼承 GIT_*/機密/注入向量給半可信工作區的語言伺服器），疊 GOTOOLCHAIN。
+        env: buildSpawnEnv({ GOTOOLCHAIN: 'local' }),
       });
     } catch {
       return Promise.resolve(null);

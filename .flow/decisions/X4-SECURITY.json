@@ -1,0 +1,8 @@
+{
+  "id": "X4-SECURITY",
+  "question": "",
+  "choice": "X-4：新增 src/main/security/spawnEnv.ts 白名單(buildSpawnEnv 給 git/lsp/搜尋/安裝)+denylist(sanitizeUserEnv 給 PTY)，修掉 git/lsp/pty 整包 process.env 洩漏(含 GIT_EXTERNAL_DIFF diff-RCE 向量)；write 路徑以 writeEnv env-config 關 fsmonitor(防一鍵 RCE)、不關 hooks(加入工作區=已信任 TRUST-MODEL，commit/checkout 跑 repo hooks 屬預期)；renderer 補權限 deny-all + CSP base-uri/frame-ancestors/form-action/object-src + isDev×app.isPackaged + will-redirect；terminal allowProposedApi=false + 不設 linkHandler。",
+  "why": "HIGH/MEDIUM 全修並以 tests/security 自動化守。接受 LOW 殘留(記錄不修)：DSR/DA 裝置回報(xterm 不可關、受限非攻擊者可控)、OSC52 8-bit C1(UTF-8 模式 inert)、meta-CSP 後備(header 為主防線)、shell 元字元分支名(已靠 shell:false 中和+測試)——皆已被其他層擋住，成本>邊際效益",
+  "by": "auto",
+  "at": "2026-06-28T18:45:46.054Z"
+}

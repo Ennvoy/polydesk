@@ -52,13 +52,16 @@ export const DEFAULT_TERMINAL_THEME: ITheme = {
 /** 產生單一 xterm 實例的安全初始化選項。 */
 export function createSecureTerminalOptions(theme: ITheme = DEFAULT_TERMINAL_THEME): ITerminalOptions {
   return {
-    allowProposedApi: true,
+    // 最小權限（REQ-TERM-008）：不啟用 xterm proposed/不穩定 API（現有 addon 不需要）。
+    allowProposedApi: false,
     fontFamily: TERMINAL_FONT_FAMILY,
     fontSize: 13,
     lineHeight: 1.2,
     cursorBlink: true,
     scrollback: 5000,
     // 不開 OSC52 剪貼簿寫入（不掛 clipboard addon）；視窗回報全關（防回灌注入）。
+    // 刻意「不設 linkHandler」：OSC 8 超連結因而保持 inert（不可點擊），杜絕惡意 PTY 以
+    // ESC]8;;javascript:/file: 觸發危險導覽。日後若要可點連結，linkHandler 內 SHALL 只放行 http/https。
     windowOptions: { ...SECURE_WINDOW_OPTIONS },
     theme,
   };

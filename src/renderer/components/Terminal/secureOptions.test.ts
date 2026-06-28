@@ -28,4 +28,11 @@ describe('xterm 安全選項（F-3-A3 escape 硬化）', () => {
     // 不應出現任何 clipboard/OSC52 寫入相關設定（核心 xterm 不處理、亦不掛 addon）
     expect(JSON.stringify(opts).toLowerCase()).not.toContain('clipboard');
   });
+
+  it('X-4：allowProposedApi 為 false（最小權限），且不設 linkHandler（OSC 8 連結保持 inert）', () => {
+    const opts = createSecureTerminalOptions();
+    expect(opts.allowProposedApi).toBe(false);
+    // 不啟用任何 OSC 8 連結處理器 → 惡意 PTY 無法以 ESC]8;;javascript:/file: 觸發危險導覽
+    expect('linkHandler' in opts).toBe(false);
+  });
 });

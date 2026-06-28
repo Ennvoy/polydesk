@@ -16,6 +16,7 @@ import * as pty from 'node-pty';
 import type { IpcMain } from 'electron';
 import { emit, emitRaw } from '../ipc/broadcast';
 import { PTY_DATA, PTY_WRITE } from '../../shared/channels';
+import { sanitizeUserEnv } from '../security/spawnEnv';
 import type { ShellKind, TermState } from '../../shared/types';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
 import type { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
@@ -219,7 +220,9 @@ export class PtyManager {
       cols: 80,
       rows: 24,
       cwd: ws.path,
-      env: process.env,
+      // REQ-SEC-002：使用者 shell 保留其完整環境，只剔除 Electron/Node 注入向量
+      // （ELECTRON_RUN_AS_NODE/NODE_OPTIONS），避免 shell rc/profile 自動執行碼濫用。
+      env: sanitizeUserEnv(),
       encoding: null,
     });
 

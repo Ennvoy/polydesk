@@ -16,7 +16,9 @@ mark('main:start'); // 冷啟動量測起點（REQ-PERF-001）
 const userDataOverride = process.env['POLYDESK_USER_DATA'];
 if (userDataOverride) app.setPath('userData', userDataOverride);
 
-const isDev = !!process.env['ELECTRON_RENDERER_URL'];
+// REQ-SEC-001：dev 判定須與 app.isPackaged 交叉，確保打包正式版即使被帶 ELECTRON_RENDERER_URL 啟動，
+// 也永遠走 prod 嚴格分支（嚴 CSP + 擋導航），不被外部 URL 接管殼。
+const isDev = !app.isPackaged && !!process.env['ELECTRON_RENDERER_URL'];
 
 let mainWindow: BrowserWindow | null = null;
 let store: StateStore;
@@ -30,12 +32,15 @@ function stateFilePath(): string {
 function applyContentSecurityPolicy(): void {
   const csp = isDev
     ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws://localhost:* http://localhost:*; worker-src 'self' blob:;"
-    : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self';";
+    : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none';";
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] },
     });
   });
+  // REQ-SEC-001：app 自有 UI 不需要任何 web 權限（地理位置/相機麥克風/通知/剪貼簿讀…）→ 一律拒絕。
+  session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
+  session.defaultSession.setPermissionCheckHandler(() => false);
 }
 
 function createWindow(): void {
@@ -79,12 +84,14 @@ function createWindow(): void {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
-  // 限制 will-navigate：dev 只允許導航回 renderer URL，prod 一律擋
-  mainWindow.webContents.on('will-navigate', (event, url) => {
+  // 限制導航：dev 只允許回 renderer URL，prod 一律擋。will-redirect 一併綁（重導鏈不觸發 will-navigate）。
+  const blockNavigation = (event: Electron.Event, url: string): void => {
     const rendererUrl = process.env['ELECTRON_RENDERER_URL'];
     if (isDev && rendererUrl && url.startsWith(rendererUrl)) return;
     event.preventDefault();
-  });
+  };
+  mainWindow.webContents.on('will-navigate', blockNavigation);
+  mainWindow.webContents.on('will-redirect', blockNavigation);
 
   // 視窗位置/大小持久化（REQ-PERSIST-003）
   mainWindow.on('close', () => {
