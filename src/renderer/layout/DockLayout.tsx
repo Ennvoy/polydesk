@@ -26,7 +26,7 @@ import {
 const SIDEBAR_ID = 'sidebar';
 const TERMINAL_ID = 'terminal';
 const EDITOR_ID = 'editor';
-const TOGGLEABLE: readonly string[] = [SIDEBAR_ID, TERMINAL_ID];
+const TOGGLEABLE: readonly string[] = [SIDEBAR_ID, EDITOR_ID, TERMINAL_ID];
 
 // 模組級單例 api，供 F-10 / features 取用（toggle/maximize/reset/開檔聚焦編輯區）。
 let layoutApi: DockviewApi | null = null;
@@ -61,6 +61,22 @@ function addTerminal(api: DockviewApi): void {
     });
   } else {
     api.addPanel({ id: TERMINAL_ID, component: 'terminal', title: '終端機' });
+  }
+}
+
+function addEditor(api: DockviewApi): void {
+  if (api.getPanel(EDITOR_ID)) return;
+  // 編輯器重新顯示：擺在側欄右側（無側欄則接在現有第一個 panel 旁，再無則獨立）。
+  const ref = api.getPanel(SIDEBAR_ID) ?? api.panels[0];
+  if (ref) {
+    api.addPanel({
+      id: EDITOR_ID,
+      component: 'editor',
+      title: '編輯器',
+      position: { direction: 'right', referencePanel: ref.id },
+    });
+  } else {
+    api.addPanel({ id: EDITOR_ID, component: 'editor', title: '編輯器' });
   }
 }
 
@@ -118,6 +134,7 @@ export function DockLayout(): React.JSX.Element {
   const controllerRef = useRef<LayoutPersistController | null>(null);
   const [toolbar, setToolbar] = useState<ToolbarState>({
     sidebarVisible: true,
+    editorVisible: true,
     terminalVisible: true,
     maximized: false,
   });
@@ -126,7 +143,7 @@ export function DockLayout(): React.JSX.Element {
   const syncToolbar = useCallback(() => {
     const api = layoutApi;
     if (!api) return;
-    setToolbar(deriveToolbarState(api, { sidebar: SIDEBAR_ID, terminal: TERMINAL_ID }));
+    setToolbar(deriveToolbarState(api, { sidebar: SIDEBAR_ID, editor: EDITOR_ID, terminal: TERMINAL_ID }));
   }, []);
 
   const onReady = useCallback(
@@ -209,6 +226,13 @@ export function DockLayout(): React.JSX.Element {
     syncToolbar();
   }, [syncToolbar]);
 
+  const onToggleEditor = useCallback(() => {
+    const api = layoutApi;
+    if (!api) return;
+    togglePanel(api, EDITOR_ID, () => addEditor(api));
+    syncToolbar();
+  }, [syncToolbar]);
+
   const onToggleTerminal = useCallback(() => {
     const api = layoutApi;
     if (!api) return;
@@ -251,6 +275,17 @@ export function DockLayout(): React.JSX.Element {
           style={toolbarBtnStyle}
         >
           側欄
+        </button>
+        <button
+          type="button"
+          className={`pd-btn${toolbar.editorVisible ? ' pd-btn-primary' : ''}`}
+          aria-label="切換編輯器顯示"
+          aria-pressed={toolbar.editorVisible}
+          title="顯示/隱藏編輯器"
+          onClick={onToggleEditor}
+          style={toolbarBtnStyle}
+        >
+          編輯器
         </button>
         <button
           type="button"

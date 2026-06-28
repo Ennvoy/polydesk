@@ -258,13 +258,18 @@ describe('A1 — 顯隱單一真相 + 去重防 duplicate id', () => {
       { id: 'sidebar', component: 'sidebar' },
       { id: 'terminal', component: 'terminal' },
     ]);
-    let st = deriveToolbarState(api, { sidebar: 'sidebar', terminal: 'terminal' });
+    const ids = { sidebar: 'sidebar', editor: 'editor', terminal: 'terminal' };
+    let st = deriveToolbarState(api, ids);
     expect(st.sidebarVisible).toBe(api.getPanel('sidebar') != null);
+    expect(st.editorVisible).toBe(api.getPanel('editor') != null);
     expect(st.terminalVisible).toBe(api.getPanel('terminal') != null);
     togglePanel(api, 'sidebar', addSidebar(api)); // 隱藏 sidebar
-    st = deriveToolbarState(api, { sidebar: 'sidebar', terminal: 'terminal' });
+    togglePanel(api, 'editor', () => api.addPanel({ id: 'editor', component: 'editor' })); // 隱藏 editor
+    st = deriveToolbarState(api, ids);
     expect(st.sidebarVisible).toBe(false);
     expect(st.sidebarVisible).toBe(api.getPanel('sidebar') != null);
+    expect(st.editorVisible).toBe(false);
+    expect(st.editorVisible).toBe(api.getPanel('editor') != null);
   });
 });
 

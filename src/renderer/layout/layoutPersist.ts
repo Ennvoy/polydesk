@@ -210,15 +210,20 @@ export function deriveUiState(
 
 export interface ToolbarState {
   sidebarVisible: boolean;
+  editorVisible: boolean;
   terminalVisible: boolean;
   maximized: boolean;
 }
 
 /** A1：工具列視覺態一律由 dockview getPanel 直接推導（不依賴獨立 boolean，避免狀態機去同步）。 */
-export function deriveToolbarState(api: DockApiLike, ids: { sidebar: string; terminal: string }): ToolbarState {
+export function deriveToolbarState(
+  api: DockApiLike,
+  ids: { sidebar: string; editor: string; terminal: string },
+): ToolbarState {
   const term = api.getPanel(ids.terminal);
   return {
     sidebarVisible: api.getPanel(ids.sidebar) != null,
+    editorVisible: api.getPanel(ids.editor) != null,
     terminalVisible: term != null,
     maximized: term ? safeIsMaximized(term) : false,
   };
