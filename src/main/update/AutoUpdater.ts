@@ -39,3 +39,13 @@ export function registerUpdateHandlers(ipc: IpcMain): void {
     return { ok: true } as const;
   });
 }
+
+/**
+ * 啟動時觸發一次更新檢查（REQ-NFR-004）。electron-updater 不會自行輪詢——必須有人呼叫，
+ * 否則 autoDownload 永無作用、整條更新流程休眠。dev/未打包無 provider → 優雅失敗、不擾使用者。
+ */
+export function checkForUpdatesOnStartup(): void {
+  void autoUpdater.checkForUpdatesAndNotify().catch(() => {
+    /* 無 provider / 開發期 / 網路問題：靜默（手動 update:check 仍可用） */
+  });
+}

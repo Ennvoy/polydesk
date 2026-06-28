@@ -141,13 +141,21 @@ export function SourceControlPanel(): React.JSX.Element {
     void refresh();
   }, [refresh]);
 
-  // 訂閱 main 背景監控廣播（REQ-MON-005）：該工作區 git 狀態變動自動刷新（不自設 timer）。
+  // REQ-MON-005：訂閱該工作區檔案系統變動 → 去抖自動刷新 git 狀態（工作樹變動即反映，不自設 timer/輪詢）。
+  // 用 fs:change（FileWatcher 真會發；舊版誤訂從不觸發的 git:statusUpdate → 背景刷新靜默失效）。
   useEffect(() => {
-    if (!wsId) return undefined;
-    return ipc.events.git.statusUpdate((p) => {
-      if (p.wsId === wsId) void refresh();
+    if (!wsId || !status?.isRepo) return undefined;
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const off = ipc.events.fs.change((p) => {
+      if (p.wsId !== wsId) return;
+      if (t) clearTimeout(t);
+      t = setTimeout(() => void refresh(), 300); // 去抖：多檔變動合併成一次刷新
     });
-  }, [wsId, refresh]);
+    return () => {
+      if (t) clearTimeout(t);
+      off();
+    };
+  }, [wsId, status?.isRepo, refresh]);
 
   // 切到歷史/分支頁時載入對應資料。
   useEffect(() => {

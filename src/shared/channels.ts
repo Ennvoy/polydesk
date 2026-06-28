@@ -53,13 +53,10 @@ export const INVOKE_CHANNELS = [
 
 export const EVENT_CHANNELS = [
   'claude:status',
-  'git:statusUpdate',
   'fs:change',
-  'fs:externalEdit',
   'pty:exit',
   'search:result',
   'lsp:diagnostics',
-  'workspace:lost',
   'update:progress',
   'window:maximizedChange',
 ] as const satisfies readonly EventChannel[];

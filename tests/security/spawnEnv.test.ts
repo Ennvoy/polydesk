@@ -19,7 +19,7 @@ const DANGEROUS = {
   RANDOM_INHERITED: 'r',
 };
 
-describe('buildSpawnEnv（白名單最小 env，給 git/lsp/搜尋/安裝）', () => {
+describe('buildSpawnEnv（白名單最小 env，給 git/lsp/LSP安裝；ripgrep/probe 各自更窄白名單）', () => {
   const source = {
     PATH: '/usr/bin',
     PATHEXT: '.EXE',
@@ -73,5 +73,12 @@ describe('sanitizeUserEnv（PTY denylist，給使用者 shell）', () => {
     expect(env.GIT_SSH_COMMAND).toBe('user-own-ssh');
     expect(env.MY_TOKEN).toBe('t');
     expect(env.CUSTOM_VAR).toBe('v');
+  });
+
+  it('denylist 大小寫不敏感（Windows env 名不分大小寫，不可被 node_options 繞過）', () => {
+    const env = sanitizeUserEnv({}, { node_options: '--require x', Electron_Run_As_Node: '1', PATH: '/b' });
+    expect(env.node_options).toBeUndefined();
+    expect(env.Electron_Run_As_Node).toBeUndefined();
+    expect(env.PATH).toBe('/b');
   });
 });

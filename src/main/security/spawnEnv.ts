@@ -1,7 +1,9 @@
 // 子程序環境變數清洗（REQ-SEC-002 單一真相）。X-4 安全硬化。
 //
 // 兩種策略，對應兩類 spawn：
-//  1) buildSpawnEnv —— app「主動呼叫的工具」（git / 語言伺服器 / ripgrep / 安裝器）。白名單為主：
+//  1) buildSpawnEnv —— app「主動呼叫的工具」（git / 語言伺服器 / LSP 安裝器）。白名單為主：
+//     （註：ripgrep 的 SearchService.buildEnv 與程序探測的 processProbe.safeProbeEnv 刻意各自維持
+//      「更窄」的最小白名單、不共用本函式——least-privilege；其安全性各自成立、見各自註解。）
 //     只給已知安全的基礎環境（PATH/HOME/locale/SSH-agent…），其餘一律因不在白名單而排除。
 //     這天然擋掉可達 RCE 的繼承變數：GIT_EXTERNAL_DIFF / GIT_SSH_COMMAND / GIT_PROXY_COMMAND /
 //     GIT_ASKPASS / GIT_CONFIG_* / RIPGREP_CONFIG_PATH，以及 *_TOKEN/*_SECRET 機密與
@@ -40,8 +42,9 @@ export function buildSpawnEnv(
   return { ...out, ...extra };
 }
 
-/** PTY denylist：剔除會被 shell 自動執行碼濫用的 Electron/Node 注入向量。 */
-const USER_ENV_DENY = new Set(['ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS']);
+/** PTY denylist：剔除會被 shell 自動執行碼濫用的 Electron/Node 注入向量。
+ *  以小寫存放並比對：Windows env 名稱不分大小寫，避免 node_options/Electron_Run_As_Node 之類大小寫繞過。 */
+const USER_ENV_DENY = new Set(['electron_run_as_node', 'node_options']);
 
 /**
  * 使用者 shell 環境清洗（PTY）：保留使用者完整環境，只移除 Electron/Node 程序注入向量。
@@ -54,7 +57,7 @@ export function sanitizeUserEnv(
 ): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(source)) {
-    if (v === undefined || USER_ENV_DENY.has(k)) continue;
+    if (v === undefined || USER_ENV_DENY.has(k.toLowerCase())) continue;
     out[k] = v;
   }
   return { ...out, ...extra };

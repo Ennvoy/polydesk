@@ -13,7 +13,9 @@ const N_SWITCH = 12;
 const N_FILE = 8;
 const N_KEY = 20;
 const N_IDLE_WS = 10;
-const IDLE_WINDOW_MS = 8000;
+// 量測窗須涵蓋 ≥1 個完整 poll 週期才測得到監控成本：監控自適應間隔 = base(5s)*ceil(n/4)，
+// n=10 → 15s。8s 窗會落在兩輪之間的空檔 → 假綠。設 18s（>15s）確保窗內至少發生一次列舉。
+const IDLE_WINDOW_MS = 18000;
 
 const BUDGET = { coldStart: 3000, wsSwitch: 200, fileOpen: 500, keyLatency: 50, idleCpuPct: 10 };
 
@@ -122,11 +124,12 @@ test('REQ-PERF-002/003/004 切換 / 開檔 / 按鍵 p95', async () => {
   rmSync(dirB, { recursive: true, force: true });
   rmSync(userData, { recursive: true, force: true });
 
-  expect(sw.length, 'wsSwitch 樣本數').toBeGreaterThan(0);
+  // 樣本數下限（防 under-sampling 假綠：若埋點退化只 fire 一次，p95=該單一樣本即蒙混過關）。
+  expect(sw.length, 'wsSwitch 樣本數').toBeGreaterThanOrEqual(N_SWITCH);
   expect(p95(sw), 'wsSwitch p95').toBeLessThan(BUDGET.wsSwitch);
-  expect(fo.length, 'fileOpen 樣本數').toBeGreaterThan(0);
+  expect(fo.length, 'fileOpen 樣本數').toBeGreaterThanOrEqual(N_FILE);
   expect(p95(fo), 'fileOpen p95').toBeLessThan(BUDGET.fileOpen);
-  expect(kl.length, 'keyLatency 樣本數').toBeGreaterThan(0);
+  expect(kl.length, 'keyLatency 樣本數').toBeGreaterThanOrEqual(Math.floor(N_KEY * 0.6)); // echo 往返時序變異，留餘裕
   expect(p95(kl), 'keyLatency p95').toBeLessThan(BUDGET.keyLatency);
 });
 

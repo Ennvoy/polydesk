@@ -106,13 +106,10 @@ export interface StreamChannels {
 /** event 通道：main 主動 `webContents.send` 推播；payload 一律帶 wsId 以路由面板。 */
 export interface EventChannels {
   'claude:status': { wsId: string; status: ClaudeStatus };
-  'git:statusUpdate': { wsId: string; status: GitStatus };
   'fs:change': { wsId: string; path: string; kind: 'add' | 'change' | 'unlink' };
-  'fs:externalEdit': { wsId: string; path: string };
   'pty:exit': { termId: string; exitCode: number };
   'search:result': { searchId: string; hits: SearchHit[]; done: boolean; truncated: boolean };
   'lsp:diagnostics': { wsId: string; uri: string; diagnostics: unknown[] };
-  'workspace:lost': { wsId: string };
   'update:progress': { percent: number; state: 'checking' | 'downloading' | 'ready' };
   /** 視窗最大化狀態變動（自訂標題列同步 max/restore 圖示；OS 快捷鍵/雙擊也會觸發）。 */
   'window:maximizedChange': { maximized: boolean };

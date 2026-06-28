@@ -41,14 +41,6 @@ export function getMeasures(name: string): number[] {
   return [...(measures.get(name) ?? [])];
 }
 
-/** 取樣本 p95（最近鄰插值，樣本空回 NaN）。 */
-export function p95(samples: number[]): number {
-  if (samples.length === 0) return NaN;
-  const sorted = [...samples].sort((a, b) => a - b);
-  const idx = Math.ceil(sorted.length * 0.95) - 1;
-  return sorted[Math.min(sorted.length - 1, Math.max(0, idx))];
-}
-
 /** 清空所有 mark / measure（測試用）。 */
 export function clearPerf(): void {
   marks.clear();
