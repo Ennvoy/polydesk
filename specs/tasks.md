@@ -132,6 +132,14 @@
       conflictZone：src/main/security/（spawnEnv.ts）、tests/security/
       verify：自動化測試確認 spawn git 的 env 無接線機密、PTY 輸出/腳本不 echo 機密、CSP 阻擋外部腳本、OSC 52 預設關閉、惡意 commit message/分支名不注入。
 
+## Dogfood 回饋 refinements（實機試用後補強，已交付）
+
+判準：使用者實機 dogfood 後提的 UI 補強，對既有 feature 的 refinement；不走完整 ledger，仍照 TDD/build/真 e2e 驗證後 per-commit。
+
+- [x] **DF-1 git 歷史 commit 線圖**（swimlane lane 圖；commit dda9413）— GitLogEntry 增 parents（log `%P`）+ gitGraph.ts 純演算法（6 測試：線性/diamond/多 root/octopus/不變量/空）+ 每列 SVG 線段+節點渲染。
+- [x] **DF-2 版面工具列「編輯器」顯隱切換鈕**（commit 5208903）— DockLayout TOGGLEABLE 納入 editor + addEditor + layoutPersist ToolbarState.editorVisible，顯隱經 deriveUiState 持久化還原。
+- [x] **DF-3 自訂無框標題列**（VSCode 風；commit a4ffbc3）— frame:false + Menu.setApplicationMenu(null) + window:* IPC（min/max/close/isMaximized + maximizedChange）+ TitleBar（檔案/編輯/檢視 自訂選單 + 拖曳區 + 自畫視窗鈕）；e2e dogfood-ui 真 electron 截圖驗證（同時覆蓋 DF-1/DF-2）。
+
 ## Backlog（本輪不做）
 
 - [ ] 真 PASS/FAIL 測試結果回報管道（D-TEST-REPORT，v1 用可觀測訊號）
