@@ -1,0 +1,17 @@
+{
+  "_note": "X-1 效能 budget 基準快照（務實 N 量到綠；嚴謹 30 次 p95 + 多基準機留 ship 量一次）。",
+  "_measuredOn": "2026-06-29",
+  "_howToRun": "npm run build 後：npx playwright test e2e/perf.spec.ts（報告寫 test-results/perf-report.json）",
+  "machine": {
+    "cpu": "Intel(R) Core(TM) Ultra 5 235U",
+    "cores": 14,
+    "totalMemGB": 34
+  },
+  "metrics": {
+    "coldStart":  { "p95Ms": 1033, "n": 8,  "budgetMs": 3000, "pass": true, "req": "REQ-PERF-001" },
+    "wsSwitch":   { "p95Ms": 0,    "n": 13, "budgetMs": 200,  "pass": true, "req": "REQ-PERF-002", "note": "切已載入工作區為同步 setState，次毫秒" },
+    "fileOpen":   { "p95Ms": 56,   "n": 8,  "budgetMs": 500,  "pass": true, "req": "REQ-PERF-003" },
+    "keyLatency": { "p95Ms": 31,   "n": 21, "budgetMs": 50,   "pass": true, "req": "REQ-PERF-004", "note": "PTY 往返（輸入→shell echo→回流）" }
+  },
+  "idleCpu": { "pct": 0.4, "workspaces": 10, "windowMs": 8000, "budgetPct": 10, "pass": true, "req": "REQ-MON-006" }
+}

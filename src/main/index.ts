@@ -5,10 +5,12 @@ import { join } from 'node:path';
 import { StateStore } from './store/StateStore';
 import { registerIpcHandlers, type MainServices } from './ipc/router';
 import { setMainWindow, emit } from './ipc/broadcast';
-import { mark, measure } from '../shared/perf';
+import { mark, measure, getMeasures } from '../shared/perf';
 import { APP_NAME, STATE_FILE_NAME } from '../shared/constants';
 
 mark('main:start'); // 冷啟動量測起點（REQ-PERF-001）
+// 診斷 seam（X-1 perf harness 經 electronApp.evaluate 讀 main 埋點；非 IPC、不影響執行期）。
+(globalThis as unknown as { __pdPerf?: unknown }).__pdPerf = { getMeasures };
 
 // 測試/可攜：允許以 env 覆寫 userData 目錄（E2E 隔離狀態、不污染真實設定）。
 const userDataOverride = process.env['POLYDESK_USER_DATA'];

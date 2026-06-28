@@ -104,7 +104,7 @@
 
 判準：跨 feature 才能做、不屬任一 user story。
 
-- [ ] **X-1 效能 budget 量測調校（PERF 硬閘門）**
+- [x] **X-1 效能 budget 量測調校（PERF 硬閘門）**
       story：以程式 timestamp 埋點（非肉眼）記基準機規格、連續 30 次取 p95，量冷啟動 <3s、切已載入工作區 <200ms、開一般檔 <500ms、終端機按鍵 <50ms，並量 N=10 背景閒置監控總 CPU 低水位；未達標調校到綠。
       reqRefs：REQ-PERF-001/002/003/004、REQ-MON-006
       blockedBy：F-1、F-3、F-4、F-8
