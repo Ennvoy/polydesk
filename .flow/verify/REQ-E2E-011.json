@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-011",
+  "status": "pass",
+  "evidence": "e2e/a11y-keyboard.spec.ts：純鍵盤 tabTo 新增工作區→信任→開檔(treeitem Enter)→編輯→Ctrl+S，磁碟確認 KBD_SAVE 寫入；焦點順序與 aria 皆通",
+  "by": "evaluator",
+  "at": "2026-06-28T18:22:03.073Z"
+}

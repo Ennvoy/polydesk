@@ -95,6 +95,7 @@ export function EditorGroup(): React.JSX.Element {
   const suppressDirtyRef = useRef<Set<string>>(new Set());
   const selfWriteRef = useRef<Map<string, number>>(new Map());
   const pendingRevealRef = useRef<number | null>(null);
+  const lastFocusKeyRef = useRef<string | null>(null); // 上次因開檔/切分頁聚焦過的 key（避免背景 metadata 變動搶焦點）
 
   useEffect(() => {
     tabsRef.current = tabs;
@@ -301,8 +302,13 @@ export function EditorGroup(): React.JSX.Element {
       ed.revealLineInCenter(line);
       ed.setPosition({ lineNumber: line, column: 1 });
       ed.focus();
+    } else if (model && lastFocusKeyRef.current !== activeKey) {
+      // 開檔 / 切分頁（active key 變更）後聚焦編輯器：鍵盤可直接編輯（REQ-UI-004 / 開檔即可打字）。
+      // 僅 key 變更才 focus，避免背景 metadata（dirty/readonly）變動搶走他處焦點。
+      ed.focus();
     }
-  }, [active]);
+    lastFocusKeyRef.current = activeKey;
+  }, [active, activeKey]);
 
   // ── 分割並排：建立/銷毀次編輯器並綁同一 model（共享 dirty，REQ-EDIT-006） ──
   useEffect(() => {
@@ -384,39 +390,48 @@ export function EditorGroup(): React.JSX.Element {
 
   return (
     <div className="pd-editor-root">
-      <div className="pd-editor-tabs" role="tablist" aria-label="開啟的檔案">
-        {tabs.map((t) => (
-          <div
-            key={t.key}
-            role="tab"
-            tabIndex={0}
-            aria-selected={t.key === activeKey}
-            aria-label={`${t.name}${t.dirty ? '（未存檔）' : ''}`}
-            className={`pd-editor-tab${t.key === activeKey ? ' is-active' : ''}`}
-            title={t.path}
-            onMouseDown={() => setActiveKey(t.key)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                setActiveKey(t.key);
-              }
-            }}
-          >
-            <span className="pd-editor-tab-name">{t.name}</span>
-            {t.dirty && <span className="pd-editor-dot" aria-hidden="true" />}
-            <button
-              className="pd-editor-tab-close"
-              aria-label={`關閉 ${t.name}`}
-              title="關閉"
-              onClick={(e) => {
-                e.stopPropagation();
-                void requestClose(t.key);
+      <div className="pd-editor-tabs">
+        {/* role=tablist 只包 role=tab 子元素（a11y）；display:contents 不影響既有 flex 版面。 */}
+        <div className="pd-editor-tablist" role="tablist" aria-label="開啟的檔案" style={{ display: 'contents' }}>
+          {tabs.map((t) => (
+            <div
+              key={t.key}
+              role="tab"
+              tabIndex={0}
+              aria-selected={t.key === activeKey}
+              aria-label={`${t.name}${t.dirty ? '（未存檔）' : ''}（Delete 鍵關閉）`}
+              className={`pd-editor-tab${t.key === activeKey ? ' is-active' : ''}`}
+              title={t.path}
+              onMouseDown={() => setActiveKey(t.key)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setActiveKey(t.key);
+                } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                  e.preventDefault();
+                  void requestClose(t.key);
+                }
               }}
             >
-              ×
-            </button>
-          </div>
-        ))}
+              <span className="pd-editor-tab-name">{t.name}</span>
+              {t.dirty && <span className="pd-editor-dot" aria-hidden="true" />}
+              {/* 關閉：滑鼠用非聚焦 span（避免 role=tab 內嵌互動）；鍵盤改按 Delete（見 onKeyDown）。 */}
+              <span
+                className="pd-editor-tab-close"
+                role="presentation"
+                aria-hidden="true"
+                title="關閉（或按 Delete）"
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  void requestClose(t.key);
+                }}
+              >
+                ×
+              </span>
+            </div>
+          ))}
+        </div>
         <div className="pd-editor-tabs-spacer" />
         <button
           className="pd-editor-action"
@@ -434,8 +449,8 @@ export function EditorGroup(): React.JSX.Element {
       </div>
 
       <div className="pd-editor-panes">
-        <div ref={primaryElRef} className="pd-editor-pane" aria-label="編輯區" />
-        {split && <div ref={secondaryElRef} className="pd-editor-pane pd-editor-pane-split" aria-label="分割編輯區" />}
+        <div ref={primaryElRef} className="pd-editor-pane" role="group" aria-label="編輯區" />
+        {split && <div ref={secondaryElRef} className="pd-editor-pane pd-editor-pane-split" role="group" aria-label="分割編輯區" />}
         {tabs.length === 0 && (
           <div className="pd-editor-empty" aria-hidden="true">
             <p>尚未開啟檔案</p>

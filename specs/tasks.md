@@ -118,7 +118,7 @@
       conflictZone：electron-builder.yml、dev-app-update.yml、src/main/update/AutoUpdater.ts、build/afterPack.js
       verify：產出 Setup.exe 安裝後雙擊啟動終端機正常（不報 pty.node 找不到）；模擬新版本 latest.yml 觸發更新流程到 ready。
 
-- [ ] **X-3 a11y pass（aria 標籤 + 全域鍵盤導航 + 焦點順序）**
+- [x] **X-3 a11y pass（aria 標籤 + 全域鍵盤導航 + 焦點順序）**
       story：所有互動元素補 aria 標籤、焦點順序正確、可見 focus ring、全域鍵盤導航流暢；以鍵盤（不用滑鼠）完成「新增工作區→開檔→存檔」主路徑。
       reqRefs：REQ-UI-004、REQ-E2E-011
       blockedBy：F-1、F-4

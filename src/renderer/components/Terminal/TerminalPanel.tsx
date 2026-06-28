@@ -147,55 +147,62 @@ export function TerminalPanel(): React.JSX.Element {
       {/* 分頁列 + 新增/shell 切換 */}
       <div
         className="pd-panel-header pd-scroll"
-        role="tablist"
-        aria-label="終端機分頁"
         style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', overflowX: 'auto', textTransform: 'none' }}
       >
-        {wsTerms.map((t) => {
-          const isActive = t.termId === activeTermId;
-          return (
-            <div
-              key={t.termId}
-              className={`pd-row${isActive ? ' is-active' : ''}`}
-              role="tab"
-              aria-selected={isActive}
-              aria-label={`${SHELL_LABEL[t.shell]} 終端機${t.alive ? '' : '（已結束）'}`}
-              tabIndex={0}
-              onClick={() => setActiveByWs((prev) => ({ ...prev, [activeWs.id]: t.termId }))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setActiveByWs((prev) => ({ ...prev, [activeWs.id]: t.termId }));
-                }
-              }}
-              style={{ flexShrink: 0, paddingRight: 'var(--space-1)' }}
-            >
-              <span
-                aria-hidden
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: 'var(--radius-pill)',
-                  background: t.alive ? 'var(--success)' : 'var(--meta)',
-                  flexShrink: 0,
+        {/* role=tablist 只包 role=tab（a11y）；display:contents 不影響既有 flex 版面。＋/shell 選擇移出 tablist。 */}
+        <div role="tablist" aria-label="終端機分頁" style={{ display: 'contents' }}>
+          {wsTerms.map((t) => {
+            const isActive = t.termId === activeTermId;
+            return (
+              <div
+                key={t.termId}
+                className={`pd-row${isActive ? ' is-active' : ''}`}
+                role="tab"
+                aria-selected={isActive}
+                aria-label={`${SHELL_LABEL[t.shell]} 終端機${t.alive ? '' : '（已結束）'}（Delete 鍵關閉）`}
+                tabIndex={0}
+                onClick={() => setActiveByWs((prev) => ({ ...prev, [activeWs.id]: t.termId }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setActiveByWs((prev) => ({ ...prev, [activeWs.id]: t.termId }));
+                  } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                    e.preventDefault();
+                    void closeTerm(t);
+                  }
                 }}
-              />
-              <span>{SHELL_LABEL[t.shell]}</span>
-              <button
-                className="pd-term-tab-close"
-                aria-label={`關閉 ${SHELL_LABEL[t.shell]} 終端機`}
-                title="關閉"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void closeTerm(t);
-                }}
-                style={tabCloseStyle}
+                style={{ flexShrink: 0, paddingRight: 'var(--space-1)' }}
               >
-                ×
-              </button>
-            </div>
-          );
-        })}
+                <span
+                  aria-hidden
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: 'var(--radius-pill)',
+                    background: t.alive ? 'var(--success)' : 'var(--meta)',
+                    flexShrink: 0,
+                  }}
+                />
+                <span>{SHELL_LABEL[t.shell]}</span>
+                {/* 關閉：滑鼠用非聚焦 span（避免 role=tab 內嵌互動）；鍵盤改按 Delete。 */}
+                <span
+                  className="pd-term-tab-close"
+                  role="presentation"
+                  aria-hidden="true"
+                  title="關閉（或按 Delete）"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    void closeTerm(t);
+                  }}
+                  style={tabCloseStyle}
+                >
+                  ×
+                </span>
+              </div>
+            );
+          })}
+        </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-1)', flexShrink: 0 }}>
           <select

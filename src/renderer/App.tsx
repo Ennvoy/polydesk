@@ -17,7 +17,7 @@ function StatusBar(): React.JSX.Element {
       <span>Polydesk</span>
       <span style={{ color: 'var(--meta)' }}>·</span>
       <span>{active ? active.name : '未選工作區'}</span>
-      <span style={{ marginLeft: 'auto', color: 'var(--meta)' }}>工作區 {workspaces.length}</span>
+      <span style={{ marginLeft: 'auto' }}>工作區 {workspaces.length}</span>
     </footer>
   );
 }
