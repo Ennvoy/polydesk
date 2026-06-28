@@ -1,0 +1,8 @@
+{
+  "id": "X2-BUILD-ENV",
+  "question": "",
+  "choice": "X-2 Windows 打包：electron-builder 解壓 winCodeSign 的 darwin symlink 需 SeCreateSymbolicLinkPrivilege（非 admin/非 Dev Mode 會 exit2 無限重試）→ 解法：手動把 winCodeSign-2.6.0.7z 以 7za -xr!darwin 預解壓進 %LOCALAPPDATA%\\electron-builder\\Cache\\winCodeSign\\winCodeSign-2.6.0（darwin 純 macOS 用、Windows 不需）。簽章 unsigned（無憑證、CSC_IDENTITY_AUTO_DISCOVERY=false）→ SmartScreen 警告；publish url 為佔位 https://updates.polydesk.local/。後二者屬部署期設定（給 CSC_LINK 憑證 + 真更新伺服器 URL 即可）",
+  "why": "symlink 權限是 Windows 環境問題非 app code 缺陷；app 打包/asar/afterPack 原生模組 unpack 全綠。unsigned+佔位URL 是已記 DL-12 的部署期 trade-off，非 X-2 機制缺陷",
+  "by": "auto",
+  "at": "2026-06-28T15:30:48.771Z"
+}

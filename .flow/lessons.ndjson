@@ -1,0 +1,1 @@
+{"id":"F-6","failedApproach":"F-6 SearchService A4/A5 用注入 fake spawn 但同步讀 children[]，且為修 @vscode/ripgrep ESM 改 rgPath 為 async dynamic import 後沒重跑單元測試","why":"spawnSearch 在 await getRgBin() 後才 spawn，children 不同步出現；4 測試紅卻仍被標 F-6 delivered。教訓：整合期 async 重構會悄悄打破假同步的單測，標 delivered 前必須重跑全 vitest，不能信舊綠","stale":false,"at":"2026-06-28T14:49:39.462Z"}

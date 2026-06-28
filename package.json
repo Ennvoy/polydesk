@@ -11,7 +11,10 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "dist": "electron-vite build && electron-builder --win",
+    "pack:dir": "electron-vite build && electron-builder --win --dir"
   },
   "dependencies": {
     "@vscode/ripgrep": "^1.18.0",

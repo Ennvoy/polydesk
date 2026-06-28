@@ -1,0 +1,5 @@
+# 開發期 electron-updater 設定（X-2）：讓 dev 下 autoUpdater 有 provider 不致直接拋；
+# 實際更新流程於打包安裝版才生效。url 為佔位（dev 不會真連）。
+provider: generic
+url: https://updates.polydesk.local/
+updaterCacheDirName: polydesk-updater

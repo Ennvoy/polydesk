@@ -111,7 +111,7 @@
       conflictZone：tests/perf/、scripts/perf/
       verify：perf 報告四項 p95 全達標 + 背景監控 CPU 上限達標，數據落檔。
 
-- [ ] **X-2 打包 + 自動更新（electron-builder NSIS + node-pty asarUnpack + electron-updater）**
+- [x] **X-2 打包 + 自動更新（electron-builder NSIS + node-pty asarUnpack + electron-updater）**
       story：electron-builder 打包成可雙擊的 Windows app，node-pty 經 @electron/rebuild + asarUnpack（*.node、winpty/spawn-helper 落 app.asar.unpacked）正確打包；electron-updater generic provider 輪詢 latest.yml 差量更新（dev-app-update.yml 開發期模擬）。
       reqRefs：REQ-NFR-003、REQ-NFR-004
       blockedBy：F-1、F-3、F-4、F-7

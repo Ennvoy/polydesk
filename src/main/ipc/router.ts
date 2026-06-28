@@ -14,7 +14,8 @@ import { registerGitHandlers } from '../git/GitService';
 import { registerSearchHandlers } from '../search/SearchService';
 import { registerLspHandlers } from '../lsp/LspManager';
 import { ClaudeStatusMonitor } from '../monitor/ClaudeStatusMonitor';
-import { registerPlaywrightHandlers, registerUpdateHandlers } from './stubHandlers';
+import { registerUpdateHandlers } from '../update/AutoUpdater';
+import { registerPlaywrightHandlers } from './stubHandlers';
 
 /** main 端服務（供 app 生命週期 teardown / 後續波次取用）。 */
 export interface MainServices {
@@ -43,9 +44,9 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
   const monitor = new ClaudeStatusMonitor(workspaces, pty, undefined, undefined, { lifecycle });
   monitor.start();
 
-  // 空樁（後續 task 取代 / 無接線）
+  registerUpdateHandlers(ipcMain); // update:*（electron-updater）
+  // 空樁：playwright（無接線、缺件偵測於 F-3 終端機提示）
   registerPlaywrightHandlers(ipcMain);
-  registerUpdateHandlers(ipcMain);
 
   return { lifecycle, workspaces, pty, fileWatcher, monitor };
 }

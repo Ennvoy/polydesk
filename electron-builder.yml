@@ -1,20 +1,37 @@
 appId: com.polydesk.app
 productName: Polydesk
+# 鎖定 electron 版本（中文路徑下自動偵測曾失敗，明示避免）。
+electronVersion: 33.4.11
+# node-pty 用 N-API prebuild（ABI 跨 Node/Electron 穩定，已實測 Electron 33 可載入，decision NODE-PTY-NAPI）
+# → 不需 @electron/rebuild 從源碼重建（本機無 Visual Studio）；直接打包 prebuild 二進位。
+npmRebuild: false
 directories:
   output: release
   buildResources: build
 files:
   - out/**/*
   - package.json
-# 原生模組（node-pty 等）必須落在 app.asar.unpacked 才能 dlopen（REQ-NFR-003）。
-# 預留 **/*.node；node-pty 由後續 task (X-2) 加入後一併 unpack。
+# 原生模組與外部執行檔必須落在 app.asar.unpacked 才能 dlopen / spawn（REQ-NFR-003）：
+#  - node-pty：pty.node / conpty.node / conpty_console_list.node / winpty.dll / winpty-agent.exe（prebuilds/win32-x64）
+#  - @vscode/ripgrep：rg.exe 在平台 optional dep @vscode/ripgrep-win32-x64；且 @vscode/ripgrep 為 ESM，
+#    runtime 以 dynamic import() 載入，故整包 unpack 避免 asar 內 ESM 解析問題。
 asarUnpack:
   - "**/*.node"
+  - "**/node-pty/**"
+  - "**/@vscode/ripgrep/**"
+  - "**/@vscode/ripgrep-win32-x64/**"
+afterPack: build/afterPack.js
 win:
   target:
     - nsis
+  artifactName: ${productName}-Setup-${version}.${ext}
 nsis:
   perMachine: false
   oneClick: false
   allowToChangeInstallationDirectory: true
-# publish/electron-updater(generic) 與簽章由 X-2 補；本骨架不實際打包。
+  deleteAppDataOnUninstall: false
+# electron-updater generic provider：自架 HTTPS 輪詢 latest.yml 差量更新（REQ-NFR-004）。
+# url 為佔位，實際部署替換成你的更新伺服器；未簽章 → SmartScreen 警告（trade-off 已記 DL-12）。
+publish:
+  provider: generic
+  url: https://updates.polydesk.local/
