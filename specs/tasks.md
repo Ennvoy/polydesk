@@ -145,17 +145,17 @@
 
 判準：使用者實機 dogfood 提出、已用 AskUserQuestion 定版範圍與時機（皆選「ship 後」）；屬既有 feature 的增強，照 lightweight 路徑（精簡 SDD + TDD + 真 e2e）做。
 
-- [ ] **PE-1 git 線圖 GitLens 級互動**（F-7 增強）— ① Hover：commit 列指過去顯示完整訊息（subject+body）+ 作者/相對時間/完整 hash（需 `git:log` 加 `%b`、`GitLogEntry.body`，零新 IPC）。② 右鍵選單（常用集）：複製雜湊 / 複製訊息 / 開啟此 commit 變更(commit-scoped diff，需擴 `git:diff` 或新 `git:show`) / 簽出此 commit(detached，需 GitService 允許 hash-ref 簽出 + 確認) / 從此 commit 建立分支（`git:branch` create 加 startPoint）。需通用 ContextMenu 元件（可複用 TitleBar dropdown 模式），破壞性動作走確認。
-- [ ] **PE-2 Claude 多專案狀態強化**（F-8 增強；三態徽章已現成）— ① 狀態文字標籤（dot 旁顯示 執行中/待接手/未啟動）。② 待接手桌面通知（工作區 claude 轉 `stopped-await` 時 main `Notification` 推播；需狀態轉移偵測 + 去抖/可關）。③ 狀態總覽計數（status bar 顯示各態數量）。（不含依狀態排序——使用者本輪未選。）
+- **PE-1 git 線圖 GitLens 級互動**（F-7 增強，ship 後做）— ① Hover：commit 列指過去顯示完整訊息（subject+body）+ 作者/相對時間/完整 hash（需 `git:log` 加 `%b`、`GitLogEntry.body`，零新 IPC）。② 右鍵選單（常用集）：複製雜湊 / 複製訊息 / 開啟此 commit 變更(commit-scoped diff，需擴 `git:diff` 或新 `git:show`) / 簽出此 commit(detached，需 GitService 允許 hash-ref 簽出 + 確認) / 從此 commit 建立分支（`git:branch` create 加 startPoint）。需通用 ContextMenu 元件（可複用 TitleBar dropdown 模式），破壞性動作走確認。
+- **PE-2 Claude 多專案狀態強化**（F-8 增強；三態徽章已現成，ship 後做）— ① 狀態文字標籤（dot 旁顯示 執行中/待接手/未啟動）。② 待接手桌面通知（工作區 claude 轉 `stopped-await` 時 main `Notification` 推播；需狀態轉移偵測 + 去抖/可關）。③ 狀態總覽計數（status bar 顯示各態數量）。（不含依狀態排序——使用者本輪未選。）
 
 ## Backlog（本輪不做）
 
-- [ ] 真 PASS/FAIL 測試結果回報管道（D-TEST-REPORT，v1 用可觀測訊號）
-- [ ] 初始登錄表外少見語言 LSP（D-LSP-MORE，按需加列）
-- [ ] app 內建 Claude 對話面板（D-CLAUDE-PANEL）/ Claude 登入狀態指示（D-LOGIN-UI）
-- [ ] app 內手動瀏覽網頁的內嵌瀏覽器（D-INAPP-BROWSER）
-- [ ] 正式名稱命名（D-NAME，出貨前定）
-- [ ] （deliver 過程動態發現的記這裡，footer 帶 Spotted:）
+- 真 PASS/FAIL 測試結果回報管道（D-TEST-REPORT，v1 用可觀測訊號）
+- 初始登錄表外少見語言 LSP（D-LSP-MORE，按需加列）
+- app 內建 Claude 對話面板（D-CLAUDE-PANEL）/ Claude 登入狀態指示（D-LOGIN-UI）
+- app 內手動瀏覽網頁的內嵌瀏覽器（D-INAPP-BROWSER）
+- 正式名稱命名（D-NAME，出貨前定）
+- （deliver 過程動態發現的記這裡，footer 帶 Spotted:）
 
 ---
 

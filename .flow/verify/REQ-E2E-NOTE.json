@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-NOTE",
+  "status": "n/a",
+  "evidence": "非 journey：為 REQ-E2E-004 的驗證分層說明（決定性 Playwright 腳本進硬閘門、真 claude 端到端列人工/半自動驗收）；journey-check 明示核可例外，decision VERIFY-LAYER",
+  "by": "evaluator",
+  "at": "2026-06-28T18:47:51.027Z"
+}
