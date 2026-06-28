@@ -90,6 +90,11 @@ export interface InvokeChannels {
   // 更新
   'update:check': { req: void; res: { available: boolean; version?: string } };
   'update:install': { req: void; res: { ok: true } };
+  // 視窗控制（frame:false 自訂無框標題列；renderer 自畫 min/max/close）
+  'window:minimize': { req: void; res: { ok: true } };
+  'window:maximizeToggle': { req: void; res: { maximized: boolean } };
+  'window:close': { req: void; res: { ok: true } };
+  'window:isMaximized': { req: void; res: { maximized: boolean } };
 }
 
 /** stream 通道：PTY 高頻 chunk（建議走 MessagePort 直連，骨架先以事件接線）。 */
@@ -109,6 +114,8 @@ export interface EventChannels {
   'lsp:diagnostics': { wsId: string; uri: string; diagnostics: unknown[] };
   'workspace:lost': { wsId: string };
   'update:progress': { percent: number; state: 'checking' | 'downloading' | 'ready' };
+  /** 視窗最大化狀態變動（自訂標題列同步 max/restore 圖示；OS 快捷鍵/雙擊也會觸發）。 */
+  'window:maximizedChange': { maximized: boolean };
 }
 
 export type InvokeChannel = keyof InvokeChannels;

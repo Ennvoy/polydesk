@@ -1,10 +1,10 @@
 // Polydesk main 入口：單一實例 + 安全基線 BrowserWindow + CSP + 狀態持久化 + perf 埋點。
 
-import { app, BrowserWindow, session, shell } from 'electron';
+import { app, BrowserWindow, Menu, session, shell } from 'electron';
 import { join } from 'node:path';
 import { StateStore } from './store/StateStore';
 import { registerIpcHandlers, type MainServices } from './ipc/router';
-import { setMainWindow } from './ipc/broadcast';
+import { setMainWindow, emit } from './ipc/broadcast';
 import { mark, measure } from '../shared/perf';
 import { APP_NAME, STATE_FILE_NAME } from '../shared/constants';
 
@@ -46,6 +46,8 @@ function createWindow(): void {
     show: false,
     title: APP_NAME,
     backgroundColor: '#0a0a0a',
+    // 無框：標題列/選單/視窗鈕全由 renderer 自畫（深色一致）。仍可調整大小。
+    frame: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -57,6 +59,10 @@ function createWindow(): void {
   });
 
   setMainWindow(mainWindow);
+
+  // 最大化狀態變動 → 推給自訂標題列同步 max/restore 圖示（OS 快捷鍵/雙擊也會觸發）。
+  mainWindow.on('maximize', () => emit('window:maximizedChange', { maximized: true }));
+  mainWindow.on('unmaximize', () => emit('window:maximizedChange', { maximized: false }));
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
@@ -110,6 +116,7 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+    Menu.setApplicationMenu(null); // 無框：移除預設原生 File/Edit 選單列（改由自訂標題列提供）
     store = new StateStore(stateFilePath());
     store.load();
     applyContentSecurityPolicy();

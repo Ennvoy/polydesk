@@ -15,6 +15,7 @@ import { registerSearchHandlers } from '../search/SearchService';
 import { registerLspHandlers } from '../lsp/LspManager';
 import { ClaudeStatusMonitor } from '../monitor/ClaudeStatusMonitor';
 import { registerUpdateHandlers } from '../update/AutoUpdater';
+import { registerWindowControls } from '../window/windowControls';
 import { registerPlaywrightHandlers } from './stubHandlers';
 
 /** main 端服務（供 app 生命週期 teardown / 後續波次取用）。 */
@@ -45,6 +46,7 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
   monitor.start();
 
   registerUpdateHandlers(ipcMain); // update:*（electron-updater）
+  registerWindowControls(ipcMain); // window:*（自訂無框標題列 min/max/close）
   // 空樁：playwright（無接線、缺件偵測於 F-3 終端機提示）
   registerPlaywrightHandlers(ipcMain);
 

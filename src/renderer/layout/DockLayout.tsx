@@ -105,6 +105,20 @@ export function resetLayout(): void {
   if (layoutApi) buildDefaultLayout(layoutApi);
 }
 
+/** 供標題列「檢視」選單切換面板顯隱（toolbar 視覺態經 dockview onDidLayoutChange 自動 re-sync）。 */
+export function toggleLayoutPanel(which: 'sidebar' | 'editor' | 'terminal'): void {
+  const api = layoutApi;
+  if (!api) return;
+  if (which === 'sidebar') togglePanel(api, SIDEBAR_ID, () => addSidebar(api));
+  else if (which === 'editor') togglePanel(api, EDITOR_ID, () => addEditor(api));
+  else togglePanel(api, TERMINAL_ID, () => addTerminal(api));
+}
+
+/** 供標題列「檢視」選單切換終端機最大化。 */
+export function toggleTerminalMax(): void {
+  if (layoutApi) toggleTerminalMaximize(layoutApi, TERMINAL_ID);
+}
+
 /** A2/A3：還原時套用 UI 狀態—先依 hidden 移除（與序列化樹對齊），再依 maximized 以原生 API 最大化終端機。 */
 function applyUi(api: DockviewApi, ui: LayoutUiState): void {
   for (const id of ui.hidden) {

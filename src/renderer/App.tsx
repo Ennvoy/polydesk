@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { ActivityBar } from './components/ActivityBar';
+import { TitleBar } from './components/TitleBar';
 import { DockLayout } from './layout/DockLayout';
 import { DialogHost } from './components/Dialogs/host';
 import { WorkspaceRail } from './components/WorkspaceRail';
@@ -23,16 +24,19 @@ function StatusBar(): React.JSX.Element {
 
 export function App(): React.JSX.Element {
   return (
-    <div className="pd-shell">
-      <ActivityBar />
-      <WorkspaceRail />
-      <div className="pd-shell-main">
-        <div className="pd-shell-body">
-          <DockLayout />
+    <div className="pd-root">
+      <TitleBar />
+      <div className="pd-shell">
+        <ActivityBar />
+        <WorkspaceRail />
+        <div className="pd-shell-main">
+          <div className="pd-shell-body">
+            <DockLayout />
+          </div>
+          <StatusBar />
         </div>
-        <StatusBar />
+        <DialogHost />
       </div>
-      <DialogHost />
     </div>
   );
 }

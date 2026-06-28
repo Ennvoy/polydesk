@@ -45,6 +45,10 @@ export const INVOKE_CHANNELS = [
   'store:import',
   'update:check',
   'update:install',
+  'window:minimize',
+  'window:maximizeToggle',
+  'window:close',
+  'window:isMaximized',
 ] as const satisfies readonly InvokeChannel[];
 
 export const EVENT_CHANNELS = [
@@ -57,6 +61,7 @@ export const EVENT_CHANNELS = [
   'lsp:diagnostics',
   'workspace:lost',
   'update:progress',
+  'window:maximizedChange',
 ] as const satisfies readonly EventChannel[];
 
 /** PTY 高頻資料流通道（不走 invoke）。 */

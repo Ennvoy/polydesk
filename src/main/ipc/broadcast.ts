@@ -10,6 +10,11 @@ export function setMainWindow(w: BrowserWindow | null): void {
   win = w;
 }
 
+/** 取目前主視窗參照（視窗控制 handler 於呼叫時取用；未就緒回 null）。 */
+export function getMainWindow(): BrowserWindow | null {
+  return win && !win.isDestroyed() ? win : null;
+}
+
 /** 推一個型別化 event 通道（payload 對齊 EventChannels）。 */
 export function emit<C extends keyof EventChannels>(channel: C, payload: EventChannels[C]): void {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
