@@ -20,3 +20,10 @@
 {"t":"2026-06-28T08:09:25.849Z","ev":"checkpoint","id":"P-1","phase":"green","note":"scaffold complete: tsc/build/7 vitest tests all green; IPC contract + StateStore + single-instance + security baseline + perf hooks in place"}
 {"t":"2026-06-28T08:09:26.513Z","ev":"verify.attempt","id":"node \"$userprofile/.claude/skills/flow-toolkit/flow-state.mjs\" checkpoint p-1 green \"scaffold complete: tsc/build/7 vitest tests all green; ipc contract + statestore + single-instance + security basel","sig":"ok","exit":0}
 {"t":"2026-06-28T08:19:25.280Z","ev":"task.transition","id":"P-1","from":"delivered","to":"delivered"}
+{"t":"2026-06-28T08:27:07.418Z","ev":"verify.attempt","id":"[console]::outputencoding=[text.encoding]::utf8; $outputencoding=[text.encoding]::utf8; npm run build 2>&1 | select-object 30; \"=== exit: $lastexitcode ===\"","sig":"ok","exit":0}
+{"t":"2026-06-28T08:41:44.845Z","ev":"decision","id":"LSP-BRIDGE","choice":"F-5 LSP 改用自製 thin bridge：main spawn 語言伺服器(stdio)+vscode-jsonrpc/vscode-languageserver-protocol 經 IPC 橋到 renderer、再 adapter 成 monaco completion/hover/definition/diagnostics provider；不裝 monaco-languageclient+monaco-vscode-api","by":"auto"}
+{"t":"2026-06-28T08:41:44.941Z","ev":"decision","id":"NODE-PTY-NAPI","choice":"node-pty 1.1.0 用 N-API prebuild(win32-x64 內附)，Electron 33 免 @electron/rebuild(實測 PTY smoke PASS)；X-2 打包僅需 asarUnpack node-pty","by":"auto"}
+{"t":"2026-06-28T08:41:45.030Z","ev":"decision","id":"DEPS-LATEST","choice":"採 npm 當前最新主版：dockview v7(非 design 寫的 v4)、@xterm v6、chokidar v5、monaco 0.55；API 對齊各自當前官方","by":"auto"}
+{"t":"2026-06-28T09:04:58.806Z","ev":"task.transition","id":"P-3","from":"pending","to":"delivered"}
+{"t":"2026-06-28T09:04:59.042Z","ev":"task.transition","id":"P-2","from":"pending","to":"delivered"}
+{"t":"2026-06-28T09:04:59.377Z","ev":"verify.attempt","id":"cd \"c:/users/ennvoy.lin/documents/我的終端機\" fs=\"$home/.claude/skills/flow-toolkit/flow-state.mjs\" setverify() { node \"const fs=require('fs');const p='.flow/state.json';const s=json.parse(fs.readfilesync(","sig":"ok","exit":0}

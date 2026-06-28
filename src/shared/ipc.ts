@@ -30,6 +30,7 @@ export interface InvokeChannels {
   'workspace:rename': { req: { wsId: string; name: string }; res: { ok: true } };
   'workspace:reorder': { req: { orderedIds: string[] }; res: { ok: true } };
   'workspace:activate': { req: { wsId: string }; res: { ok: true } };
+  'workspace:setShell': { req: { wsId: string; shell: ShellKind }; res: { ok: true } };
   // 檔案 / 編輯器
   'fs:read': {
     req: { wsId: string; path: string };

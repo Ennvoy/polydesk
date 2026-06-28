@@ -17,14 +17,14 @@
       conflictZone：package.json、vite.config.ts、electron-builder.yml、tsconfig*.json、src/shared/（ipc.ts、types.ts、channels.ts、constants.ts）、src/main/index.ts、src/main/ipc/、src/main/store/、src/preload/、src/renderer/main.tsx、src/renderer/App.tsx、src/renderer/ipc/client.ts、src/shared/perf.ts
       verify：`npm run build` 綠 + 啟動後二次啟動只帶前景單視窗 + 寫入 state.json 後重啟讀回主題/版面（人手毀檔驗證自動備份 + 預設啟動不崩潰）。
 
-- [ ] **P-2 UI foundation：dockable layout 引擎 + activity bar + 三主題系統 + dialog host + 設定面板**
+- [x] **P-2 UI foundation：dockable layout 引擎 + activity bar + 三主題系統 + dialog host + 設定面板**
       story：開發者看到類 VSCode 預設版面（dockview 驅動，所有面板槽以 placeholder 註冊在 panelRegistry，features 各自實作對應 placeholder）、左側 activity bar 可切功能，能在設定面板即時切換深/淺/暖三主題（tokens.css 落地三套 CSS 變數）、切換後重啟沿用，並可匯出/匯入設定。**本 task 預連 panelRegistry 全部 lazy 槽位 + 共用 dialog host，features 不碰 DockLayout.tsx/panelRegistry/theme。**
       reqRefs：REQ-UI-001、REQ-THEME-001/002、REQ-PERSIST-005、REQ-E2E-007
       blockedBy：P-1
       conflictZone：src/renderer/layout/（DockLayout.tsx、panelRegistry.ts）、src/renderer/components/ActivityBar.tsx、src/renderer/theme/（ThemeProvider.tsx、tokens.css）、src/renderer/components/Settings/、src/renderer/components/Dialogs/host.tsx
       verify：Playwright headed 切深→淺→暖即時套用、重啟沿用（對齊 REQ-E2E-007）；匯出 JSON→改主題→匯入還原。
 
-- [ ] **P-3 workspace 模型基礎（WorkspaceManager + lazy 實體化 + teardown 協調）**
+- [x] **P-3 workspace 模型基礎（WorkspaceManager + lazy 實體化 + teardown 協調）**
       story：main 端有完整工作區模型——CRUD、路徑去重、拖曳排序持久化、lazy 實體化（被 activate 才 hydrate）、資料夾遺失偵測標 missing、移除時 teardown 協調掛鉤；對應 `workspace:*` invoke handler 全部接上（UI 由 F-1 接）。
       reqRefs：REQ-WS-001/002/005/006/009、REQ-PERF-001
       blockedBy：P-1
@@ -49,12 +49,12 @@
       conflictZone：src/renderer/components/Explorer.tsx、src/main/fs/FileWatcher.ts
       verify：Playwright 展開樹 + 在磁碟新增檔案後樹即時出現該檔；確認 node_modules 不被監看（watcher 計數）。
 
-- [ ] **F-3 整合終端機多開（xterm + node-pty/ConPTY + 多分頁 + shell 切換 + 崩潰重啟 + 關閉確認 + escape 注入鉤）**
-      story：每工作區可「＋」開多個 real PTY 終端機（預設 PowerShell，可切 cmd/pwsh/Git Bash/WSL、每工作區記預設）、cwd=工作區、切走後背景續跑、shell 崩潰顯示 exit code 一鍵重啟、關閉工作區/app 若有跑中程序彈窗列出要求確認後完整 teardown。**建立 PTY 啟動時的 env 注入鉤（envInjection.ts，讀外部提供的 config 路徑，內容由 F-9 填），按鍵延遲達標。**
-      reqRefs：REQ-TERM-001/002/003/004/005/006/007/008、REQ-WS-005/009、REQ-PERF-004、REQ-E2E-008
+- [ ] **F-3 整合終端機多開（xterm + node-pty/ConPTY + 多分頁 + shell 切換 + 崩潰重啟 + 關閉確認 + escape 硬化 + Claude/Playwright 缺件偵測）**
+      story：每工作區可「＋」開多個 real PTY 終端機（預設 PowerShell，可切 cmd/pwsh/Git Bash/WSL、每工作區記預設）、**cwd=工作區資料夾**、切走後背景續跑、shell 崩潰顯示 exit code 一鍵重啟、關閉工作區/app 若有跑中程序彈窗列出要求確認後完整 teardown。**app 不做接線、不註冊 MCP、不注入 env**：在工作區終端機跑 `claude` 即由官方 `@playwright/mcp` 依該 cwd 自動取得 per-workspace persistent profile（隔離、可平行、零 repo 足跡）；偵測使用者環境缺 `@playwright/mcp`/Claude CLI/Playwright 瀏覽器時顯示不擋路安裝指引（不崩潰、不自動寫全域設定）；偵測到 WSL shell 明示接線不保證（REQ-NFR-005）。按鍵延遲達標、escape 硬化（OSC 52/8、標題、回灌）。
+      reqRefs：REQ-TERM-001/002/003/004/005/006/007/008、REQ-WS-005/009、REQ-PERF-004、REQ-PW-001/004/005/006/007、REQ-NFR-005、REQ-E2E-004/008/010
       blockedBy：P-1、P-2、P-3
-      conflictZone：src/renderer/components/Terminal/、src/main/pty/（PtyManager.ts、envInjection.ts）、src/renderer/components/Dialogs/CloseConfirm.tsx
-      verify：Playwright 開兩個終端機跑指令、切工作區再切回前一個仍在背景跑；按鍵延遲埋點 p95 <50ms；關閉含跑中程序彈窗確認後查無殘留程序（對齊 REQ-E2E-008）。
+      conflictZone：src/renderer/components/Terminal/、src/main/pty/PtyManager.ts、src/renderer/components/Dialogs/CloseConfirm.tsx
+      verify：Playwright 開兩個終端機跑指令、切工作區再切回前一個仍在背景跑；按鍵延遲埋點 p95 <50ms；關閉含跑中程序彈窗確認後查無殘留程序（對齊 REQ-E2E-008）；決定性 Playwright 腳本驗 cwd profile 路由/headed 可見/徽章/跨工作區隔離（REQ-E2E-004/010；真 claude 端到端列人工驗收，journey-check 核可例外）。
 
 - [ ] **F-4 Monaco 編輯 + 編碼偵測 + 存檔（分割並排共享 model + 外部修改衝突 + 唯讀/權限錯誤）**
       story：開檔（語法高亮、TS/JS 內建智能、多游標、檔內找取代、minimap）→輸入→存檔未存檔徽章消失；分割並排同檔共享同一 model（不互蓋）；偵測 UTF-8/Big5 編碼正確顯示與原編碼存回、保留 CRLF/LF；外部修改時依有無未存檔提示重載或保留；唯讀存檔失敗顯示明確錯誤。
@@ -91,12 +91,7 @@
       conflictZone：src/main/monitor/（ClaudeStatusMonitor.ts、processProbe.ts）
       verify：在終端機跑/停模擬 claude 程序，徽章三態正確切換；掛 ≥2 工作區於其一跑程序、切到另一個背景徽章持續更新（對齊 REQ-E2E-005）；N=10 背景閒置量測總 CPU 低水位（交 X-1 量）。
 
-- [ ] **F-9 Claude×Playwright 自動接線（user-scope MCP 註冊 + 每工作區 persistent profile + PTY env 注入 + 平行隔離）**
-      story：首次經同意彈窗（S10）以 `claude mcp add polydesk-pw -s user` 註冊一次 MCP（衝突偵測、managed marker、手改 JSON 走原子寫+備份）；每工作區一份 user-data-dir + config JSON；PTY 啟動注入 `PLAYWRIGHT_MCP_CONFIG`（零 repo 足跡、機密不 echo）；在 A 終端機跑 claude 用 Playwright 開 URL 點擊→headed 視窗即時可見→徽章「自動化進行中」→切 B 跑另一 claude，各用各自 profile 平行、登入互不可見；WSL 偵測到明示不支援。
-      reqRefs：REQ-PW-001/002/003/004/005/006/007/008、REQ-NFR-005、REQ-E2E-004、REQ-E2E-010
-      blockedBy：F-3
-      conflictZone：src/main/playwright/（PlaywrightWiring.ts、profileManager.ts、mcpConfigWriter.ts）、src/main/pty/（envInjection 內容填充，經 F-3 鉤）、src/renderer/components/Dialogs/McpConsent.tsx
-      verify：決定性 Playwright 腳本下達等價 navigate/click，驗接線/profile 路由/headed 可見/徽章/跨工作區隔離（對齊 REQ-E2E-004 硬閘門 + REQ-E2E-010 profile 隔離；真 claude 端到端列人工驗收，journey-check 核可例外）。
+> **F-9 已砍除**（decision `F9-DROP`）：原「自建接線層（註冊 MCP / 管 profile / 注入 env）」完全沿用官方 `@playwright/mcp` 依 cwd 自動分流取代；app 唯一責任 = 終端機 cwd=工作區（併入 F-3）。REQ-PW 已精簡、REQ-PW-002/003/008 移除、REQ-TERM-004 改 cwd。
 
 - [ ] **F-10 dockable 版面拖曳停靠 + 持久化（resize/上下左右停靠重排/顯隱/終端機最大化 + serialize 重啟還原 + 一鍵重設）**
       story：面板可拖曳調整大小、拖曳重新停靠/重排（如 VSCode 上下左右）、展開/隱藏左欄/側欄/終端機、最大化終端機（全高暫隱編輯區）；版面 toJSON 存 userData、重啟 fromJSON 還原（失敗 fallback 預設不 brick）、一鍵重設回預設 layout。
@@ -130,10 +125,10 @@
       conflictZone：src/renderer/a11y/、tests/a11y/
       verify：Playwright 純鍵盤走完新增工作區→開檔→存檔主路徑，焦點順序與 aria 正確（對齊 REQ-E2E-011）；axe 掃描無嚴重違規。
 
-- [ ] **X-4 安全硬化 pass（spawnEnv 白名單 + CSP/window 旗標稽核 + 終端機/ git/接線 env 機密衛生）**
-      story：稽核並補齊——spawn 子程序傳白名單最小環境（剔除 PLAYWRIGHT_MCP_*/無關 GIT_*）、接線 env 只進 PTY 不進 git/telemetry；複核 renderer contextIsolation/sandbox/CSP/攔外開連結；複核終端機 escape 硬化（OSC 52/8、標題、回灌）與 git argv 硬化確實生效；明文威脅模型對齊。
-      reqRefs：REQ-SEC-001/002/003、REQ-TERM-008、REQ-SCM-009、REQ-PW-008
-      blockedBy：F-3、F-7、F-9
+- [ ] **X-4 安全硬化 pass（spawnEnv 白名單 + CSP/window 旗標稽核 + 終端機/git env 機密衛生）**
+      story：稽核並補齊——spawn 子程序傳白名單最小環境（剔除無關 `GIT_*`/無關機密）；複核 renderer contextIsolation/sandbox/CSP/攔外開連結；複核終端機 escape 硬化（OSC 52/8、標題、回灌）與 git argv 硬化確實生效；明文威脅模型對齊。（app 不做 Playwright 接線，故無「接線 env 衛生」項。）
+      reqRefs：REQ-SEC-001/002/003、REQ-TERM-008、REQ-SCM-009
+      blockedBy：F-3、F-7
       conflictZone：src/main/security/（spawnEnv.ts）、tests/security/
       verify：自動化測試確認 spawn git 的 env 無接線機密、PTY 輸出/腳本不 echo 機密、CSP 阻擋外部腳本、OSC 52 預設關閉、惡意 commit message/分支名不注入。
 
@@ -153,5 +148,5 @@
 - **Wave 0（序列）**：P-1（先釘 `src/shared/ipc.ts`+`types.ts` 單一真相 + preload 全 API + router 樁 + StateStore + 單一實例 + 安全基線 + perf 埋點 helper）。
 - **Wave 1（並行）**：P-2（renderer：layout/theme/activity/dialog host/settings）∥ P-3（main：workspace 模型）— conflictZone 一個純 renderer、一個純 main，零重疊。
 - **Wave 2（並行）**：F-1（WorkspaceRail）∥ F-2（Explorer+FileWatcher）∥ F-3（Terminal+PTY）∥ F-4（Editor+fileService）∥ F-7（git）— 五者 conflictZone 互斥（F-2/F-4 同在 main/fs 但檔不同：FileWatcher.ts vs fileService.ts）。
-- **Wave 3（並行）**：F-5（LSP，依 F-4）∥ F-6（搜尋跳檔，依 F-4）∥ F-8（Claude 監控，依 F-1+F-3）∥ F-9（Playwright 接線，依 F-3）∥ F-10（dock 持久化，依 P-2）— 各寫各自 main/renderer 子目錄，無重疊。
+- **Wave 3（並行）**：F-5（LSP，依 F-4）∥ F-6（搜尋跳檔，依 F-4）∥ F-8（Claude 監控，依 F-1+F-3）∥ F-10（dock 持久化，依 P-2）— 各寫各自 main/renderer 子目錄，無重疊。（F-9 已砍除，見上。）
 - **Wave 4（X，ship 前序列為主）**：X-1 效能量測 → X-2 打包/更新 → X-3 a11y → X-4 安全硬化（X 多為跨檔稽核/量測，序列執行避免互踩）。

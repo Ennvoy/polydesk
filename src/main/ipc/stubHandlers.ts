@@ -18,7 +18,7 @@ function stubNamespace(ipc: IpcMain, ns: string): void {
   }
 }
 
-export const registerWorkspaceHandlers = (ipc: IpcMain): void => stubNamespace(ipc, 'workspace');
+// 註：workspace namespace 已由 P-3 WorkspaceManager 真實實作（見 ../workspace/）。
 export const registerFsHandlers = (ipc: IpcMain): void => stubNamespace(ipc, 'fs');
 export const registerGitHandlers = (ipc: IpcMain): void => stubNamespace(ipc, 'git');
 export const registerPtyHandlers = (ipc: IpcMain): void => stubNamespace(ipc, 'pty');

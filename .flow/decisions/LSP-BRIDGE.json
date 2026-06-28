@@ -1,0 +1,8 @@
+{
+  "id": "LSP-BRIDGE",
+  "question": "",
+  "choice": "F-5 LSP 改用自製 thin bridge：main spawn 語言伺服器(stdio)+vscode-jsonrpc/vscode-languageserver-protocol 經 IPC 橋到 renderer、再 adapter 成 monaco completion/hover/definition/diagnostics provider；不裝 monaco-languageclient+monaco-vscode-api",
+  "why": "design DL-05 的 monaco-vscode-api 會接管 monaco 與 F-4 plain monaco 衝突(design 自稱最大升級陷阱、白屏風險)；自製 bridge 更穩、淨減重相依、完整滿足 REQ-EDIT-003/004/005 含缺件降級",
+  "by": "auto",
+  "at": "2026-06-28T08:41:44.830Z"
+}

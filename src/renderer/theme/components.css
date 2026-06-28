@@ -1,0 +1,120 @@
+/* Polydesk 共用元件樣式（深層客製化；全部 var(--*) 取值，含互動微狀態）。 */
+
+/* ── app 外殼版面 ── */
+.pd-shell {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg);
+}
+.pd-shell-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.pd-shell-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+/* ── 活動列 ── */
+.pd-activitybar {
+  width: var(--activitybar-w);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+  flex-shrink: 0;
+}
+.pd-activity-group { display: flex; flex-direction: column; gap: 4px; }
+.pd-activity-btn {
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--meta); border-radius: var(--radius-sm);
+  position: relative;
+  transition: color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
+}
+.pd-activity-btn:hover { color: var(--fg-2); background: var(--surface-warm); }
+.pd-activity-btn.is-active { color: var(--fg); }
+.pd-activity-btn.is-active::before {
+  content: ''; position: absolute; left: -2px; top: 8px; bottom: 8px; width: 2px;
+  background: var(--accent); border-radius: var(--radius-pill);
+}
+
+/* ── status bar ── */
+.pd-statusbar {
+  height: var(--statusbar-h);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs); color: var(--muted);
+  flex-shrink: 0;
+}
+
+/* ── 通用按鈕（Default/Hover/Active/Focus/Disabled） ── */
+.pd-btn {
+  font: inherit; font-size: var(--text-sm);
+  padding: 6px 12px; border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--fg);
+  border: 1px solid var(--border); cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
+}
+.pd-btn:hover { background: var(--surface-warm); }
+.pd-btn:active { transform: translateY(0.5px); }
+.pd-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pd-btn-primary { background: var(--accent); color: var(--accent-on); border-color: transparent; }
+.pd-btn-primary:hover { background: var(--accent-hover); }
+.pd-btn-primary:active { background: var(--accent-active); }
+.pd-btn-danger { background: var(--danger); color: #fff; border-color: transparent; }
+.pd-btn-danger:hover { filter: brightness(1.08); }
+
+/* ── 輸入框 ── */
+.pd-input {
+  font: inherit; font-size: var(--text-sm);
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); width: 100%;
+}
+.pd-input:focus-visible { box-shadow: var(--focus-ring); border-color: var(--accent); outline: none; }
+
+/* ── 主題選擇卡 ── */
+.pd-theme-card {
+  display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+  padding: var(--space-3); border-radius: var(--radius-md);
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--fg); cursor: pointer; text-align: left;
+  transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
+}
+.pd-theme-card:hover { border-color: var(--accent); }
+.pd-theme-card.is-active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/* ── 共用 list/tree 行（features 沿用） ── */
+.pd-row {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: 4px var(--space-3); cursor: pointer; color: var(--fg-2);
+  font-size: var(--text-sm); border-radius: var(--radius-sm);
+  user-select: none;
+}
+.pd-row:hover { background: var(--surface-warm); color: var(--fg); }
+.pd-row.is-active { background: color-mix(in oklab, var(--accent), transparent 85%); color: var(--fg); }
+
+/* ── 面板標頭 ── */
+.pd-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted); font-weight: 600;
+  border-bottom: 1px solid var(--border-soft);
+}
+.pd-scroll { overflow: auto; }
+.pd-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.pd-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--radius-pill); }
+.pd-scroll::-webkit-scrollbar-thumb:hover { background: var(--meta); }

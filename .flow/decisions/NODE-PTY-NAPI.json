@@ -1,0 +1,8 @@
+{
+  "id": "NODE-PTY-NAPI",
+  "question": "",
+  "choice": "node-pty 1.1.0 用 N-API prebuild(win32-x64 內附)，Electron 33 免 @electron/rebuild(實測 PTY smoke PASS)；X-2 打包僅需 asarUnpack node-pty",
+  "why": "N-API ABI 跨 Node/Electron 穩定；中文路徑下 electron-rebuild/install-app-deps 偵測失敗，改驗證 prebuild 直接可用更穩",
+  "by": "auto",
+  "at": "2026-06-28T08:41:44.930Z"
+}

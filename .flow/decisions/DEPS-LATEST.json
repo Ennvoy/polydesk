@@ -1,0 +1,8 @@
+{
+  "id": "DEPS-LATEST",
+  "question": "",
+  "choice": "採 npm 當前最新主版：dockview v7(非 design 寫的 v4)、@xterm v6、chokidar v5、monaco 0.55；API 對齊各自當前官方",
+  "why": "design asOf 2026-06 後生態續迭代，鎖最新穩定版避免裝舊版的已知 bug；核心 API(DockviewReact toJSON/fromJSON、xterm、chokidar watch)語意一致",
+  "by": "auto",
+  "at": "2026-06-28T08:41:45.020Z"
+}

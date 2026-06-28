@@ -3,16 +3,21 @@
 import { app, BrowserWindow, session, shell } from 'electron';
 import { join } from 'node:path';
 import { StateStore } from './store/StateStore';
-import { registerIpcHandlers } from './ipc/router';
+import { registerIpcHandlers, type MainServices } from './ipc/router';
 import { mark, measure } from '../shared/perf';
 import { APP_NAME, STATE_FILE_NAME } from '../shared/constants';
 
 mark('main:start'); // 冷啟動量測起點（REQ-PERF-001）
 
+// 測試/可攜：允許以 env 覆寫 userData 目錄（E2E 隔離狀態、不污染真實設定）。
+const userDataOverride = process.env['POLYDESK_USER_DATA'];
+if (userDataOverride) app.setPath('userData', userDataOverride);
+
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 
 let mainWindow: BrowserWindow | null = null;
 let store: StateStore;
+let services: MainServices;
 
 function stateFilePath(): string {
   return join(app.getPath('userData'), STATE_FILE_NAME);
@@ -104,7 +109,7 @@ if (!gotTheLock) {
     store = new StateStore(stateFilePath());
     store.load();
     applyContentSecurityPolicy();
-    registerIpcHandlers(store);
+    services = registerIpcHandlers(store, app.getPath('userData'));
     createWindow();
 
     app.on('activate', () => {
@@ -114,5 +119,11 @@ if (!gotTheLock) {
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
+  });
+
+  // 結束前完整 teardown 所有工作區執行中程序/監看（避免殭屍程序，REQ-WS-009）。
+  app.on('before-quit', () => {
+    if (!services) return;
+    for (const w of services.workspaces.list()) void services.lifecycle.teardown(w.id);
   });
 }
