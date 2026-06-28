@@ -139,6 +139,14 @@
 - [x] **DF-1 git 歷史 commit 線圖**（swimlane lane 圖；commit dda9413）— GitLogEntry 增 parents（log `%P`）+ gitGraph.ts 純演算法（6 測試：線性/diamond/多 root/octopus/不變量/空）+ 每列 SVG 線段+節點渲染。
 - [x] **DF-2 版面工具列「編輯器」顯隱切換鈕**（commit 5208903）— DockLayout TOGGLEABLE 納入 editor + addEditor + layoutPersist ToolbarState.editorVisible，顯隱經 deriveUiState 持久化還原。
 - [x] **DF-3 自訂無框標題列**（VSCode 風；commit a4ffbc3）— frame:false + Menu.setApplicationMenu(null) + window:* IPC（min/max/close/isMaximized + maximizedChange）+ TitleBar（檔案/編輯/檢視 自訂選單 + 拖曳區 + 自畫視窗鈕）；e2e dogfood-ui 真 electron 截圖驗證（同時覆蓋 DF-1/DF-2）。
+- [x] **DF-4 git 線圖跨列連續 + 分支切換 dirty-tree 處理**（commit ddfbe8c；含多代理對抗式審查強化）— 列高由 GRAPH_ROW_H 單一真相驅動（消 JS/CSS 漂移）、移除 border、log `--topo-order` 杜絕 dangling 線；分支切換改用結構化 status 判斷 dirty（不靠在地化錯誤字串）+ `stash -u`（含 untracked）+ 第二次 checkout try/catch；git:stash 加 includeUntracked。e2e 3 案例 + git.spec 回歸綠。
+
+## 規劃中（ship 後做，已與使用者定範圍；dogfood 提出、刻意排在出貨硬閘門之後）
+
+判準：使用者實機 dogfood 提出、已用 AskUserQuestion 定版範圍與時機（皆選「ship 後」）；屬既有 feature 的增強，照 lightweight 路徑（精簡 SDD + TDD + 真 e2e）做。
+
+- [ ] **PE-1 git 線圖 GitLens 級互動**（F-7 增強）— ① Hover：commit 列指過去顯示完整訊息（subject+body）+ 作者/相對時間/完整 hash（需 `git:log` 加 `%b`、`GitLogEntry.body`，零新 IPC）。② 右鍵選單（常用集）：複製雜湊 / 複製訊息 / 開啟此 commit 變更(commit-scoped diff，需擴 `git:diff` 或新 `git:show`) / 簽出此 commit(detached，需 GitService 允許 hash-ref 簽出 + 確認) / 從此 commit 建立分支（`git:branch` create 加 startPoint）。需通用 ContextMenu 元件（可複用 TitleBar dropdown 模式），破壞性動作走確認。
+- [ ] **PE-2 Claude 多專案狀態強化**（F-8 增強；三態徽章已現成）— ① 狀態文字標籤（dot 旁顯示 執行中/待接手/未啟動）。② 待接手桌面通知（工作區 claude 轉 `stopped-await` 時 main `Notification` 推播；需狀態轉移偵測 + 去抖/可關）。③ 狀態總覽計數（status bar 顯示各態數量）。（不含依狀態排序——使用者本輪未選。）
 
 ## Backlog（本輪不做）
 
