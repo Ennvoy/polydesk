@@ -1,0 +1,16 @@
+{
+  "attacks": [
+    { "id": "F-2-A1", "severity": "high", "scenario": "fs:tree 的 dir 未約束在 workspace 內→路徑穿越列舉 ~/.ssh/~/.aws（相對逃逸/絕對/UNC）", "failSafeTest": "resolve+realpath 雙重 containment、拒 UNC/\\?\；攻擊矩陣全回 {entries:[]}、readdir 不落界外" },
+    { "id": "F-2-A2", "severity": "high", "scenario": "workspace 內 junction/symlink 指向外部→經 watcher/tree 外洩或監看區外", "failSafeTest": "realpath containment、followSymlinks:false、symlink 標 dir:false；真 junction 測試" },
+    { "id": "F-2-A3", "severity": "medium", "scenario": "watcher 未排除 node_modules/.git→重目錄高 CPU（違 REQ-MON-006）", "failSafeTest": "ignored 路徑分段比對；真 chokidar 測 node_modules 不觸發、src 觸發" },
+    { "id": "F-2-A4", "severity": "medium", "scenario": "並發 fs:tree 同 wsId→建多個 watcher 洩漏；teardown 不清→殭屍", "failSafeTest": "ensureWatch 冪等（同步 check-set）、teardown size===0 收不到事件" },
+    { "id": "F-2-A5", "severity": "low", "scenario": "大量檔變動 flood→IPC 風暴卡 UI", "failSafeTest": "flood breaker 切 coarse '' 訊號、awaitWriteFinish 合併；500 檔→<50 推送" }
+  ],
+  "coverage": [
+    { "attackId": "F-2-A1", "status": "covered", "testFile": "src/main/fs/FileWatcher.test.ts" },
+    { "attackId": "F-2-A2", "status": "covered", "testFile": "src/main/fs/FileWatcher.test.ts" },
+    { "attackId": "F-2-A3", "status": "covered", "testFile": "src/main/fs/FileWatcher.test.ts" },
+    { "attackId": "F-2-A4", "status": "covered", "testFile": "src/main/fs/FileWatcher.test.ts" },
+    { "attackId": "F-2-A5", "status": "covered", "testFile": "src/main/fs/FileWatcher.test.ts" }
+  ]
+}

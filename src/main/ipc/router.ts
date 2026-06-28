@@ -1,5 +1,4 @@
-// IPC 通道註冊表（channel registry）：store + workspace 真實實作；其餘 feature 預連空樁。
-// 後續 feature task 各自實作其 registerXxxHandlers 並由整合波接上（取代 stub）。
+// IPC 通道註冊表（channel registry）：store/workspace/fs/pty/git 真實實作；search/lsp/playwright/update 預連空樁。
 
 import { ipcMain } from 'electron';
 import type { StateStore } from '../store/StateStore';
@@ -7,10 +6,11 @@ import { registerStoreHandlers } from '../store/storeHandlers';
 import { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
 import { WorkspaceManager } from '../workspace/WorkspaceManager';
 import { registerWorkspaceHandlers } from '../workspace/workspaceHandlers';
+import { registerFsTreeAndWatch, type FileWatcher } from '../fs/FileWatcher';
+import { registerFileService } from '../fs/fileService';
+import { registerPtyHandlers, type PtyManager } from '../pty/PtyManager';
+import { registerGitHandlers } from '../git/GitService';
 import {
-  registerFsHandlers,
-  registerGitHandlers,
-  registerPtyHandlers,
   registerSearchHandlers,
   registerLspHandlers,
   registerPlaywrightHandlers,
@@ -21,6 +21,8 @@ import {
 export interface MainServices {
   lifecycle: WorkspaceLifecycle;
   workspaces: WorkspaceManager;
+  pty: PtyManager;
+  fileWatcher: FileWatcher;
 }
 
 export function registerIpcHandlers(store: StateStore, userDataDir: string): MainServices {
@@ -30,15 +32,16 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
   // 真實實作
   registerStoreHandlers(ipcMain, store);
   registerWorkspaceHandlers(ipcMain, workspaces);
+  const fileWatcher = registerFsTreeAndWatch(ipcMain, workspaces, lifecycle); // fs:tree + 監看
+  registerFileService(ipcMain, workspaces); // fs:read / fs:write
+  const pty = registerPtyHandlers(ipcMain, workspaces, lifecycle); // pty:*
+  registerGitHandlers(ipcMain, workspaces); // git:*
 
   // 空樁（後續 task 取代）
-  registerFsHandlers(ipcMain);
-  registerGitHandlers(ipcMain);
-  registerPtyHandlers(ipcMain);
   registerSearchHandlers(ipcMain);
   registerLspHandlers(ipcMain);
   registerPlaywrightHandlers(ipcMain);
   registerUpdateHandlers(ipcMain);
 
-  return { lifecycle, workspaces };
+  return { lifecycle, workspaces, pty, fileWatcher };
 }

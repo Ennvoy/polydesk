@@ -1,0 +1,16 @@
+{
+  "attacks": [
+    { "id": "F-7-A1", "severity": "high", "scenario": "分支/remote 名黑名單放行 git 特殊語意（main:refs/heads/evil、+main、@{0}、x.lock、--opt）→ refspec 注入/選項注入", "failSafeTest": "validateRef 白名單（check-ref-format 等價）；惡意名單全 false、execFile 從未被呼叫" },
+    { "id": "F-7-A2", "severity": "high", "scenario": "唯讀監控觸發工作區半可信 hook/fsmonitor/textconv→任意程式執行", "failSafeTest": "read argv 帶 core.fsmonitor=false/hooksPath=/--no-pager、diff --no-textconv、env NOSYSTEM；惡意 config 不執行 PWNED" },
+    { "id": "F-7-A3", "severity": "high", "scenario": "commit message 經暫存檔→可預測路徑竄改/symlink 覆寫/殘留", "failSafeTest": "commit 走 -F - stdin 零暫存檔；spy fs writeFileSync/mkdtempSync 全程未呼叫" },
+    { "id": "F-7-A4", "severity": "medium", "scenario": "檔名 pathspec magic（:(glob)/前導 -）→誤 stage 他檔/選項注入", "failSafeTest": "literal pathspec :(literal)+--；-z porcelain 解析；只該檔被 stage" },
+    { "id": "F-7-A5", "severity": "medium", "scenario": "同工作區併發 git→index.lock 衝突；一個 reject 毒化整鏈/unhandledRejection", "failSafeTest": "gitSerialQueue 每 wsId 序列化、reject 不毒鏈、maxActive===1、鏈清理不洩漏" }
+  ],
+  "coverage": [
+    { "attackId": "F-7-A1", "status": "covered", "testFile": "src/main/git/gitSafeArgs.test.ts" },
+    { "attackId": "F-7-A2", "status": "covered", "testFile": "src/main/git/GitService.security.test.ts" },
+    { "attackId": "F-7-A3", "status": "covered", "testFile": "src/main/git/GitService.commit.test.ts" },
+    { "attackId": "F-7-A4", "status": "covered", "testFile": "src/main/git/GitService.porcelain.test.ts" },
+    { "attackId": "F-7-A5", "status": "covered", "testFile": "src/main/git/gitSerialQueue.test.ts" }
+  ]
+}

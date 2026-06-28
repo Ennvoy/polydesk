@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-009",
+  "status": "pass",
+  "evidence": "e2e/editor-conflict.spec.ts 真綠（外部修改 保留/載入各一）",
+  "by": "evaluator",
+  "at": "2026-06-28T10:30:32.339Z"
+}

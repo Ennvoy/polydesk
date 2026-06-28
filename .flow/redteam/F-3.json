@@ -1,0 +1,18 @@
+{
+  "attacks": [
+    { "id": "F-3-A1", "severity": "high", "scenario": "pty:create 的 shell 字串直接餵 spawn→任意執行檔（calc.exe / powershell -enc）", "failSafeTest": "固定 Record<ShellKind,string> allowlist 查表、未知 throw 不 spawn；測非法 shell/wsId spy 未呼叫 spawn" },
+    { "id": "F-3-A2", "severity": "high", "scenario": "PTY 輸出 OSC 52 剪貼簿寫入/escape 回灌成輸入", "failSafeTest": "stripOsc52 純函式（跨 chunk carry、上限防無界）；非 OSC52 CSI 保留" },
+    { "id": "F-3-A3", "severity": "medium", "scenario": "終端機標題/視窗回報 escape 注入回灌", "failSafeTest": "secureOptions 關閉所有視窗/標題回報旗標、不掛 clipboard addon" },
+    { "id": "F-3-A4", "severity": "medium", "scenario": "關閉時序競態：close 後 write/resize 寫已死 pty 崩潰、double close", "failSafeTest": "write/resize/close 帶 alive 守衛、close 冪等安全 no-op" },
+    { "id": "F-3-A5", "severity": "medium", "scenario": "PTY 高頻輸出洪流→IPC 風暴卡 UI / 記憶體爆", "failSafeTest": "frame 16ms 批次合併 + backpressure（>1MB pause、flush resume）" },
+    { "id": "F-3-A6", "severity": "high", "scenario": "移除工作區/關 app 未殺前景子程序→殭屍程序", "failSafeTest": "teardown 經 lifecycle treeKill（taskkill /T /F）；真實測 child pid 消失" }
+  ],
+  "coverage": [
+    { "attackId": "F-3-A1", "status": "covered", "testFile": "src/main/pty/PtyManager.test.ts" },
+    { "attackId": "F-3-A2", "status": "covered", "testFile": "src/main/pty/PtyManager.test.ts" },
+    { "attackId": "F-3-A3", "status": "covered", "testFile": "src/renderer/components/Terminal/secureOptions.test.ts" },
+    { "attackId": "F-3-A4", "status": "covered", "testFile": "src/main/pty/PtyManager.test.ts" },
+    { "attackId": "F-3-A5", "status": "covered", "testFile": "src/main/pty/PtyManager.test.ts" },
+    { "attackId": "F-3-A6", "status": "covered", "testFile": "src/main/pty/PtyManager.test.ts" }
+  ]
+}

@@ -1,0 +1,150 @@
+/* Editor 面板樣式（F-4，深層客製化；全部 var(--*) 取值，禁手刻 hex）。 */
+
+.pd-editor-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+}
+
+/* ── tab 列 ── */
+.pd-editor-tabs {
+  display: flex;
+  align-items: stretch;
+  height: 34px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.pd-editor-tabs::-webkit-scrollbar { height: 0; }
+
+.pd-editor-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  max-width: 200px;
+  font-size: var(--text-sm);
+  color: var(--fg-2);
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border-soft);
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+.pd-editor-tab:hover { background: var(--surface-warm); color: var(--fg); }
+.pd-editor-tab.is-active { background: var(--bg); color: var(--fg); }
+.pd-editor-tab.is-active::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 2px;
+  background: var(--accent);
+}
+.pd-editor-tab:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+
+.pd-editor-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pd-editor-dot {
+  width: 8px; height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.pd-editor-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px; height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--meta);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+.pd-editor-tab-close:hover { background: var(--surface-warm); color: var(--fg); }
+.pd-editor-tab-close:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.pd-editor-tabs-spacer { flex: 1; min-width: var(--space-2); }
+
+.pd-editor-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  border: none;
+  background: transparent;
+  color: var(--meta);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
+}
+.pd-editor-action:hover:not(:disabled) { color: var(--fg); background: var(--surface-warm); }
+.pd-editor-action[aria-pressed='true'] { color: var(--accent); }
+.pd-editor-action:disabled { opacity: 0.4; cursor: not-allowed; }
+.pd-editor-action:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+
+/* ── 編輯區（可分割並排） ── */
+.pd-editor-panes {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.pd-editor-pane {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+.pd-editor-pane-split { border-left: 1px solid var(--border); }
+
+.pd-editor-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--meta);
+  background: var(--bg);
+  text-align: center;
+  pointer-events: none;
+  padding: var(--space-6);
+}
+.pd-editor-empty p { margin: 0; }
+.pd-editor-empty-sub { font-size: var(--text-sm); color: var(--meta); }
+
+/* ── 狀態列（語言 / 編碼 / EOL / 游標 / 唯讀） ── */
+.pd-editor-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 24px;
+  flex-shrink: 0;
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  background: var(--surface);
+  border-top: 1px solid var(--border-soft);
+}
+.pd-editor-status-sep { color: var(--meta); }
+.pd-editor-status-right { margin-left: auto; }
+.pd-editor-status-idle { color: var(--meta); }
+.pd-editor-ro {
+  color: var(--warn);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

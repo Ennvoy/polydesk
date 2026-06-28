@@ -4,6 +4,7 @@ import { app, BrowserWindow, session, shell } from 'electron';
 import { join } from 'node:path';
 import { StateStore } from './store/StateStore';
 import { registerIpcHandlers, type MainServices } from './ipc/router';
+import { setMainWindow } from './ipc/broadcast';
 import { mark, measure } from '../shared/perf';
 import { APP_NAME, STATE_FILE_NAME } from '../shared/constants';
 
@@ -55,6 +56,8 @@ function createWindow(): void {
     },
   });
 
+  setMainWindow(mainWindow);
+
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
     mark('window:interactive');
@@ -82,6 +85,7 @@ function createWindow(): void {
     }
   });
   mainWindow.on('closed', () => {
+    setMainWindow(null);
     mainWindow = null;
   });
 

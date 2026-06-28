@@ -11,6 +11,7 @@ export const INVOKE_CHANNELS = [
   'workspace:reorder',
   'workspace:activate',
   'workspace:setShell',
+  'workspace:pickFolder',
   'fs:read',
   'fs:write',
   'fs:tree',

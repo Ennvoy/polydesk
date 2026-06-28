@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-003",
+  "status": "pass",
+  "evidence": "e2e/git.spec.ts 真綠（真 git upstream+2分支 編輯→stage→commit→ahead+1）",
+  "by": "evaluator",
+  "at": "2026-06-28T10:30:31.930Z"
+}

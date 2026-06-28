@@ -1,0 +1,18 @@
+{
+  "attacks": [
+    { "id": "F-1-A1", "severity": "high", "scenario": "惡意資料夾名（含 <img onerror>/U+202E RTL/控制字元）經 WorkspaceManager.add 以 basename 當 name；若以 dangerouslySetInnerHTML/contentEditable 渲染→XSS 觸發 IPC（如 workspace.remove purge）", "failSafeTest": "name 一律 React 文字節點+neutralizeBidi、受控 input 改名；單元測 neutralizeBidi 中和 RTL/控制字元、HTML 原樣為純文字" },
+    { "id": "F-1-A4", "severity": "medium", "scenario": "新增磁碟根目錄/超大樹未警告→誤掛巨量檔卡死", "failSafeTest": "classifyPath 判 root/huge-tree/null；add 一律先經 TrustConfirm 確認" },
+    { "id": "F-1-A2", "severity": "low", "scenario": "首載慢樣本污染 REQ-PERF-002 切換 p95 桶；perf 缺 mark 時 throw 擋切換", "failSafeTest": "首載記 wsFirstLoad、再切才記 wsSwitch；try/catch 容缺不擋切換（E2E/X-1 驗）" },
+    { "id": "F-1-A3", "severity": "medium", "scenario": "點 missing 工作區把 active 切到不存在路徑→下游崩潰", "failSafeTest": "missing 列不綁切換 onClick、灰化、isActive 排除 missing（E2E 驗）" },
+    { "id": "F-1-A5", "severity": "medium", "scenario": "移除誤刪 profile 資料（purge 預設開或單擊即刪）", "failSafeTest": "purge 預設 false、狀態隔離列表重繪、勾選需二次確認（E2E 驗）" },
+    { "id": "F-1-A6", "severity": "medium", "scenario": "ClaudeStatusBadge 收到他工作區事件誤顯示、unmount 不退訂洩漏 listener", "failSafeTest": "cb 只認本 wsId、useEffect 回退訂、初值 idle（E2E 驗）" }
+  ],
+  "coverage": [
+    { "attackId": "F-1-A1", "status": "covered", "testFile": "src/renderer/components/Dialogs/TrustConfirm.tsx.test.ts" },
+    { "attackId": "F-1-A4", "status": "covered", "testFile": "src/renderer/components/Dialogs/TrustConfirm.tsx.test.ts" },
+    { "attackId": "F-1-A2", "status": "deferred", "testFile": "src/renderer/components/WorkspaceRail.tsx", "note": "防禦已實作，行為由 E2E/X-1 驗" },
+    { "attackId": "F-1-A3", "status": "deferred", "testFile": "src/renderer/components/WorkspaceRail.tsx", "note": "防禦已實作，由 E2E 驗" },
+    { "attackId": "F-1-A5", "status": "deferred", "testFile": "src/renderer/components/WorkspaceRail.tsx", "note": "防禦已實作，由 E2E 驗" },
+    { "attackId": "F-1-A6", "status": "deferred", "testFile": "src/renderer/components/ClaudeStatusBadge.tsx", "note": "防禦已實作，由 E2E 驗" }
+  ]
+}

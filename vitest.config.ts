@@ -8,5 +8,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
+    // 真實依賴測試（真 git / 真 node-pty / 真 fs）在 Windows 首跑較慢，放寬逐測 timeout。
+    testTimeout: 25_000,
+    hookTimeout: 25_000,
   },
 });

@@ -1,0 +1,242 @@
+/* 原始碼控制面板樣式（深層客製化；全 var(--*) token、含互動微狀態；不手刻 hex）。 */
+
+.pd-scm {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--fg-2);
+}
+
+/* panel header 內的動作群 */
+.pd-scm-hdr-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pd-scm-busy {
+  color: var(--accent);
+  font-size: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+  animation: pd-scm-pulse 1.2s var(--ease-standard) infinite;
+}
+@keyframes pd-scm-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* 小圖示鈕（重整 / push / pull / back） */
+.pd-scm-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--meta);
+  cursor: pointer;
+  font-size: var(--text-base);
+  line-height: 1;
+  transition: color var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+.pd-scm-icon:hover { color: var(--fg); background: var(--surface-warm); }
+.pd-scm-icon:active { transform: translateY(0.5px); }
+.pd-scm-icon:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.pd-scm-icon:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* 同步列 */
+.pd-scm-syncbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-soft);
+  font-size: var(--text-xs);
+}
+.pd-scm-branch {
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pd-scm-ab { color: var(--meta); white-space: nowrap; }
+.pd-scm-syncbtns { margin-left: auto; display: flex; gap: 2px; }
+
+/* 分頁 */
+.pd-scm-tabs {
+  display: flex;
+  gap: 2px;
+  padding: var(--space-2) var(--space-2) 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.pd-scm-tab {
+  flex: 1;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--meta);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+.pd-scm-tab:hover { color: var(--fg-2); }
+.pd-scm-tab.is-active { color: var(--fg); border-bottom-color: var(--accent); }
+.pd-scm-tab:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+
+/* 內容區 */
+.pd-scm-body { flex: 1; min-height: 0; padding: var(--space-2); }
+
+/* commit 區 */
+.pd-scm-commit { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
+.pd-scm-msg { resize: vertical; min-height: 44px; font-family: var(--font-body); }
+.pd-scm-commitbtn { align-self: stretch; }
+
+/* 變更分組 */
+.pd-scm-group { margin-bottom: var(--space-3); }
+.pd-scm-grouphead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-1) var(--space-2);
+}
+.pd-scm-grouplabel {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* 文字型次要動作（取消暫存 / 暫存 / 全部） */
+.pd-scm-link {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+.pd-scm-link:hover { background: var(--surface-warm); color: var(--accent-hover); }
+.pd-scm-link:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.pd-scm-link:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* 變更列 */
+.pd-scm-change { justify-content: space-between; gap: var(--space-1); padding-right: var(--space-1); }
+.pd-scm-changemain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+}
+.pd-scm-changemain:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+.pd-scm-changepath {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl; /* 路徑過長時保留檔名（右側）可見 */
+  text-align: left;
+}
+
+/* 狀態徽章 */
+.pd-scm-badge {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  border-radius: var(--radius-sm);
+  color: var(--accent-on);
+  line-height: 16px;
+}
+.pd-scm-badge.is-m { background: var(--warn); color: var(--bg); }
+.pd-scm-badge.is-a { background: var(--success); }
+.pd-scm-badge.is-d { background: var(--danger); }
+.pd-scm-badge.is-r { background: var(--accent); }
+.pd-scm-badge.is-u { background: var(--danger); }
+.pd-scm-badge.is-untracked { background: var(--meta); }
+
+/* stash / 新分支 動作列 */
+.pd-scm-stash { display: flex; gap: var(--space-2); padding: var(--space-2); flex-wrap: wrap; }
+
+/* 歷史 */
+.pd-scm-logrow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border-soft);
+}
+.pd-scm-logsubject { color: var(--fg); font-size: var(--text-sm); }
+.pd-scm-logmeta { color: var(--meta); font-size: var(--text-xs); }
+
+/* 分支列 */
+.pd-scm-branchrow { width: 100%; border: none; background: transparent; text-align: left; }
+.pd-scm-branchrow:disabled { cursor: default; }
+.pd-scm-branchrow:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.pd-scm-branchdot { color: var(--accent); flex-shrink: 0; }
+.pd-scm-branchname { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* diff 全面板 */
+.pd-scm-back { padding: 2px 8px; font-size: var(--text-xs); }
+.pd-scm-difftitle {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--fg);
+  font-weight: 600;
+  margin-left: var(--space-2);
+}
+.pd-scm-diffwrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pd-scm-diff { flex: 1; min-height: 0; }
+.pd-scm-diff-empty { padding: var(--space-3); color: var(--meta); font-size: var(--text-sm); margin: 0; }
+
+/* 空 / 錯誤狀態 */
+.pd-scm-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  color: var(--meta);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+.pd-scm-error {
+  margin: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in oklab, var(--danger), transparent 88%);
+  border: 1px solid color-mix(in oklab, var(--danger), transparent 60%);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-size: var(--text-xs);
+  word-break: break-word;
+}

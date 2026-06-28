@@ -31,6 +31,7 @@ export interface InvokeChannels {
   'workspace:reorder': { req: { orderedIds: string[] }; res: { ok: true } };
   'workspace:activate': { req: { wsId: string }; res: { ok: true } };
   'workspace:setShell': { req: { wsId: string; shell: ShellKind }; res: { ok: true } };
+  'workspace:pickFolder': { req: void; res: { path: string | null } };
   // 檔案 / 編輯器
   'fs:read': {
     req: { wsId: string; path: string };

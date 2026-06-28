@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-007",
+  "status": "pass",
+  "evidence": "e2e/shell.spec.ts 真綠（深→淺→暖 重啟沿用）",
+  "by": "evaluator",
+  "at": "2026-06-28T10:30:32.062Z"
+}

@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-008",
+  "status": "pass",
+  "evidence": "e2e/terminal.spec.ts 真綠（跑中終端機→移除→關閉確認→teardown）",
+  "by": "evaluator",
+  "at": "2026-06-28T10:30:32.195Z"
+}

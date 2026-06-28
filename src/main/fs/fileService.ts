@@ -1,0 +1,369 @@
+// fs:read / fs:write 真實實作（F-4，取代 fs stub 的 read/write）。
+// 安全錨點：一律以 WorkspaceManager.get(wsId).path 的 realpath 為根解析；
+//   realpath 後用 path.relative 做邊界檢查（解 symlink/junction/8.3 短名/大小寫），
+//   拒 UNC / \\?\ 長路徑前綴；絕對 path 必須仍落在 workspace 內才放行（REQ-SEC-003 / 紅軍 F-4-A1）。
+// 編碼：BOM 為硬證據優先 → 合法 UTF-8 視為 utf-8 → 否則 jschardet + zh-TW Big5 結構權重；
+//   未知/低信心不靜默以錯編碼 re-encode（預設 utf-8 + lowConfidence，紅軍 F-4-A2）。
+// EOL/BOM：content 一律剝 BOM、寫檔逐位元組忠實（不全域正規化換行），保留原換行（紅軍 F-4-A3）。
+// 寫檔：原子（temp + fsync + rename）+ 以「上次交給 renderer 的 mtime」做 lost-update 衝突偵測（紅軍 F-4-A4）。
+// 讀檔：stat 先擋目錄/特殊檔與超大檔，避免 OOM / EISDIR / 卡死（紅軍 F-4-A5）。
+
+import { realpathSync, constants as fsConstants, promises as fsp } from 'node:fs';
+import { resolve, relative, isAbsolute, dirname, join, basename } from 'node:path';
+import jschardet from 'jschardet';
+import iconv from 'iconv-lite';
+import type { IpcMain } from 'electron';
+import type { WorkspaceManager } from '../workspace/WorkspaceManager';
+import type { FileEncoding, Eol } from '../../shared/types';
+import type { InvokeReq } from '../../shared/ipc';
+
+/** 讀取硬上限（防 OOM）；REQ-PERF-003 一般檔 ≤1MB，此為避免單檔 DoS 的安全閘。 */
+export const DEFAULT_MAX_READ_BYTES = 50 * 1024 * 1024;
+/** jschardet 信心低於此值視為 lowConfidence（不靜默以該編碼重寫）。 */
+const LOW_CONFIDENCE_THRESHOLD = 0.5;
+
+export type FsErrorCode = 'outside-workspace' | 'too-large' | 'not-a-file' | 'not-found' | 'read-failed';
+
+/** 型別化檔案服務錯誤（fs:read 契約無 error 變體 → 以 throw 讓 IPC reject，狀態清楚）。 */
+export class FileServiceError extends Error {
+  constructor(public readonly code: FsErrorCode) {
+    super(code);
+    this.name = 'FileServiceError';
+  }
+}
+
+/** 記錄「上次交給 renderer 的版本 mtime」供 lost-update 衝突偵測（key = realpath 絕對路徑）。 */
+const readVersions = new Map<string, number>();
+let writeSeq = 0;
+
+// ── 路徑沙箱 ──────────────────────────────────────────────────────────────
+
+/** UNC（\\server）或裝置/長路徑前綴（\\?\、\\.\）；正反斜線皆擋。 */
+const UNC_OR_DEVICE = /^[\\/]{2}/;
+
+/** 解析「存在部分」的 realpath（沿 symlink/junction/短名/大小寫正規化），再接上尚不存在的尾段。 */
+function realpathExisting(p: string): string {
+  let cur = resolve(p);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      const real = realpathSync.native(cur);
+      return tail.length ? join(real, ...tail.reverse()) : real;
+    } catch {
+      const parent = dirname(cur);
+      if (parent === cur) return resolve(p); // 連根都不存在：回正規化結果
+      tail.push(basename(cur));
+      cur = parent;
+    }
+  }
+}
+
+/** realTarget 是否落在 realRoot 之內（含等於根）；用 path.relative 邊界檢查、避免前綴混淆。 */
+function isInside(realRoot: string, realTarget: string): boolean {
+  const rel = relative(realRoot, realTarget);
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+}
+
+/** 把 (wsId, path) 解析成 workspace 沙箱內的安全絕對路徑；越界/UNC 一律拒。 */
+export function resolveSafe(
+  mgr: WorkspaceManager,
+  wsId: string,
+  p: string,
+): { ok: true; abs: string } | { error: 'outside-workspace' } {
+  if (typeof p !== 'string' || p === '') return { error: 'outside-workspace' };
+  if (UNC_OR_DEVICE.test(p)) return { error: 'outside-workspace' };
+  const ws = mgr.get(wsId);
+  if (!ws) return { error: 'outside-workspace' };
+  let realRoot: string;
+  try {
+    realRoot = realpathSync.native(ws.path);
+  } catch {
+    return { error: 'outside-workspace' }; // workspace 路徑無法解析（missing 等）→ 拒
+  }
+  const candidate = resolve(realRoot, p); // p 為絕對則直接是 p → 仍須通過下方邊界檢查
+  if (UNC_OR_DEVICE.test(candidate)) return { error: 'outside-workspace' };
+  const realTarget = realpathExisting(candidate);
+  if (UNC_OR_DEVICE.test(realTarget)) return { error: 'outside-workspace' };
+  if (!isInside(realRoot, realTarget)) return { error: 'outside-workspace' };
+  return { ok: true, abs: realTarget };
+}
+
+// ── 編碼偵測 ──────────────────────────────────────────────────────────────
+
+function detectByBom(buf: Buffer): FileEncoding | null {
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) return 'utf-8-bom';
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return 'utf-16le';
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return 'utf-16be';
+  return null;
+}
+
+/** jschardet 名稱 → FileEncoding 白名單對映；未知回 null（不臆測）。 */
+function normalizeEncoding(name: string | null): FileEncoding | null {
+  if (!name) return null;
+  const n = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  switch (n) {
+    case 'big5':
+    case 'cp950':
+    case 'big5hkscs':
+      return 'big5';
+    case 'utf8':
+    case 'ascii':
+    case 'usascii':
+      return 'utf-8';
+    case 'utf16le':
+    case 'utf16':
+      return 'utf-16le';
+    case 'utf16be':
+      return 'utf-16be';
+    default:
+      return null;
+  }
+}
+
+function isValidUtf8(buf: Buffer): boolean {
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(buf);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 緩衝是否為結構合法的 Big5（且至少含一個雙位元組序列；純 ASCII 不算）。 */
+function isValidBig5(buf: Buffer): boolean {
+  let i = 0;
+  let sawDouble = false;
+  while (i < buf.length) {
+    const b = buf[i];
+    if (b < 0x80) {
+      i++;
+      continue;
+    }
+    if (b < 0x81 || b > 0xfe) return false; // 非合法 lead
+    const t = buf[i + 1];
+    if (t === undefined) return false; // 尾段落單
+    const trailOk = (t >= 0x40 && t <= 0x7e) || (t >= 0xa1 && t <= 0xfe);
+    if (!trailOk) return false;
+    sawDouble = true;
+    i += 2;
+  }
+  return sawDouble;
+}
+
+export interface EncodingDetection {
+  encoding: FileEncoding;
+  confidence: number;
+  /** 偵測信心不足或編碼未對映：不應靜默以該編碼 re-encode，交 UI 提示使用者手動指定。 */
+  lowConfidence: boolean;
+}
+
+/** 偵測緩衝編碼（BOM 硬證據優先 → 合法 UTF-8 → jschardet + zh-TW Big5 結構權重）。 */
+export function detectEncoding(buf: Buffer): EncodingDetection {
+  const bom = detectByBom(buf);
+  if (bom) return { encoding: bom, confidence: 1, lowConfidence: false };
+  if (buf.length === 0) return { encoding: 'utf-8', confidence: 1, lowConfidence: false };
+  if (isValidUtf8(buf)) return { encoding: 'utf-8', confidence: 1, lowConfidence: false };
+
+  let jres: { encoding: string | null; confidence: number };
+  try {
+    jres = jschardet.detect(buf);
+  } catch {
+    jres = { encoding: null, confidence: 0 };
+  }
+  const mapped = normalizeEncoding(jres.encoding);
+  if (mapped === 'big5') {
+    return { encoding: 'big5', confidence: jres.confidence, lowConfidence: jres.confidence < LOW_CONFIDENCE_THRESHOLD };
+  }
+  // zh-TW 權重：非 UTF-8 但結構合法 Big5 → 判 Big5（壓制 windows-1252 之類誤判）。
+  if (isValidBig5(buf)) {
+    return { encoding: 'big5', confidence: Math.max(jres.confidence, 0.6), lowConfidence: false };
+  }
+  if (mapped && mapped !== 'utf-8') {
+    return { encoding: mapped, confidence: jres.confidence, lowConfidence: jres.confidence < LOW_CONFIDENCE_THRESHOLD };
+  }
+  // 未知/未對映（windows-1252、iso-8859-* 等）→ 不臆測：預設 utf-8 + lowConfidence。
+  return { encoding: 'utf-8', confidence: jres.confidence, lowConfidence: true };
+}
+
+// ── 編解碼（BOM 一律剝離/單次補回，不做全域 EOL 正規化） ──────────────────
+
+function decodeWith(buf: Buffer, encoding: FileEncoding): string {
+  switch (encoding) {
+    case 'utf-8-bom': {
+      const body = buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf ? buf.subarray(3) : buf;
+      return iconv.decode(body, 'utf8');
+    }
+    case 'utf-16le': {
+      const body = buf[0] === 0xff && buf[1] === 0xfe ? buf.subarray(2) : buf;
+      return iconv.decode(body, 'utf16le');
+    }
+    case 'utf-16be': {
+      const body = buf[0] === 0xfe && buf[1] === 0xff ? buf.subarray(2) : buf;
+      return iconv.decode(body, 'utf16be');
+    }
+    case 'big5':
+      return iconv.decode(buf, 'big5');
+    case 'utf-8':
+    default:
+      return iconv.decode(buf, 'utf8');
+  }
+}
+
+function encodeContent(content: string, encoding: FileEncoding): Buffer {
+  // content 內任何前導 BOM 一律剝除，避免雙 BOM；BOM 僅由 encoding 在此處單次補回（F-4-A3）。
+  const text = content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
+  switch (encoding) {
+    case 'utf-8-bom':
+      return Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), iconv.encode(text, 'utf8')]);
+    case 'utf-16le':
+      return iconv.encode(text, 'utf16le', { addBOM: true });
+    case 'utf-16be':
+      return iconv.encode(text, 'utf16be', { addBOM: true });
+    case 'big5':
+      return iconv.encode(text, 'big5');
+    case 'utf-8':
+    default:
+      return iconv.encode(text, 'utf8');
+  }
+}
+
+function detectEol(content: string): Eol {
+  return content.includes('\r\n') ? 'crlf' : 'lf';
+}
+
+async function isReadonly(abs: string): Promise<boolean> {
+  try {
+    await fsp.access(abs, fsConstants.W_OK);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+function isPermError(e: unknown): boolean {
+  const code = (e as NodeJS.ErrnoException | null)?.code;
+  return code === 'EACCES' || code === 'EPERM' || code === 'EROFS';
+}
+
+/** 原子寫：同目錄 temp + fsync + rename（rename 同檔案系統具原子性，杜絕截斷/空檔，F-4-A4）。 */
+async function atomicWrite(abs: string, bytes: Buffer): Promise<void> {
+  const tmp = join(dirname(abs), `.polydesk-tmp-${process.pid}-${Date.now()}-${(writeSeq++).toString(36)}`);
+  const fh = await fsp.open(tmp, 'w');
+  try {
+    await fh.writeFile(bytes);
+    await fh.sync();
+  } finally {
+    await fh.close();
+  }
+  try {
+    await fsp.rename(tmp, abs);
+  } catch (e) {
+    await fsp.rm(tmp, { force: true }).catch(() => {});
+    throw e;
+  }
+}
+
+// ── 對外：read / write 核心（可直接單元測試） ─────────────────────────────
+
+export interface ReadResult {
+  content: string;
+  encoding: FileEncoding;
+  eol: Eol;
+  readonly: boolean;
+}
+
+export interface ReadOptions {
+  /** 讀取大小上限（測試可注入低值驗 too-large 路徑）。 */
+  maxBytes?: number;
+}
+
+/** fs:read 核心；越界/目錄/特殊檔/超大/讀失敗一律 throw（IPC 會 reject）。 */
+export async function readFileSafe(
+  mgr: WorkspaceManager,
+  req: InvokeReq<'fs:read'>,
+  opts?: ReadOptions,
+): Promise<ReadResult> {
+  const safe = resolveSafe(mgr, req.wsId, req.path);
+  if ('error' in safe) throw new FileServiceError('outside-workspace');
+  const abs = safe.abs;
+
+  let st;
+  try {
+    st = await fsp.stat(abs); // stat 不跟隨「待讀檔本身」以外的東西；目錄/FIFO 在此被擋
+  } catch {
+    throw new FileServiceError('not-found');
+  }
+  if (!st.isFile()) throw new FileServiceError('not-a-file'); // 拒目錄/FIFO/裝置檔（不無限 await）
+  const maxBytes = opts?.maxBytes ?? DEFAULT_MAX_READ_BYTES;
+  if (st.size > maxBytes) throw new FileServiceError('too-large'); // 讀前擋大檔，永不整檔載入
+
+  let buf: Buffer;
+  try {
+    buf = await fsp.readFile(abs);
+  } catch {
+    throw new FileServiceError('read-failed');
+  }
+
+  const det = detectEncoding(buf);
+  const content = decodeWith(buf, det.encoding);
+  const eol = detectEol(content);
+  const readonly = await isReadonly(abs);
+  readVersions.set(abs, st.mtimeMs); // 記下交付版本，供寫回時偵測外部變更
+  return { content, encoding: det.encoding, eol, readonly };
+}
+
+/** fs:write 核心；越界 throw、唯讀/權限回 {error:'permission'}、外部已改回 {error:'conflict'}。 */
+export async function writeFileSafe(
+  mgr: WorkspaceManager,
+  req: InvokeReq<'fs:write'>,
+): Promise<{ ok: true } | { error: 'permission' | 'conflict' }> {
+  const safe = resolveSafe(mgr, req.wsId, req.path);
+  if ('error' in safe) throw new FileServiceError('outside-workspace');
+  const abs = safe.abs;
+
+  let exists = true;
+  let curMtime: number | undefined;
+  try {
+    const st = await fsp.stat(abs);
+    if (!st.isFile()) throw new FileServiceError('not-a-file'); // 不可寫到目錄/特殊檔
+    curMtime = st.mtimeMs;
+  } catch (e) {
+    if (e instanceof FileServiceError) throw e;
+    exists = false;
+  }
+
+  // 既有檔不可寫 → permission（先擋，確定性且不留 temp）。
+  if (exists && (await isReadonly(abs))) return { error: 'permission' };
+
+  // lost-update：曾交付過此檔，磁碟現況 mtime 已被外部改動 → 不靜默覆蓋（REQ-EDIT-007）。
+  const known = readVersions.get(abs);
+  if (exists && known !== undefined && curMtime !== undefined && curMtime !== known) {
+    return { error: 'conflict' };
+  }
+
+  const bytes = encodeContent(req.content, req.encoding);
+  try {
+    await atomicWrite(abs, bytes);
+  } catch (e) {
+    if (isPermError(e)) return { error: 'permission' };
+    throw e;
+  }
+  try {
+    const st2 = await fsp.stat(abs);
+    readVersions.set(abs, st2.mtimeMs);
+  } catch {
+    /* 更新版本指紋失敗不致命 */
+  }
+  return { ok: true };
+}
+
+/** 測試輔助：清空模組級版本指紋狀態。 */
+export function __resetFileServiceState(): void {
+  readVersions.clear();
+}
+
+/** 註冊 fs:read / fs:write（取代 stub 的 fs read/write；fs:tree 由 F-2 提供）。 */
+export function registerFileService(ipc: IpcMain, workspaces: WorkspaceManager): void {
+  ipc.handle('fs:read', (_e, req: InvokeReq<'fs:read'>) => readFileSafe(workspaces, req));
+  ipc.handle('fs:write', (_e, req: InvokeReq<'fs:write'>) => writeFileSafe(workspaces, req));
+}

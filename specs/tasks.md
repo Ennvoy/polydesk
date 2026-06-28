@@ -35,28 +35,28 @@
 
 判準：能向使用者 demo 一次、對應一條完整 REQ 或 REQ-E2E-*。features 各寫自己的檔以降低 conflictZone 重疊。
 
-- [ ] **F-1 工作區新增/切換/改名/刪除/拖曳排序（含空狀態歡迎頁 + 信任確認 + Claude 徽章殼）**
+- [x] **F-1 工作區新增/切換/改名/刪除/拖曳排序（含空狀態歡迎頁 + 信任確認 + Claude 徽章殼）**
       story：空列表顯示歡迎頁 CTA→新增工作區 A（去重、根目錄/超大樹警告、信任確認彈窗）→再新增 B→點 A 切到 A、點 B 切到 B（已載入 <200ms）→改名、右鍵/hover 移除（含「連同 profile 刪除」二次確認）→拖曳排序持久化。**建 ClaudeStatusBadge 元件並訂閱 `claude:status` 事件（預設 idle，真實狀態由 F-8 推），不耦合監控邏輯。**
       reqRefs：REQ-WS-001/002/003/004/006/007/008/010、REQ-PERF-002、REQ-E2E-001
       blockedBy：P-1、P-2、P-3
       conflictZone：src/renderer/components/WorkspaceRail.tsx、src/renderer/components/EmptyWelcome.tsx、src/renderer/components/ClaudeStatusBadge.tsx、src/renderer/components/Dialogs/TrustConfirm.tsx
       verify：Playwright headed 從歡迎頁真實點擊走完新增 A→新增 B→切 A→切 B（對齊 REQ-E2E-001）；切已載入工作區埋點 p95 <200ms。
 
-- [ ] **F-2 檔案總管樹（Explorer + FileWatcher 即時反映）**
+- [x] **F-2 檔案總管樹（Explorer + FileWatcher 即時反映）**
       story：選工作區後側欄顯示該工作區檔案樹，展開/收合資料夾、點檔開啟（交給 F-4 editor），外部新增/刪除/改名即時反映；watcher 層排除 node_modules/.git 重目錄。
       reqRefs：REQ-WS-004、REQ-MON-005、REQ-E2E-001
       blockedBy：P-1、P-2、P-3
       conflictZone：src/renderer/components/Explorer.tsx、src/main/fs/FileWatcher.ts
       verify：Playwright 展開樹 + 在磁碟新增檔案後樹即時出現該檔；確認 node_modules 不被監看（watcher 計數）。
 
-- [ ] **F-3 整合終端機多開（xterm + node-pty/ConPTY + 多分頁 + shell 切換 + 崩潰重啟 + 關閉確認 + escape 硬化 + Claude/Playwright 缺件偵測）**
+- [x] **F-3 整合終端機多開（xterm + node-pty/ConPTY + 多分頁 + shell 切換 + 崩潰重啟 + 關閉確認 + escape 硬化 + Claude/Playwright 缺件偵測）**
       story：每工作區可「＋」開多個 real PTY 終端機（預設 PowerShell，可切 cmd/pwsh/Git Bash/WSL、每工作區記預設）、**cwd=工作區資料夾**、切走後背景續跑、shell 崩潰顯示 exit code 一鍵重啟、關閉工作區/app 若有跑中程序彈窗列出要求確認後完整 teardown。**app 不做接線、不註冊 MCP、不注入 env**：在工作區終端機跑 `claude` 即由官方 `@playwright/mcp` 依該 cwd 自動取得 per-workspace persistent profile（隔離、可平行、零 repo 足跡）；偵測使用者環境缺 `@playwright/mcp`/Claude CLI/Playwright 瀏覽器時顯示不擋路安裝指引（不崩潰、不自動寫全域設定）；偵測到 WSL shell 明示接線不保證（REQ-NFR-005）。按鍵延遲達標、escape 硬化（OSC 52/8、標題、回灌）。
       reqRefs：REQ-TERM-001/002/003/004/005/006/007/008、REQ-WS-005/009、REQ-PERF-004、REQ-PW-001/004/005/006/007、REQ-NFR-005、REQ-E2E-004/008/010
       blockedBy：P-1、P-2、P-3
       conflictZone：src/renderer/components/Terminal/、src/main/pty/PtyManager.ts、src/renderer/components/Dialogs/CloseConfirm.tsx
       verify：Playwright 開兩個終端機跑指令、切工作區再切回前一個仍在背景跑；按鍵延遲埋點 p95 <50ms；關閉含跑中程序彈窗確認後查無殘留程序（對齊 REQ-E2E-008）；決定性 Playwright 腳本驗 cwd profile 路由/headed 可見/徽章/跨工作區隔離（REQ-E2E-004/010；真 claude 端到端列人工驗收，journey-check 核可例外）。
 
-- [ ] **F-4 Monaco 編輯 + 編碼偵測 + 存檔（分割並排共享 model + 外部修改衝突 + 唯讀/權限錯誤）**
+- [x] **F-4 Monaco 編輯 + 編碼偵測 + 存檔（分割並排共享 model + 外部修改衝突 + 唯讀/權限錯誤）**
       story：開檔（語法高亮、TS/JS 內建智能、多游標、檔內找取代、minimap）→輸入→存檔未存檔徽章消失；分割並排同檔共享同一 model（不互蓋）；偵測 UTF-8/Big5 編碼正確顯示與原編碼存回、保留 CRLF/LF；外部修改時依有無未存檔提示重載或保留；唯讀存檔失敗顯示明確錯誤。
       reqRefs：REQ-EDIT-001/002/006/007/008/009、REQ-PERF-003、REQ-E2E-002、REQ-E2E-009
       blockedBy：P-1、P-2、P-3
@@ -77,7 +77,7 @@
       conflictZone：src/renderer/components/Search.tsx、src/main/search/SearchService.ts
       verify：Playwright 大 repo 搜尋串流出結果、按取消即停、點結果跳到正確檔行並高亮（對齊 REQ-E2E-006）。
 
-- [ ] **F-7 git GUI 含 git 樹（變更樹/diff/stage/commit/push/pull/branch/history/stash + N/A 狀態 + init 引導 + 安全硬化 + 序列化）**
+- [x] **F-7 git GUI 含 git 樹（變更樹/diff/stage/commit/push/pull/branch/history/stash + N/A 狀態 + init 引導 + 安全硬化 + 序列化）**
       story：編輯造成變更→面板出現變更樹→點開看 diff（Monaco diff）→stage→寫 message→commit→變更清空、未推送 +1→push/pull→分支建立/切換、commit 歷史、stash；無 .git 顯示「尚未初始化」一鍵 git init；無 remote/upstream/detached/新分支顯示 N/A 不報錯；所有 git 走 execFile argv+shell:false+`--`+`-F tempfile`+名稱驗證、同工作區序列化、網路操作逾時、失敗明確錯誤不偽裝成功。
       reqRefs：REQ-SCM-001/002/003/004/005/006/007/008/009、REQ-MON-003、REQ-E2E-003
       blockedBy：P-1、P-2、P-3

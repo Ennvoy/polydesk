@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-001",
+  "status": "pass",
+  "evidence": "e2e/workspace.spec.ts 真綠（歡迎頁→新增 A/B→切換）",
+  "by": "evaluator",
+  "at": "2026-06-28T10:30:31.799Z"
+}

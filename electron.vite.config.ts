@@ -8,7 +8,9 @@ import react from '@vitejs/plugin-react';
 // 造成 loadAndTransform 失敗（見 decision ENV-JUNCTION）。
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    // chokidar v5 為 ESM-only，electron main 走 CJS 會 ERR_REQUIRE_ESM；排除外部化 → 由 rollup
+    // bundle 進 CJS main。node-pty 等原生模組仍須外部化（不可 bundle .node）。
+    plugins: [externalizeDepsPlugin({ exclude: ['chokidar'] })],
     resolve: { preserveSymlinks: true },
   },
   preload: {

@@ -1,0 +1,16 @@
+{
+  "attacks": [
+    { "id": "F-4-A1", "severity": "high", "scenario": "fs:read/write path 絕對直用/相對逃逸/前綴混淆/UNC→任意檔讀寫（金鑰外洩/任意寫）", "failSafeTest": "realpath+path.relative 沙箱、拒 UNC、絕對須仍在 workspace 內；攻擊矩陣全 reject(/outside-workspace/)" },
+    { "id": "F-4-A2", "severity": "high", "scenario": "編碼誤判（Big5/cp950 當 UTF-8）→整檔亂碼或靜默以錯編碼重寫毀檔", "failSafeTest": "BOM 優先→UTF-8 驗證→jschardet+zh-TW 權重；低信心預設 utf-8 不靜默重寫；Big5 byte-identical 回寫" },
+    { "id": "F-4-A3", "severity": "medium", "scenario": "EOL/BOM 全域正規化→git 整檔 diff 噪音", "failSafeTest": "混合 EOL read→write byte-identical；BOM 只 encode 補一次" },
+    { "id": "F-4-A4", "severity": "high", "scenario": "lost-update：外部改檔後存檔覆蓋他人變更；併發寫截斷/壞檔", "failSafeTest": "mtime 版本圖偵測→{error:'conflict'}；temp+fsync+rename 原子寫；併發寫結果完整" },
+    { "id": "F-4-A5", "severity": "medium", "scenario": "讀目錄/特殊檔/超大檔→OOM/EISDIR/卡死", "failSafeTest": "先 stat 擋目錄與 size cap→reject(too-large/not-a-file/not-found)" }
+  ],
+  "coverage": [
+    { "attackId": "F-4-A1", "status": "covered", "testFile": "src/main/fs/fileService.test.ts" },
+    { "attackId": "F-4-A2", "status": "covered", "testFile": "src/main/fs/fileService.test.ts" },
+    { "attackId": "F-4-A3", "status": "covered", "testFile": "src/main/fs/fileService.test.ts" },
+    { "attackId": "F-4-A4", "status": "covered", "testFile": "src/main/fs/fileService.test.ts" },
+    { "attackId": "F-4-A5", "status": "covered", "testFile": "src/main/fs/fileService.test.ts" }
+  ]
+}

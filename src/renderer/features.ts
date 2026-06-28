@@ -2,12 +2,12 @@
 // 由本檔以 side-effect import 匯入，於 app bootstrap（main.tsx）時執行一次。
 // 波次整合時在此加一行 import；features 不碰 panelRegistry/DockLayout（單向依賴）。
 
-// Wave 2/3 features 將在此登錄，例：
-// import './components/Explorer';        // F-2 → registerPanel('view:explorer', ...)
-// import './components/Editor';          // F-4 → registerPanel('editor', ...)
-// import './components/Terminal';        // F-3 → registerPanel('terminal', ...)
-// import './components/Search';          // F-6 → registerPanel('view:search', ...)
-// import './components/SourceControl';   // F-7 → registerPanel('view:scm', ...)
+import './components/Explorer'; // F-2 → registerPanel('view:explorer', Explorer) + 訂閱 fs:change
+import './components/Terminal'; // F-3 → registerPanel('terminal', TerminalPanel)
+import './components/Editor'; // F-4 → monacoSetup + registerPanel('editor', EditorGroup)
+import './components/SourceControl'; // F-7 → monacoSetup + registerPanel('view:scm', SourceControlPanel)
+// F-1 的 WorkspaceRail/EmptyWelcome/ClaudeStatusBadge 為 UI 元件（非 panel），由 App.tsx 直接渲染。
+// Wave 3 將加入：F-6 Search（view:search）。
 
 export function registerAllFeatures(): void {
   // side-effect imports 已於模組頂層執行；此函式僅作為明確 bootstrap 進入點。
