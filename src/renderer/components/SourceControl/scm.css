@@ -182,15 +182,30 @@
 /* stash / 新分支 動作列 */
 .pd-scm-stash { display: flex; gap: var(--space-2); padding: var(--space-2); flex-wrap: wrap; }
 
-/* 歷史 */
+/* 歷史（含 commit 線圖）*/
 .pd-scm-logrow {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--space-2);
+  flex-direction: row;
+  align-items: stretch;
+  gap: var(--space-2);
   border-bottom: 1px solid var(--border-soft);
 }
-.pd-scm-logsubject { color: var(--fg); font-size: var(--text-sm); }
+.pd-scm-graph { flex: 0 0 auto; display: block; overflow: visible; }
+.pd-scm-logtext {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+}
+.pd-scm-logsubject {
+  color: var(--fg);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .pd-scm-logmeta { color: var(--meta); font-size: var(--text-xs); }
 
 /* 分支列 */

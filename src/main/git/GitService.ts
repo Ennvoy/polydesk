@@ -366,7 +366,8 @@ export class GitService {
     const cwd = this.path(wsId);
     if (!cwd) return [];
     const n = Math.max(1, Math.min(1000, Math.floor(limit) || 50));
-    const fmt = '%H%x1f%an%x1f%at%x1f%s';
+    // 欄位以 unit-separator(\x1f) 分隔；%P=parents（空白分隔），放 subject 之前（subject 可能含任意字元、留最後）。
+    const fmt = '%H%x1f%an%x1f%at%x1f%P%x1f%s';
     try {
       const { stdout } = await this.run(
         [...readHardeningArgs(), 'log', '-n', String(n), `--pretty=format:${fmt}`, '-z'],
@@ -376,12 +377,13 @@ export class GitService {
         .split('\0')
         .filter((r) => r.length > 0)
         .map((rec) => {
-          const [hash, author, at, subject] = rec.split('\x1f');
+          const [hash, author, at, parents, subject] = rec.split('\x1f');
           return {
             hash: hash ?? '',
             author: author ?? '',
             date: (parseInt(at ?? '0', 10) || 0) * 1000,
             subject: subject ?? '',
+            parents: (parents ?? '').trim().split(/\s+/).filter((p) => p.length > 0),
           };
         });
     } catch (e) {

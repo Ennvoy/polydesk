@@ -51,6 +51,8 @@ export interface GitLogEntry {
   author: string;
   date: number;
   subject: string;
+  /** parent commit hashes（0=root、1=一般、≥2=merge）；供 commit 線圖 lane 計算。 */
+  parents: string[];
 }
 
 export interface TermState {

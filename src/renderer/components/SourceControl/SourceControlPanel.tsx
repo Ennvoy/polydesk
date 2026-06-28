@@ -9,8 +9,63 @@ import { useAppState } from '../../state/appStore';
 import { dialog } from '../Dialogs/host';
 import type { GitStatus, GitChange, GitLogEntry } from '../../../shared/types';
 import { DiffView } from './DiffView';
+import { computeGitGraph, type GitGraphRow } from './gitGraph';
 
 type Tab = 'changes' | 'history' | 'branches';
+
+// ── commit 線圖渲染常數 ──
+const GRAPH_LANE_W = 14;
+const GRAPH_ROW_H = 46;
+const GRAPH_DOT_R = 4;
+// lane 色盤（深/淺主題皆可讀的中飽和色）；色彩索引取模循環。
+const GRAPH_COLORS = ['#4aa3ff', '#f78c6b', '#c792ea', '#7fd1b9', '#ffcb6b', '#f07178', '#82aaff', '#c3e88d'];
+const graphColor = (c: number): string => GRAPH_COLORS[((c % GRAPH_COLORS.length) + GRAPH_COLORS.length) % GRAPH_COLORS.length];
+
+/** 單列 commit 線圖（SVG）：through 直線、in 收斂、out 分岔，節點圓點落在 commitLane。 */
+function GitGraphCell({ row, width }: { row: GitGraphRow; width: number }): React.JSX.Element {
+  const h = GRAPH_ROW_H;
+  const cx = (lane: number): number => GRAPH_LANE_W / 2 + lane * GRAPH_LANE_W;
+  return (
+    <svg className="pd-scm-graph" width={width} height={h} viewBox={`0 0 ${width} ${h}`} aria-hidden="true">
+      {row.segments.map((s, i) => {
+        const col = graphColor(s.color);
+        if (s.kind === 'through') {
+          return <line key={i} x1={cx(s.from)} y1={0} x2={cx(s.from)} y2={h} stroke={col} strokeWidth={1.6} />;
+        }
+        if (s.kind === 'in') {
+          // 上緣(from) → 節點(to, 中央)，以 bezier 平滑收斂。
+          return (
+            <path
+              key={i}
+              d={`M ${cx(s.from)} 0 C ${cx(s.from)} ${h * 0.4}, ${cx(s.to)} ${h * 0.1}, ${cx(s.to)} ${h / 2}`}
+              stroke={col}
+              strokeWidth={1.6}
+              fill="none"
+            />
+          );
+        }
+        // out：節點(from, 中央) → 下緣(to)
+        return (
+          <path
+            key={i}
+            d={`M ${cx(s.from)} ${h / 2} C ${cx(s.from)} ${h * 0.9}, ${cx(s.to)} ${h * 0.6}, ${cx(s.to)} ${h}`}
+            stroke={col}
+            strokeWidth={1.6}
+            fill="none"
+          />
+        );
+      })}
+      <circle
+        cx={cx(row.commitLane)}
+        cy={h / 2}
+        r={GRAPH_DOT_R}
+        fill={graphColor(row.color)}
+        stroke="var(--bg)"
+        strokeWidth={2}
+      />
+    </svg>
+  );
+}
 interface Selected {
   path: string;
   staged: boolean;
@@ -421,14 +476,21 @@ export function SourceControlPanel(): React.JSX.Element {
           {log.length === 0 ? (
             <div className="pd-scm-empty">尚無提交紀錄。</div>
           ) : (
-            log.map((c) => (
-              <div key={c.hash} className="pd-scm-logrow" title={c.hash}>
-                <span className="pd-scm-logsubject">{c.subject}</span>
-                <span className="pd-scm-logmeta">
-                  {c.author} · {new Date(c.date).toLocaleString()} · {c.hash.slice(0, 7)}
-                </span>
-              </div>
-            ))
+            (() => {
+              const graph = computeGitGraph(log);
+              const graphW = graph.maxLanes * GRAPH_LANE_W + 6;
+              return log.map((c, i) => (
+                <div key={c.hash} className="pd-scm-logrow" title={c.hash}>
+                  <GitGraphCell row={graph.rows[i]} width={graphW} />
+                  <div className="pd-scm-logtext">
+                    <span className="pd-scm-logsubject">{c.subject}</span>
+                    <span className="pd-scm-logmeta">
+                      {c.author} · {new Date(c.date).toLocaleString()} · {c.hash.slice(0, 7)}
+                    </span>
+                  </div>
+                </div>
+              ));
+            })()
           )}
         </div>
       )}

@@ -99,6 +99,16 @@ describe('GitService（真 git）', () => {
     expect(log[0].author).toBe('Polydesk Test');
     expect(log[0].hash).toMatch(/^[0-9a-f]{40}$/);
     expect(log[0].date).toBeGreaterThan(0);
+    expect(log[0].parents).toEqual([]); // root commit 無 parent（線圖用）
+
+    // 第二個 commit → parents 指向第一個（%P 解析驗證）
+    writeFileSync(join(ctx.repo, 'b.txt'), 'y');
+    await svc.stage(ctx.wsId, ['b.txt'], true);
+    await svc.commit(ctx.wsId, 'second');
+    const log2 = await svc.log(ctx.wsId, 10);
+    expect(log2.length).toBe(2);
+    expect(log2[0].subject).toBe('second');
+    expect(log2[0].parents).toEqual([log[0].hash]);
   });
 
   it('合法分支名可建立並出現在 list', async () => {
