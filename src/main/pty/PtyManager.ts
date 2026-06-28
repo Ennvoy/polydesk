@@ -303,6 +303,21 @@ export class PtyManager {
     return this.list(wsId).filter((t) => t.alive);
   }
 
+  /** 該 wsId 所有 alive pty 的 root pid（供 F-8 ClaudeStatusMonitor 探測 PTY 下的 claude 子程序）。 */
+  pidsOf(wsId: string): number[] {
+    const out: number[] = [];
+    for (const t of this.terms.values()) {
+      if (t.wsId === wsId && t.alive) {
+        try {
+          out.push(t.pty.pid);
+        } catch {
+          /* pid 取不到略過 */
+        }
+      }
+    }
+    return out;
+  }
+
   /** teardown：殺該 wsId 所有 pty（含子程序樹）並移除（REQ-WS-009）。 */
   killWorkspace(wsId: string): void {
     for (const [termId, t] of [...this.terms]) {
