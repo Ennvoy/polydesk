@@ -116,6 +116,18 @@ function makeFakeSpawn() {
   return { children, spawn };
 }
 
+/**
+ * 等注入式 fake spawn 真的被呼叫：spawnSearch() 在 `await getRgBin()` 之後才呼叫 spawnFn，
+ * 故 run() 回傳後 child 不會同步出現。注入 rgPath 時 getRgBin 走 Promise.resolve（純 microtask），
+ * 這裡 drain microtask 直到 child 數達標（@vscode/ripgrep 真正的 dynamic import 才需要 macrotask）。
+ */
+async function waitForChildren(children: FakeChild[], count: number): Promise<void> {
+  for (let i = 0; i < 200 && children.length < count; i++) await Promise.resolve();
+  if (children.length < count) {
+    throw new Error(`等不到 ${count} 個注入 child（目前 ${children.length}）`);
+  }
+}
+
 /** 組一條 rg 輸出行（path\0line:col:text\n），避免在原始碼放裸 NUL。 */
 function matchLine(path: string, line: number, col: number, text: string): Buffer {
   return Buffer.concat([Buffer.from(path), Buffer.from([0]), Buffer.from(`${line}:${col}:${text}\n`)]);
@@ -328,15 +340,21 @@ describe('SearchService', () => {
   });
 
   // ── A4：收斂 / 生命週期（注入 spawn + 真實演算法）────────────────────
-  it('A4：連續 5 次搜尋，任一時刻存活 rg ≤1，舊的被 kill，收斂後 Map 清空', () => {
+  it('A4：連續 5 次搜尋，任一時刻存活 rg ≤1，舊的被 kill，收斂後 Map 清空', async () => {
     const { wsId } = addWorkspace(ctx.mgr, ctx.root, 'codeCap');
     const { children, spawn } = makeFakeSpawn();
-    const { svc } = makeService(ctx.mgr, { spawn, maxConcurrent: 1 });
+    const { svc } = makeService(ctx.mgr, { spawn, rgPath: 'rg', maxConcurrent: 1 });
 
-    for (let i = 0; i < 5; i++) svc.run({ wsId, query: 'x', opts: {} });
+    // 慢打字節奏：每次搜尋的 rg 先真的 spawn 出來，下一次 run 的 enforceCap 才殺得到它。
+    // （快打字時舊搜尋會在 spawn 前就被取消、根本不啟動 rg —— 同樣滿足「存活 ≤1」，更省。）
+    for (let i = 0; i < 5; i++) {
+      svc.run({ wsId, query: `x${i}`, opts: {} });
+      await waitForChildren(children, i + 1);
+      expect(svc.activeCount).toBe(1); // 任一時刻存活搜尋 ≤1
+      expect(children.filter((c) => !c.killed).length).toBe(1); // 任一時刻存活 rg ≤1
+    }
 
     expect(children.length).toBe(5);
-    expect(children.filter((c) => !c.killed).length).toBe(1); // 任一時刻存活 ≤1
     expect(children[4].killed).toBe(false);
     expect(children.slice(0, 4).every((c) => c.killed)).toBe(true);
     expect(svc.activeCount).toBe(1);
@@ -346,14 +364,15 @@ describe('SearchService', () => {
     expect(svc.activeCount).toBe(0);
   });
 
-  it('A4：killByOwner 殺該 owner 的殘留 child 並清 Map（webContents destroyed）', () => {
+  it('A4：killByOwner 殺該 owner 的殘留 child 並清 Map（webContents destroyed）', async () => {
     addWorkspace(ctx.mgr, ctx.root, 'codeOwner');
     const wsId = ctx.mgr.list()[0].id;
     const { children, spawn } = makeFakeSpawn();
-    const { svc } = makeService(ctx.mgr, { spawn });
+    const { svc } = makeService(ctx.mgr, { spawn, rgPath: 'rg' });
     const owner = { id: 'wc-1' };
 
     svc.run({ wsId, query: 'x', opts: {} }, owner);
+    await waitForChildren(children, 1);
     expect(svc.activeCount).toBe(1);
     svc.killByOwner(owner);
     expect(children[children.length - 1].killed).toBe(true);
@@ -364,9 +383,10 @@ describe('SearchService', () => {
     addWorkspace(ctx.mgr, ctx.root, 'codeCancel');
     const wsId = ctx.mgr.list()[0].id;
     const { children, spawn } = makeFakeSpawn();
-    const { svc, results } = makeService(ctx.mgr, { spawn, batchSize: 1 });
+    const { svc, results } = makeService(ctx.mgr, { spawn, rgPath: 'rg', batchSize: 1 });
 
     const { searchId } = svc.run({ wsId, query: 'x', opts: {} });
+    await waitForChildren(children, 1);
     const child = children[children.length - 1];
     svc.cancel({ searchId });
     expect(child.killed).toBe(true);
@@ -379,18 +399,20 @@ describe('SearchService', () => {
   });
 
   // ── A5：OOM 邊界 + done 可靠性 ──────────────────────────────────────
-  it('A5：巨大單行（無換行超上限）被丟棄、不污染後續行；preview 受上限約束', () => {
+  it('A5：巨大單行（無換行超上限）被丟棄、不污染後續行；preview 受上限約束', async () => {
     addWorkspace(ctx.mgr, ctx.root, 'codeHuge');
     const wsId = ctx.mgr.list()[0].id;
     const { children, spawn } = makeFakeSpawn();
     const { svc, hitsFor } = makeService(ctx.mgr, {
       spawn,
+      rgPath: 'rg',
       batchSize: 1,
       maxLineBytes: 1024,
       previewMax: 50,
     });
 
     const { searchId } = svc.run({ wsId, query: 'x', opts: {} });
+    await waitForChildren(children, 1);
     const child = children[children.length - 1];
 
     // 2000 bytes 無換行無 NUL → 超過 maxLineBytes → 累加器丟棄
