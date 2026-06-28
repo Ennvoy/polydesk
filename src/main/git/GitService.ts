@@ -370,7 +370,9 @@ export class GitService {
     const fmt = '%H%x1f%an%x1f%at%x1f%P%x1f%s';
     try {
       const { stdout } = await this.run(
-        [...readHardeningArgs(), 'log', '-n', String(n), `--pretty=format:${fmt}`, '-z'],
+        // --topo-order：保證任何父都不早於其子出現（rebase/cherry-pick/時鐘偏移下，預設 date order 會讓
+        // 父排在子前，破壞線圖 swimlane「子先於父」前提 → 畫出 dangling 錯誤線）。
+        [...readHardeningArgs(), 'log', '--topo-order', '-n', String(n), `--pretty=format:${fmt}`, '-z'],
         { cwd, env: readEnv() },
       );
       return stdout
@@ -393,8 +395,8 @@ export class GitService {
     }
   }
 
-  /** REQ-SCM：stash push/pop/list。 */
-  async stash(wsId: string, op: 'push' | 'pop' | 'list'): Promise<unknown> {
+  /** REQ-SCM：stash push/pop/list。push 可選 -u（含 untracked，供「切換分支前清乾淨工作樹」用）。 */
+  async stash(wsId: string, op: 'push' | 'pop' | 'list', includeUntracked = false): Promise<unknown> {
     const cwd = this.path(wsId);
     if (!cwd) throw new Error('workspace not found');
     if (op === 'list') {
@@ -404,7 +406,8 @@ export class GitService {
       });
       return { entries: stdout.split('\0').filter((s) => s.length > 0) };
     }
-    await this.run(['stash', op], { cwd, env: writeEnv() });
+    const args = op === 'push' && includeUntracked ? ['stash', 'push', '-u'] : ['stash', op];
+    await this.run(args, { cwd, env: writeEnv() });
     return { ok: true };
   }
 
@@ -458,7 +461,7 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
     enqueue(req.wsId, () => svc.log(req.wsId, req.limit)),
   );
   ipc.handle('git:stash', (_e, req: InvokeReq<'git:stash'>) =>
-    enqueue(req.wsId, () => svc.stash(req.wsId, req.op)),
+    enqueue(req.wsId, () => svc.stash(req.wsId, req.op, req.includeUntracked)),
   );
   ipc.handle('git:init', (_e, req: InvokeReq<'git:init'>) =>
     enqueue(req.wsId, () => svc.init(req.wsId)),

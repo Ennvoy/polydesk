@@ -55,7 +55,7 @@ export interface InvokeChannels {
     res: { branches: string[]; current: string } | { ok: true };
   };
   'git:log': { req: { wsId: string; limit: number }; res: GitLogEntry[] };
-  'git:stash': { req: { wsId: string; op: 'push' | 'pop' | 'list' }; res: unknown };
+  'git:stash': { req: { wsId: string; op: 'push' | 'pop' | 'list'; includeUntracked?: boolean }; res: unknown };
   'git:init': { req: { wsId: string }; res: { ok: true } };
   // 終端機（控制訊息走 invoke；資料流走 stream）
   'pty:create': { req: { wsId: string; shell: ShellKind }; res: { termId: string } };

@@ -182,22 +182,23 @@
 /* stash / 新分支 動作列 */
 .pd-scm-stash { display: flex; gap: var(--space-2); padding: var(--space-2); flex-wrap: wrap; }
 
-/* 歷史（含 commit 線圖）*/
+/* 歷史（含 commit 線圖）：列高由 SourceControlPanel 的 GRAPH_ROW_H 經 inline style 設定（單一真相），
+   列間無 border/間隙 → 線圖跨列無縫不斷。此處只負責排版與裁切，不再硬編碼高度（避免與 JS 兩處漂移）。 */
 .pd-scm-logrow {
   display: flex;
   flex-direction: row;
   align-items: stretch;
   gap: var(--space-2);
-  border-bottom: 1px solid var(--border-soft);
+  overflow: hidden;
 }
-.pd-scm-graph { flex: 0 0 auto; display: block; overflow: visible; }
+.pd-scm-graph { flex: 0 0 auto; display: block; }
 .pd-scm-logtext {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
-  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  padding-right: var(--space-2);
 }
 .pd-scm-logsubject {
   color: var(--fg);
@@ -206,7 +207,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.pd-scm-logmeta { color: var(--meta); font-size: var(--text-xs); }
+.pd-scm-logmeta {
+  color: var(--meta);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* 分支列 */
 .pd-scm-branchrow { width: 100%; border: none; background: transparent; text-align: left; }

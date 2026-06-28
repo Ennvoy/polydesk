@@ -15,7 +15,7 @@ type Tab = 'changes' | 'history' | 'branches';
 
 // ── commit 線圖渲染常數 ──
 const GRAPH_LANE_W = 14;
-const GRAPH_ROW_H = 46;
+const GRAPH_ROW_H = 48; // === scm.css .pd-scm-logrow height；務必同步（線圖列高＝SVG 高才不斷線）
 const GRAPH_DOT_R = 4;
 // lane 色盤（深/淺主題皆可讀的中飽和色）；色彩索引取模循環。
 const GRAPH_COLORS = ['#4aa3ff', '#f78c6b', '#c792ea', '#7fd1b9', '#ffcb6b', '#f07178', '#82aaff', '#c3e88d'];
@@ -234,7 +234,28 @@ export function SourceControlPanel(): React.JSX.Element {
   const onCheckout = (name: string): Promise<void> =>
     run(async () => {
       if (!wsId) return;
-      await ipc.git.branch({ wsId, op: 'checkout', name });
+      try {
+        await ipc.git.branch({ wsId, op: 'checkout', name });
+      } catch (e) {
+        // checkout 失敗：以「結構化 status」判斷是否因工作區有未提交變更被擋——不靠 git 錯誤字串
+        // （在地化 locale 會翻譯、untracked 也含 'overwritten by checkout'，字串比對兩頭不可靠）。
+        const cur = await ipc.git.changes({ wsId }).catch(() => [] as GitChange[]);
+        if (cur.length === 0) throw e; // 工作樹乾淨 → 是別的錯誤（分支不存在等），照原樣回報
+        const choice = await dialog.open((close) => <DirtyCheckoutPrompt branch={name} onChoose={close} />);
+        if (choice !== 'stash') return; // 取消：維持原分支
+        // -u：tracked + untracked 全收，確保工作樹乾淨（untracked 不收會讓第二次 checkout 仍被擋）。
+        await ipc.git.stash({ wsId, op: 'push', includeUntracked: true });
+        try {
+          await ipc.git.branch({ wsId, op: 'checkout', name });
+        } catch (e2) {
+          // 變更已安全進 stash 但仍切不過去 → 明確告知去向，刷新讓 UI 與真實狀態一致，不留破碎中間態。
+          setError(
+            `變更已暫存到 stash，但切換到「${name}」仍失敗：${errText(e2)}。你目前仍在原分支，可在「變更」分頁按 Stash Pop 取回。`,
+          );
+          await refresh();
+          return;
+        }
+      }
       await refresh();
       const r = await ipc.git.branch({ wsId, op: 'list' });
       if ('branches' in r) setBranches({ list: r.branches, current: r.current });
@@ -480,7 +501,8 @@ export function SourceControlPanel(): React.JSX.Element {
               const graph = computeGitGraph(log);
               const graphW = graph.maxLanes * GRAPH_LANE_W + 6;
               return log.map((c, i) => (
-                <div key={c.hash} className="pd-scm-logrow" title={c.hash}>
+                // 列高單一真相＝GRAPH_ROW_H（與 SVG 高同源）；列高===SVG高才能跨列無縫不斷線。
+                <div key={c.hash} className="pd-scm-logrow" title={c.hash} style={{ height: GRAPH_ROW_H }}>
                   <GitGraphCell row={graph.rows[i]} width={graphW} />
                   <div className="pd-scm-logtext">
                     <span className="pd-scm-logsubject">{c.subject}</span>
@@ -571,6 +593,39 @@ function ChangeGroup(props: {
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** 切換分支前工作區有未提交變更時的處置彈窗：先 stash 再切換（可逆），或取消。 */
+function DirtyCheckoutPrompt({
+  branch,
+  onChoose,
+}: {
+  branch: string;
+  onChoose: (result?: unknown) => void;
+}): React.JSX.Element {
+  return (
+    <div style={{ minWidth: 380 }}>
+      <h2 style={{ margin: '0 0 12px', fontSize: 'var(--text-lg)', fontFamily: 'var(--font-display)' }}>
+        切換分支前需處理未提交變更
+      </h2>
+      <p style={{ margin: '0 0 16px', color: 'var(--fg-2)', fontSize: 'var(--text-sm)', lineHeight: 1.6 }}>
+        工作區有未提交的變更，直接切換到「{branch}」會被 git 阻擋。可先把變更 <strong>Stash</strong>（暫存）再切換；
+        之後在「變更」分頁按 <strong>Stash Pop</strong> 即可取回。
+      </p>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button className="pd-btn" aria-label="取消切換分支" onClick={() => onChoose(undefined)}>
+          取消
+        </button>
+        <button
+          className="pd-btn pd-btn-primary"
+          aria-label="Stash 變更並切換分支"
+          onClick={() => onChoose('stash')}
+        >
+          Stash 並切換
+        </button>
+      </div>
     </div>
   );
 }
