@@ -1,0 +1,14 @@
+{
+  "attacks": [
+    { "id": "A1", "severity": "high", "scenario": "state.json 損毀/被竄改（半寫、手改成非法 JSON、磁碟錯誤）→ app 啟動崩潰或 brick、使用者設定全失", "failSafeTest": "寫壞檔→StateStore 偵測 parse 失敗→備份 .corrupt-<ts>.json + 以預設啟動、不丟例外" },
+    { "id": "A2", "severity": "medium", "scenario": "renderer 經 IPC / contextIsolation 缺口取得 Node / raw ipcRenderer → 任意檔案/命令存取（把工作區內不可信網頁/程式視為對手）", "failSafeTest": "config 緩解：contextIsolation/sandbox/nodeIntegration:false + 最小 namespaced preload；深化稽核列 X-4" },
+    { "id": "A3", "severity": "medium", "scenario": "惡意外部頁導航 / window.open 逃逸出 app 殼", "failSafeTest": "config 緩解：setWindowOpenHandler 拒外開 + will-navigate 限制；深化稽核列 X-4" },
+    { "id": "A4", "severity": "medium", "scenario": "原子寫過程中斷（當機/斷電）→ 主 state 檔半寫壞掉", "failSafeTest": "temp+fsync+rename 原子寫，半寫只壞 temp、主檔完好" }
+  ],
+  "coverage": [
+    { "attackId": "A1", "status": "covered", "testFile": "src/main/store/StateStore.test.ts" },
+    { "attackId": "A4", "status": "covered", "testFile": "src/main/store/StateStore.test.ts" },
+    { "attackId": "A2", "status": "deferred", "note": "config 緩解（contextIsolation/sandbox/minimal preload）；深層斷言測試延後到 X-4 安全硬化 pass（tests/security/）" },
+    { "attackId": "A3", "status": "deferred", "note": "config 緩解（setWindowOpenHandler/will-navigate）；深層斷言延後到 X-4" }
+  ]
+}

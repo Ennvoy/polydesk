@@ -1,0 +1,8 @@
+{
+  "id": "VERIFY-LAYER",
+  "question": "真claude端到端是否進硬閘門",
+  "choice": "REQ-E2E-004分兩層：決定性Playwright腳本進硬閘門，真claude端到端列人工/半自動驗收不進硬閘門(journey-check核可例外)",
+  "why": "真claude測試flaky+有費用+自駕驗證會遞迴呼叫Claude，綁進完成謂詞會讓自駕跑不穩",
+  "by": "auto",
+  "at": "2026-06-28T06:22:50.043Z"
+}

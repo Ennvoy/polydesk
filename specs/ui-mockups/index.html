@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polydesk — UI Mockups 總覽</title>
+<style>
+:root{
+  --font-body:"Geist","Geist Sans",-apple-system,"Segoe UI",Arial,sans-serif;
+  --font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Monaco,"Courier New",monospace;
+  --radius-md:8px;--radius-lg:12px;--radius-pill:9999px;
+  --bg:#121316;--chrome:#17181c;--surface:#1c1e23;--surface-2:#23262c;--hover:#2a2d34;
+  --fg:#e8eaed;--fg-2:#b4b8c0;--muted:#8a8f99;--meta:#6b7079;--border:rgba(255,255,255,.08);--accent:#3b82f6;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-body);background:var(--bg);color:var(--fg);-webkit-font-smoothing:antialiased;
+  min-height:100vh;padding:56px 24px}
+.wrap{max-width:1080px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:10px;font-size:26px;font-weight:700;letter-spacing:-.03em}
+.brand .d{width:14px;height:14px;border-radius:50%;background:var(--accent)}
+.lede{color:var(--fg-2);font-size:16px;margin:14px 0 6px;line-height:1.6;max-width:680px}
+.note{color:var(--meta);font-size:13px;font-family:var(--font-mono)}
+.themes{display:flex;gap:8px;margin:24px 0 40px}
+.chip{font-size:12px;font-family:var(--font-mono);padding:5px 12px;border-radius:var(--radius-pill);background:var(--surface-2);box-shadow:0 0 0 1px var(--border);color:var(--fg-2)}
+.chip b{color:var(--fg)}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--meta);margin:0 0 16px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px}
+a.card{display:block;text-decoration:none;color:inherit;background:var(--surface);border-radius:var(--radius-lg);
+  box-shadow:0 0 0 1px var(--border);padding:20px;transition:160ms cubic-bezier(.2,0,0,1)}
+a.card:hover{box-shadow:0 0 0 1px var(--accent),0 14px 30px -12px rgba(0,0,0,.5);transform:translateY(-2px)}
+.thumb{height:120px;border-radius:var(--radius-md);background:var(--surface-2);margin-bottom:14px;overflow:hidden;position:relative;box-shadow:0 0 0 1px var(--border)}
+.thumb .bar{position:absolute;left:0;top:0;height:100%}
+.num{font-size:11px;font-family:var(--font-mono);color:var(--accent)}
+a.card h3{font-size:16px;font-weight:600;margin:4px 0 6px}
+a.card p{font-size:13px;color:var(--muted);line-height:1.55}
+.feat{margin-top:44px;padding:22px;background:var(--surface);border-radius:var(--radius-lg);box-shadow:0 0 0 1px var(--border)}
+.feat ul{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;margin-top:12px}
+.feat li{font-size:13px;color:var(--fg-2);display:flex;gap:8px}.feat li b{color:var(--fg)}
+.feat li::before{content:"›";color:var(--accent);font-weight:700}
+.foot{margin-top:36px;color:var(--meta);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><span class="d"></span>Polydesk</div>
+  <p class="lede">多工作區開發終端機 — 模仿 VSCode 的檔案總管／原始碼控制／編輯器，左側常駐<b style="color:var(--fg)">工作區列表</b>同時開發與監控多專案，每工作區各有獨立終端機與 Claude×Playwright 自動化測試。</p>
+  <p class="note">基底：vercel 設計系統（Geist · 藍 accent · shadow-as-border）→ 客製成三主題</p>
+  <div class="themes">
+    <span class="chip"><b>深色</b> 冷調中性（預設）</span>
+    <span class="chip"><b>淺色</b> Vercel 乾淨白</span>
+    <span class="chip"><b>暖色</b> Claude 陶土米色</span>
+  </div>
+
+  <h2>關鍵畫面（每頁右上可即時切換三主題）</h2>
+  <div class="cards">
+    <a class="card" href="01-shell.html">
+      <div class="thumb">
+        <div class="bar" style="width:30px;background:#0e0f12"></div>
+        <div class="bar" style="left:30px;width:14px;background:#17181c"></div>
+        <div class="bar" style="left:44px;width:60px;background:#1c1e23"></div>
+        <div class="bar" style="left:104px;right:0;background:#121316"></div>
+      </div>
+      <div class="num">01</div><h3>主畫面（Shell）</h3>
+      <p>完整 VSCode 風版面：工作區列表 + 活動列 + 檔案總管 + Monaco 分割編輯器 + 整合終端機（claude 接線中）+ 狀態列。</p>
+    </a>
+    <a class="card" href="02-source-control.html">
+      <div class="thumb">
+        <div class="bar" style="width:96px;background:#1c1e23"></div>
+        <div class="bar" style="left:96px;right:0;background:#121316"></div>
+        <div class="bar" style="left:100px;top:40px;width:120px;height:14px;background:#3a1f24"></div>
+        <div class="bar" style="left:100px;top:58px;width:150px;height:14px;background:#1f3a28"></div>
+        <div class="bar" style="left:100px;top:76px;width:140px;height:14px;background:#1f3a28"></div>
+      </div>
+      <div class="num">02</div><h3>原始碼控制（git GUI）</h3>
+      <p>變更清單 + stage/commit + 分支切換 + 並排 diff（紅綠）。呼叫系統 git，完整日常工作流。</p>
+    </a>
+    <a class="card" href="03-monitor.html">
+      <div class="thumb">
+        <div class="bar" style="left:14px;top:18px;width:90px;height:46px;background:#1c1e23;border-radius:6px"></div>
+        <div class="bar" style="left:114px;top:18px;width:90px;height:46px;background:#1c1e23;border-radius:6px"></div>
+        <div class="bar" style="left:214px;top:18px;width:90px;height:46px;background:#1c1e23;border-radius:6px"></div>
+        <div class="bar" style="left:14px;top:74px;width:90px;height:46px;background:#1c1e23;border-radius:6px"></div>
+        <div class="bar" style="left:114px;top:74px;width:90px;height:46px;background:#1c1e23;border-radius:6px"></div>
+      </div>
+      <div class="num">03</div><h3>多工作區監控總覽</h3>
+      <p>差異化核心：所有工作區的 git／程序／未存檔／自動化狀態一覽，背景持續更新，含「無法使用」狀態。</p>
+    </a>
+  </div>
+
+  <div class="feat">
+    <h2 style="margin:0">規格涵蓋（v1）</h2>
+    <ul>
+      <li><b>工作區列表</b> 切換 / 背景運行 / 監控</li>
+      <li><b>整合終端機</b> 多 shell · real PTY</li>
+      <li><b>Monaco 編輯器</b> + 多語言 LSP 自動偵測</li>
+      <li><b>完整 git GUI</b> diff/commit/分支/歷史</li>
+      <li><b>Claude × Playwright</b> 每工作區獨立 profile</li>
+      <li><b>全域搜尋</b> + 分割編輯器</li>
+      <li><b>三主題</b> 深 / 淺 / 暖</li>
+      <li><b>打包</b> Windows app + 自動更新</li>
+    </ul>
+  </div>
+  <p class="foot">Polydesk（codename，可改）· 凍結前 UI 方向對焦稿 · 設計系統為美學靈感、非官方品牌資產</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,44 @@
+# deps / build
+node_modules/
+dist/
+out/
+release/
+build/Output/
+*.exe
+*.blockmap
+
+# logs / verify artifacts
+*.log
+.playwright-mcp/
+test-results/
+playwright-report/
+coverage/
+.last-run.json
+.vite/
+
+# Flow：state.json 與 log 可衍生/一次性 → 不進 git；manifest/ledger/journal/redteam/decisions 要進 git
+.flow/state.json
+.flow/*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+# >>> flow-verify-artifacts (managed by clean-verify-artifacts.mjs) >>>
+test-results/
+playwright-report/
+.playwright/
+.playwright-mcp/
+playwright-mcp-output/
+coverage/
+.nyc_output/
+htmlcov/
+.pytest_cache/
+__pycache__/
+*.log
+.last-run.json
+*.trace.zip
+*.tmp
+# <<< flow-verify-artifacts <<<
+
+# flow hook 暫態
+.flow/ctx-reminded

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polydesk — 多工作區監控總覽</title>
+<style>
+:root{
+  --font-body:"Geist","Geist Sans",-apple-system,"Segoe UI",Arial,sans-serif;
+  --font-mono:"Geist Mono",ui-monospace,"SF Mono","Cascadia Code",Menlo,Monaco,"Courier New",monospace;
+  --radius-sm:6px;--radius-md:8px;--radius-lg:12px;--radius-pill:9999px;
+  --space-2:8px;--space-3:12px;--space-4:16px;--space-6:24px;--text-xs:12px;--text-sm:13px;--text-base:14px;--text-lg:16px;--text-xl:20px;
+  --focus-ring:0 0 0 2px var(--accent);--motion:160ms cubic-bezier(.2,0,0,1);
+}
+:root[data-theme="dark"]{--bg:#121316;--chrome:#17181c;--surface:#1c1e23;--surface-2:#23262c;--hover:#2a2d34;--fg:#e8eaed;--fg-2:#b4b8c0;--muted:#8a8f99;--meta:#6b7079;--border:rgba(255,255,255,.08);--border-soft:rgba(255,255,255,.05);--accent:#3b82f6;--accent-on:#fff;--success:#16a34a;--warn:#eab308;--danger:#dc2626;--info:#3b82f6}
+:root[data-theme="light"]{--bg:#fff;--chrome:#fafafa;--surface:#fff;--surface-2:#f6f7f8;--hover:#f0f1f3;--fg:#171717;--fg-2:#4d4d4d;--muted:#666;--meta:#808080;--border:rgba(0,0,0,.10);--border-soft:rgba(0,0,0,.05);--accent:#0070f3;--accent-on:#fff;--success:#16a34a;--warn:#b58900;--danger:#dc2626;--info:#0070f3}
+:root[data-theme="warm"]{--bg:#f5f4ed;--chrome:#efece1;--surface:#faf9f5;--surface-2:#eceadd;--hover:#e7e4d8;--fg:#141413;--fg-2:#3d3d3a;--muted:#5e5d59;--meta:#87867f;--border:rgba(20,20,19,.10);--border-soft:rgba(20,20,19,.05);--accent:#c96442;--accent-on:#faf9f5;--success:#17a34a;--warn:#b58900;--danger:#b53333;--info:#c96442}
+*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%}
+body{font-family:var(--font-body);background:var(--bg);color:var(--fg);font-size:var(--text-base);overflow:hidden;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+button:focus-visible,[tabindex]:focus-visible{outline:none;box-shadow:var(--focus-ring);border-radius:var(--radius-sm)}
+.app{display:flex;flex-direction:column;height:100vh}
+.titlebar{height:36px;background:var(--chrome);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:var(--space-3);padding:0 var(--space-3)}
+.logo{display:flex;align-items:center;gap:6px;font-weight:600;font-size:var(--text-sm)}
+.dot{width:9px;height:9px;border-radius:var(--radius-pill)}.spacer{flex:1}
+.themeswitch{display:flex;gap:2px;background:var(--surface-2);border-radius:var(--radius-pill);padding:3px}
+.themeswitch button{font-size:var(--text-xs);padding:3px 11px;border-radius:var(--radius-pill);color:var(--muted)}
+.themeswitch button.on{background:var(--surface);color:var(--fg);box-shadow:0 0 0 1px var(--border)}
+.wbtn{width:13px;height:13px;border-radius:50%;background:var(--border)}
+.head{padding:var(--space-6) var(--space-6) var(--space-4);display:flex;align-items:baseline;gap:var(--space-3)}
+.head h1{font-size:var(--text-xl);font-weight:600;letter-spacing:-.02em}
+.head .sub{color:var(--muted);font-size:var(--text-sm)}
+.head .legend{margin-left:auto;display:flex;gap:var(--space-4);font-size:var(--text-xs);color:var(--muted)}
+.legend .li{display:flex;align-items:center;gap:5px}.sw{width:8px;height:8px;border-radius:50%}
+.grid{flex:1;overflow:auto;padding:0 var(--space-6) var(--space-6);display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:var(--space-4);align-content:start}
+.card{background:var(--surface);border-radius:var(--radius-lg);box-shadow:0 0 0 1px var(--border);padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3);transition:var(--motion)}
+.card:hover{box-shadow:0 0 0 1px var(--accent),0 8px 24px -10px rgba(0,0,0,.4)}
+.card.active{box-shadow:0 0 0 2px var(--accent)}
+.card .top{display:flex;align-items:center;gap:var(--space-3)}
+.swatch{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:#fff;font-weight:700;font-size:var(--text-sm);flex-shrink:0}
+.card .nm{font-weight:600;font-size:var(--text-base)}
+.card .pa{font-size:var(--text-xs);color:var(--meta);font-family:var(--font-mono)}
+.card .live{margin-left:auto;font-size:var(--text-xs);color:var(--success);display:flex;align-items:center;gap:5px}
+.card.idle .live{color:var(--meta)}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+.metric{background:var(--surface-2);border-radius:var(--radius-md);padding:8px 10px}
+.metric .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--meta);display:flex;align-items:center;gap:5px}
+.metric .val{font-size:var(--text-sm);font-family:var(--font-mono);margin-top:3px;display:flex;align-items:center;gap:6px}
+.val.ok{color:var(--success)}.val.warn{color:var(--warn)}.val.run{color:var(--accent)}.val.idle{color:var(--muted)}
+.pulse{width:7px;height:7px;border-radius:50%;background:currentColor;animation:p 1.8s infinite}
+@keyframes p{0%{box-shadow:0 0 0 0 color-mix(in srgb,currentColor 55%,transparent)}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.card .foot{display:flex;gap:var(--space-2);border-top:1px solid var(--border-soft);padding-top:var(--space-3)}
+.card .foot button{flex:1;font-size:var(--text-xs);padding:6px;border-radius:var(--radius-sm);color:var(--fg-2);background:var(--surface-2)}
+.card .foot button:hover{background:var(--hover);color:var(--fg)}
+.card.unavail{opacity:.55}
+.card.unavail .live{color:var(--warn)}
+.addcard{border:1px dashed var(--border);border-radius:var(--radius-lg);display:grid;place-items:center;color:var(--muted);min-height:180px;font-size:var(--text-sm);transition:var(--motion)}
+.addcard:hover{border-color:var(--accent);color:var(--fg)}
+svg.i{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar">
+    <span class="wbtn"></span><span class="wbtn"></span><span class="wbtn"></span>
+    <span class="logo" style="margin-left:6px"><span class="dot" style="background:var(--accent)"></span>Polydesk · 監控總覽</span>
+    <span class="spacer"></span>
+    <div class="themeswitch" role="group" aria-label="主題切換">
+      <button onclick="setT('dark',this)" class="on">深色</button>
+      <button onclick="setT('light',this)">淺色</button>
+      <button onclick="setT('warm',this)">暖色</button>
+    </div>
+  </div>
+  <div class="head">
+    <h1>工作區監控</h1>
+    <span class="sub">4 個工作區 · 2 個有活動中程序 · 1 個測試中</span>
+    <div class="legend">
+      <span class="li"><span class="sw" style="background:var(--success)"></span>正常</span>
+      <span class="li"><span class="sw" style="background:var(--accent)"></span>執行中</span>
+      <span class="li"><span class="sw" style="background:var(--warn)"></span>需注意</span>
+    </div>
+  </div>
+  <div class="grid">
+
+    <div class="card active" tabindex="0">
+      <div class="top">
+        <div class="swatch" style="background:#3b82f6">PD</div>
+        <div><div class="nm">polydesk</div><div class="pa">~/Documents/我的終端機</div></div>
+        <span class="live"><span class="pulse"></span>作用中</span>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="lbl"><svg class="i" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M18 11.5c0 3-4 2.5-4 5.5"/></svg>GIT</div><div class="val warn">main · ●3 ↑2</div></div>
+        <div class="metric"><div class="lbl">⌁ 程序</div><div class="val run"><span class="pulse"></span>dev server :3000</div></div>
+        <div class="metric"><div class="lbl">✎ 未存檔</div><div class="val warn">1 個檔</div></div>
+        <div class="metric"><div class="lbl">⚇ 自動化</div><div class="val idle">閒置</div></div>
+      </div>
+      <div class="foot"><button>開啟</button><button>終端機</button><button>git</button></div>
+    </div>
+
+    <div class="card" tabindex="0">
+      <div class="top">
+        <div class="swatch" style="background:#16a34a">AP</div>
+        <div><div class="nm">api-server</div><div class="pa">~/work/api-server</div></div>
+        <span class="live"><span class="pulse"></span>背景</span>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="lbl">GIT</div><div class="val ok">feat/auth · ✓ ↑2</div></div>
+        <div class="metric"><div class="lbl">⌁ 程序</div><div class="val run"><span class="pulse"></span>pytest watch</div></div>
+        <div class="metric"><div class="lbl">✎ 未存檔</div><div class="val ok">無</div></div>
+        <div class="metric"><div class="lbl">⚇ 自動化</div><div class="val run"><span class="pulse"></span>Claude 測試中</div></div>
+      </div>
+      <div class="foot"><button>開啟</button><button>終端機</button><button>git</button></div>
+    </div>
+
+    <div class="card idle" tabindex="0">
+      <div class="top">
+        <div class="swatch" style="background:#e6a23c">SH</div>
+        <div><div class="nm">shop-web</div><div class="pa">~/work/shop-web</div></div>
+        <span class="live">背景</span>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="lbl">GIT</div><div class="val ok">main · ✓ 同步</div></div>
+        <div class="metric"><div class="lbl">⌁ 程序</div><div class="val idle">無</div></div>
+        <div class="metric"><div class="lbl">✎ 未存檔</div><div class="val ok">無</div></div>
+        <div class="metric"><div class="lbl">⚇ 自動化</div><div class="val idle">上次 ✓ 12:04</div></div>
+      </div>
+      <div class="foot"><button>開啟</button><button>終端機</button><button>git</button></div>
+    </div>
+
+    <div class="card unavail" tabindex="0">
+      <div class="top">
+        <div class="swatch" style="background:#6b7079">D</div>
+        <div><div class="nm">old-demo ⚠</div><div class="pa">E:/old-demo（隨身碟未接）</div></div>
+        <span class="live">無法使用</span>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="lbl">GIT</div><div class="val idle">N/A</div></div>
+        <div class="metric"><div class="lbl">⌁ 程序</div><div class="val idle">—</div></div>
+        <div class="metric"><div class="lbl">✎ 未存檔</div><div class="val idle">—</div></div>
+        <div class="metric"><div class="lbl">⚇ 自動化</div><div class="val idle">—</div></div>
+      </div>
+      <div class="foot"><button>重設路徑</button><button>移除</button></div>
+    </div>
+
+    <button class="addcard">＋ 新增工作區</button>
+  </div>
+</div>
+<script>function setT(t,b){document.documentElement.setAttribute('data-theme',t);document.querySelectorAll('.themeswitch button').forEach(x=>x.classList.remove('on'));b.classList.add('on')}</script>
+</body>
+</html>

@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polydesk — 可互動原型</title>
+<style>
+:root{
+  --font-body:"Geist","Geist Sans",-apple-system,"Segoe UI",Arial,sans-serif;
+  --font-mono:"Geist Mono",ui-monospace,"SF Mono","Cascadia Code",Menlo,Monaco,"Courier New",monospace;
+  --radius-sm:6px;--radius-md:8px;--radius-lg:12px;--radius-pill:9999px;
+  --text-xs:12px;--text-sm:13px;--text-base:14px;--text-lg:16px;
+  --focus-ring:0 0 0 2px var(--accent);--motion:150ms cubic-bezier(.2,0,0,1);
+  --rail-w:208px; --side-w:248px; --term-h:200px;
+}
+:root[data-theme="dark"]{--bg:#121316;--chrome:#17181c;--surface:#1c1e23;--surface-2:#23262c;--hover:#2a2d34;--fg:#e8eaed;--fg-2:#b4b8c0;--muted:#8a8f99;--meta:#6b7079;--border:rgba(255,255,255,.08);--border-soft:rgba(255,255,255,.05);--accent:#3b82f6;--accent-on:#fff;--rail:#0e0f12;--success:#22c55e;--warn:#eab308;--sashhl:rgba(59,130,246,.5);--kw:#c792ea;--str:#a5d6a7;--fn:#82aaff;--num:#f78c6c;--cmt:#5f6672;--tag:#7fdbca}
+:root[data-theme="light"]{--bg:#fff;--chrome:#fafafa;--surface:#fff;--surface-2:#f6f7f8;--hover:#f0f1f3;--fg:#171717;--fg-2:#4d4d4d;--muted:#666;--meta:#808080;--border:rgba(0,0,0,.10);--border-soft:rgba(0,0,0,.05);--accent:#0070f3;--accent-on:#fff;--rail:#f0f0f0;--success:#16a34a;--warn:#b58900;--sashhl:rgba(0,112,243,.4);--kw:#a626a4;--str:#50a14f;--fn:#4078f2;--num:#986801;--cmt:#a0a1a7;--tag:#0184bc}
+:root[data-theme="warm"]{--bg:#f5f4ed;--chrome:#efece1;--surface:#faf9f5;--surface-2:#eceadd;--hover:#e7e4d8;--fg:#141413;--fg-2:#3d3d3a;--muted:#5e5d59;--meta:#87867f;--border:rgba(20,20,19,.10);--border-soft:rgba(20,20,19,.05);--accent:#c96442;--accent-on:#faf9f5;--rail:#ece9dc;--success:#17a34a;--warn:#b58900;--sashhl:rgba(201,100,66,.4);--kw:#9a5fa0;--str:#5b7a3a;--fn:#b5651d;--num:#c96442;--cmt:#9b9684;--tag:#3f7a6f}
+*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%}
+body{font-family:var(--font-body);background:var(--bg);color:var(--fg);font-size:var(--text-base);-webkit-font-smoothing:antialiased;overflow:hidden;transition:background var(--motion),color var(--motion)}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+button:focus-visible,[tabindex]:focus-visible{outline:none;box-shadow:var(--focus-ring);border-radius:var(--radius-sm)}
+.dot{width:9px;height:9px;border-radius:50%}
+.wbtn{width:13px;height:13px;border-radius:50%;background:var(--border)}
+svg.i{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.lhidden{display:none !important}
+.app{display:flex;flex-direction:column;height:100vh}
+.titlebar{height:38px;background:var(--chrome);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:0 12px;flex-shrink:0}
+.logo{display:flex;align-items:center;gap:7px;font-weight:600;font-size:var(--text-sm);letter-spacing:-.01em}
+.hint{font-size:var(--text-xs);color:var(--meta);margin-left:6px}
+.spacer{flex:1}
+.lgroup{display:flex;gap:2px;background:var(--surface-2);border-radius:var(--radius-sm);padding:3px}
+.lbtn{font-size:var(--text-xs);color:var(--muted);padding:4px 8px;border-radius:var(--radius-sm);display:inline-flex;align-items:center;gap:4px}
+.lbtn:hover{background:var(--hover);color:var(--fg)}
+.lbtn.on{color:var(--fg);background:var(--surface)}
+.tbtn{font-size:var(--text-xs);color:var(--muted);padding:5px 10px;border-radius:var(--radius-sm)}
+.tbtn:hover{background:var(--hover);color:var(--fg)}
+.themeswitch{display:flex;gap:2px;background:var(--surface-2);border-radius:var(--radius-pill);padding:3px}
+.themeswitch button{font-size:var(--text-xs);padding:3px 11px;border-radius:var(--radius-pill);color:var(--muted)}
+.themeswitch button.on{background:var(--surface);color:var(--fg);box-shadow:0 0 0 1px var(--border)}
+.body{flex:1;display:flex;min-height:0}
+.sash{flex-shrink:0;position:relative;z-index:5}
+.sash.v{width:6px;cursor:col-resize;margin:0 -3px}
+.sash.h{height:6px;cursor:row-resize;margin:-3px 0}
+.sash::after{content:"";position:absolute;inset:0;transition:background var(--motion)}
+.sash.v::after{left:2px;width:2px}.sash.h::after{top:2px;height:2px}
+.sash:hover::after,.sash.drag::after{background:var(--sashhl)}
+.wsrail{width:var(--rail-w);min-width:170px;background:var(--rail);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+.wsrail h2{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;color:var(--meta);padding:14px 14px 8px;display:flex;justify-content:space-between}
+.wslist{flex:1;overflow:auto;padding:0 8px}
+.ws{display:flex;gap:10px;align-items:center;padding:9px 8px;border-radius:var(--radius-md);margin-bottom:2px;transition:var(--motion);position:relative;cursor:pointer}
+.ws:hover{background:var(--hover)}.ws.active{background:var(--surface-2)}
+.ws.active::before{content:"";position:absolute;left:-8px;top:9px;bottom:9px;width:3px;border-radius:2px;background:var(--accent)}
+.ws .swatch{width:30px;height:30px;border-radius:8px;flex-shrink:0;display:grid;place-items:center;font-size:var(--text-xs);font-weight:700;color:#fff}
+.ws .info{flex:1;min-width:0}
+.ws .name{font-size:var(--text-sm);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:var(--font-mono);margin-top:3px;padding:1px 7px;border-radius:var(--radius-pill);font-weight:600}
+.cl .d{width:7px;height:7px;border-radius:50%;background:currentColor}
+.cl.run{color:var(--success);background:color-mix(in srgb,var(--success) 15%,transparent)}
+.cl.run .d{animation:pulse 1.5s infinite}
+.cl.stop{color:var(--warn);background:color-mix(in srgb,var(--warn) 15%,transparent)}
+.cl.none{color:var(--meta);background:var(--surface-2)}
+.ws.unavail{opacity:.5}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,currentColor 60%,transparent)}70%{box-shadow:0 0 0 5px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.addws{margin:8px;padding:9px;border-radius:var(--radius-md);border:1px dashed var(--border);color:var(--muted);font-size:var(--text-sm);text-align:center;transition:var(--motion)}
+.addws:hover{color:var(--fg);border-color:var(--accent)}
+.activity{width:48px;background:var(--chrome);border-right:1px solid var(--border);border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding-top:8px;gap:2px;flex-shrink:0}
+.act{width:40px;height:40px;border-radius:var(--radius-md);display:grid;place-items:center;color:var(--muted);transition:var(--motion);position:relative}
+.act:hover{color:var(--fg);background:var(--hover)}.act.on{color:var(--fg)}
+.act.on::before{content:"";position:absolute;left:-4px;top:9px;bottom:9px;width:2px;background:var(--accent);border-radius:2px}
+.side{width:var(--side-w);min-width:180px;background:var(--surface);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+.side h3{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;color:var(--meta);padding:13px 16px 8px}
+.view{flex:1;overflow:auto;display:none;flex-direction:column}.view.on{display:flex}
+.tree{padding:0 8px 16px}
+.row{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:var(--radius-sm);font-size:var(--text-sm);color:var(--fg-2)}
+.row:hover{background:var(--hover)}.row.sel{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--fg)}
+.ic{width:15px;text-align:center;opacity:.85}
+.g{margin-left:auto;font-size:11px;font-family:var(--font-mono)}.g.m{color:var(--warn)}.g.a{color:var(--success)}
+.searchbox{padding:12px 16px}
+.searchbox input{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;font-family:inherit;font-size:var(--text-sm)}
+.searchbox input:focus{outline:none;box-shadow:var(--focus-ring);border-color:transparent}
+.sres{font-size:var(--text-sm);color:var(--fg-2);padding:5px 16px}.sres b{color:var(--accent);font-weight:600}
+.scmbox{padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.scmbox textarea{width:100%;height:46px;resize:none;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 9px;font-family:inherit;font-size:var(--text-sm)}
+.scmbox textarea:focus{outline:none;box-shadow:var(--focus-ring);border-color:transparent}
+.cbtn{background:var(--accent);color:var(--accent-on);font-weight:600;font-size:var(--text-sm);padding:8px;border-radius:var(--radius-sm);display:flex;justify-content:center;gap:6px}
+.chg{display:flex;align-items:center;gap:8px;padding:4px 16px;font-size:var(--text-sm);color:var(--fg-2)}.chg:hover{background:var(--hover)}
+.chg .st{font-family:var(--font-mono);font-size:var(--text-xs);width:12px}.st.m{color:var(--warn)}.st.a{color:var(--success)}
+.gtitle{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--meta);padding:10px 16px 4px;border-top:1px solid var(--border-soft);margin-top:6px}
+.gw{position:relative;padding-left:44px}
+.gsvg{position:absolute;left:8px;top:0;width:36px;height:140px}
+.grow{height:28px;display:flex;align-items:center;font-size:var(--text-sm);color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:10px}
+.ref{font-size:10px;font-family:var(--font-mono);padding:0 6px;border-radius:var(--radius-pill);box-shadow:0 0 0 1px var(--border);margin-right:6px}.ref.head{color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent)}.ref.br{color:var(--success)}
+.clview{padding:16px;display:flex;flex-direction:column;gap:10px}
+.clbig{background:var(--surface-2);border-radius:var(--radius-md);padding:14px;text-align:center;box-shadow:0 0 0 1px var(--border)}
+.clbig .lbl{font-size:var(--text-xs);color:var(--meta);text-transform:uppercase;letter-spacing:.05em}
+.clbig .state{font-size:var(--text-lg);font-weight:700;margin-top:8px;display:flex;align-items:center;justify-content:center}
+.clnote{font-size:var(--text-xs);color:var(--muted);line-height:1.6;background:var(--surface-2);border-radius:var(--radius-sm);padding:10px 12px}
+.clnote code{font-family:var(--font-mono);color:var(--fg);background:var(--bg);padding:1px 5px;border-radius:4px}
+.clall .clmini{font-size:var(--text-xs);color:var(--muted);display:flex;justify-content:space-between;align-items:center;padding:6px 2px;border-bottom:1px solid var(--border-soft)}
+.main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+.tabs{height:38px;background:var(--chrome);border-bottom:1px solid var(--border);display:flex;flex-shrink:0}
+.tab{display:flex;align-items:center;gap:7px;padding:0 16px;font-size:var(--text-sm);color:var(--muted);border-right:1px solid var(--border);position:relative}
+.tab.on{background:var(--bg);color:var(--fg)}.tab.on::after{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--accent)}
+.tab .dt{width:7px;height:7px;border-radius:50%;background:var(--fg-2)}
+.editorwrap{flex:1;display:flex;overflow:hidden;min-height:0}
+.gutter{padding:12px 8px;text-align:right;color:var(--meta);font-family:var(--font-mono);font-size:var(--text-sm);line-height:1.65;user-select:none}
+.code{flex:1;padding:12px 16px;font-family:var(--font-mono);font-size:var(--text-sm);line-height:1.65;overflow:auto;white-space:pre}
+.code .k{color:var(--kw)}.code .s{color:var(--str)}.code .f{color:var(--fn)}.code .n{color:var(--num)}.code .c{color:var(--cmt)}.code .t{color:var(--tag)}
+.panel{height:var(--term-h);min-height:80px;background:var(--surface);border-top:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.panel.grow{flex:1;height:auto;min-height:0}
+.ptabs{height:32px;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--border-soft);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.05em}
+.ptab{color:var(--muted);padding:8px 0;border-bottom:2px solid transparent}.ptab.on{color:var(--fg);border-bottom-color:var(--accent)}
+.ppill{margin-left:auto;font-size:11px;font-family:var(--font-mono);color:var(--muted);text-transform:none;letter-spacing:0;display:flex;align-items:center;gap:5px}
+.term{flex:1;overflow:auto;padding:12px 16px;font-family:var(--font-mono);font-size:var(--text-sm);line-height:1.55}
+.term .p{color:var(--success)}.term .d{color:var(--muted)}.term .pa{color:var(--accent)}.term .fn{color:var(--fn)}.term .ok{color:var(--success)}
+.cur{display:inline-block;width:8px;height:15px;background:var(--fg);vertical-align:-3px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.statusbar{height:24px;background:var(--accent);color:var(--accent-on);display:flex;align-items:center;gap:16px;padding:0 12px;font-size:var(--text-xs);flex-shrink:0;font-family:var(--font-mono)}
+.statusbar .right{margin-left:auto;display:flex;gap:16px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar">
+    <span class="wbtn"></span><span class="wbtn"></span><span class="wbtn"></span>
+    <span class="logo" style="margin-left:6px"><span class="dot" style="background:var(--accent)"></span>Polydesk</span>
+    <span class="hint">← 拖曳邊界調大小 · 下列按鈕展開/隱藏各欄</span>
+    <span class="spacer"></span>
+    <div class="lgroup" role="group" aria-label="版面切換">
+      <button class="lbtn on" id="t-rail" onclick="tog('rail')">▢ 工作區</button>
+      <button class="lbtn on" id="t-side" onclick="tog('side')">▢ 側欄</button>
+      <button class="lbtn on" id="t-panel" onclick="tog('panel')">▢ 終端機</button>
+      <button class="lbtn" id="t-max" onclick="tog('max')" title="終端機拉到全高、隱藏編輯區">⛶ 最大化終端機</button>
+    </div>
+    <button class="tbtn" onclick="resetLayout()">重設</button>
+    <div class="themeswitch" role="group" aria-label="主題">
+      <button onclick="setT('dark',this)" class="on">深色</button>
+      <button onclick="setT('light',this)">淺色</button>
+      <button onclick="setT('warm',this)">暖色</button>
+    </div>
+  </div>
+
+  <div class="body">
+    <nav class="wsrail" id="rail" aria-label="工作區列表">
+      <h2>工作區 <span style="color:var(--meta)">⋯</span></h2>
+      <div class="wslist" id="wslist"></div>
+      <button class="addws">＋ 新增工作區</button>
+    </nav>
+    <div class="sash v" data-resize="rail" data-pair="rail"></div>
+
+    <div class="activity" role="tablist">
+      <button class="act on" data-view="explorer" title="檔案總管"><svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+      <button class="act" data-view="search" title="搜尋"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+      <button class="act" data-view="scm" title="原始碼控制"><svg class="i" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M18 11.5c0 3-4 2.5-4 5.5"/></svg></button>
+      <button class="act" data-view="claude" title="Claude / 測試"><svg class="i" viewBox="0 0 24 24"><path d="M5 3v6l-2 9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2l-2-9V3"/><path d="M4 9h16"/></svg></button>
+    </div>
+
+    <aside class="side" id="side">
+      <h3 id="sidetitle">檔案總管 · polydesk</h3>
+      <div class="view on" data-view="explorer">
+        <div class="tree">
+          <div class="row"><span class="ic">▾</span><span class="ic">📁</span>src</div>
+          <div class="row sel" style="padding-left:26px"><span class="ic">📄</span>workspace.ts<span class="g m">M</span></div>
+          <div class="row" style="padding-left:26px"><span class="ic">📄</span>terminal.ts</div>
+          <div class="row" style="padding-left:26px"><span class="ic">📄</span>pw-bridge.ts</div>
+          <div class="row"><span class="ic">▸</span><span class="ic">📁</span>renderer</div>
+          <div class="row"><span class="ic" style="width:15px"></span><span class="ic">📄</span>package.json<span class="g m">M</span></div>
+          <div class="row"><span class="ic" style="width:15px"></span><span class="ic">📄</span>README.md<span class="g a">A</span></div>
+        </div>
+      </div>
+      <div class="view" data-view="search">
+        <div class="searchbox"><input placeholder="全域搜尋…" value="profile"></div>
+        <div class="sres">📄 pw-bridge.ts · <b>profile</b>Dir(ws.id)</div>
+        <div class="sres">📄 workspace.ts · this.<b>profile</b>Dir</div>
+        <div class="sres" style="color:var(--meta)">3 檔 · 5 處（可取消、串流顯示）</div>
+      </div>
+      <div class="view" data-view="scm">
+        <div class="scmbox"><textarea>feat: 每工作區 Playwright profile 接線</textarea><button class="cbtn">✓ 提交 (3)</button></div>
+        <div class="chg"><span class="st m">M</span>pw-bridge.ts</div>
+        <div class="chg"><span class="st a">A</span>profile-store.ts</div>
+        <div class="chg"><span class="st m">M</span>package.json</div>
+        <div class="gtitle">git 圖 · 歷史</div>
+        <div class="gw">
+          <svg class="gsvg" viewBox="0 0 36 140" aria-hidden="true">
+            <path d="M10 14 L10 126" stroke="var(--accent)" stroke-width="2" fill="none"/>
+            <path d="M10 70 C10 58 26 58 26 46" stroke="var(--success)" stroke-width="2" fill="none"/>
+            <path d="M26 46 C26 30 10 30 10 14" stroke="var(--success)" stroke-width="2" fill="none"/>
+            <circle cx="10" cy="14" r="4" fill="var(--accent)"/><circle cx="26" cy="46" r="4" fill="var(--success)"/>
+            <circle cx="10" cy="70" r="4" fill="var(--accent)"/><circle cx="10" cy="98" r="3.5" fill="var(--accent)"/><circle cx="10" cy="126" r="3.5" fill="var(--accent)"/>
+          </svg>
+          <div class="grow"><span class="ref head">main</span>Merge feat/pw-profile</div>
+          <div class="grow"><span class="ref br">feat/…</span>feat: persistentContext</div>
+          <div class="grow">refactor: profileDir()</div>
+          <div class="grow">fix: 終端機 cwd</div>
+          <div class="grow">chore: electron 30</div>
+        </div>
+      </div>
+      <div class="view" data-view="claude">
+        <div class="clview">
+          <div class="clbig"><div class="lbl">本工作區 Claude（唯讀觀察）</div><div class="state" id="clstate"></div></div>
+          <div class="clnote">app 只<b>顯示</b>狀態、<b>不控制</b> Claude。你自己在終端機跑 <code>claude</code>、要停按 <code>Ctrl+C</code>。狀態由 app 觀察該工作區終端機自動判定。</div>
+          <div class="lbl" style="font-size:var(--text-xs);color:var(--meta);text-transform:uppercase;letter-spacing:.05em;margin-top:4px">所有工作區</div>
+          <div class="clall" id="clall"></div>
+        </div>
+      </div>
+    </aside>
+    <div class="sash v" data-resize="side" data-pair="side"></div>
+
+    <div class="main">
+      <div class="tabs" id="tabs"><div class="tab on"><span class="dt"></span>workspace.ts</div><div class="tab">pw-bridge.ts</div></div>
+      <div class="editorwrap" id="editorwrap">
+        <div class="gutter">1
+2
+3
+4
+5
+6
+7
+8
+9
+10</div>
+        <div class="code"><span class="c">// 每工作區綁定自己的 Playwright profile（零 repo 足跡）</span>
+<span class="k">export class</span> <span class="f">Workspace</span> {
+  <span class="k">async</span> <span class="f">openTerminal</span>(shell = <span class="s">'pwsh'</span>) {
+    <span class="k">const</span> env = { ...process.env,
+      POLYDESK_PW_PROFILE: <span class="k">this</span>.profileDir,  <span class="c">// 接線給 claude</span>
+    }
+    <span class="k">return</span> <span class="f">spawnPty</span>(shell, { cwd: <span class="k">this</span>.path, env })
+  }
+}</div>
+      </div>
+      <div class="sash h" data-resize="term" data-pair="term"></div>
+      <div class="panel" id="panel">
+        <div class="ptabs"><span class="ptab on">終端機</span><span class="ptab">問題</span><span class="ptab">輸出</span>
+          <span class="ppill"><span class="dot" style="background:var(--success)"></span>pwsh · <span id="pillws">polydesk</span> ＋</span>
+        </div>
+        <div class="term" id="term"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <span>⎇ main</span><span>↑2 ↓0</span><span>TypeScript · LSP ✓</span>
+    <span class="right"><span id="sbcl">Claude 執行中</span><span>UTF-8</span><span>LF</span><span>行 5, 欄 8</span></span>
+  </div>
+</div>
+
+<script>
+const WS=[
+  {id:'pd',name:'polydesk',sw:'PD',c:'#3b82f6',cl:'run'},
+  {id:'api',name:'api-server',sw:'AP',c:'#16a34a',cl:'stop'},
+  {id:'shop',name:'shop-web',sw:'SH',c:'#c96442',cl:'none'},
+  {id:'demo',name:'old-demo',sw:'D',c:'#6b7079',cl:'unavail'},
+];
+let active='pd', curView='explorer';
+const CLT={run:{t:'執行中',cls:'run'},stop:{t:'已停 · 待接手',cls:'stop'},none:{t:'未啟動',cls:'none'},unavail:{t:'無法使用',cls:'none'}};
+const clBadge=s=>`<span class="cl ${CLT[s].cls}"><span class="d"></span>${CLT[s].t}</span>`;
+const curWS=()=>WS.find(x=>x.id===active);
+function renderWS(){document.getElementById('wslist').innerHTML=WS.map(w=>`
+  <div class="ws ${w.id===active?'active':''} ${w.cl==='unavail'?'unavail':''}" onclick="pickWS('${w.id}')" tabindex="0">
+    <div class="swatch" style="background:${w.c}">${w.sw}</div>
+    <div class="info"><div class="name">${w.name}${w.cl==='unavail'?' ⚠':''}</div>${clBadge(w.cl)}</div></div>`).join('');}
+function pickWS(id){const w=WS.find(x=>x.id===id);if(w.cl==='unavail')return;active=id;renderWS();renderActive();}
+function renderActive(){const w=curWS();
+  document.getElementById('pillws').textContent=w.name;
+  document.getElementById('sidetitle').textContent=({explorer:'檔案總管',search:'搜尋',scm:'原始碼控制',claude:'Claude / 測試'})[curView]+' · '+w.name;
+  document.getElementById('clstate').innerHTML=clBadge(w.cl);
+  document.getElementById('clall').innerHTML=WS.map(x=>`<div class="clmini"><span>${x.name}</span>${clBadge(x.cl)}</div>`).join('');
+  document.getElementById('sbcl').textContent='Claude '+CLT[w.cl].t;
+  renderTerm();}
+function renderTerm(){const w=curWS();let b;
+  if(w.cl==='run')b=`<span class="p">PS ~/${w.name}</span><span class="d">&gt;</span> <span class="fn">claude</span>
+<span class="pa">›</span> 幫我測登入頁、驗證導向 /dashboard
+<span class="d">  ⏺ Playwright（headed）navigate → /login</span>
+<span class="d">  ⏺ fill · click 登入 …</span><span class="cur"></span>`;
+  else if(w.cl==='stop')b=`<span class="p">PS ~/${w.name}</span><span class="d">&gt;</span> <span class="fn">claude</span>
+<span class="ok">  ✓ 測試通過：已導向 /dashboard</span>
+<span class="d">  ╰─ 已停下，等你下一步</span>
+<span class="p">PS ~/${w.name}</span><span class="d">&gt;</span> <span class="cur"></span>`;
+  else b=`<span class="p">PS ~/${w.name}</span><span class="d">&gt;</span> <span class="cur"></span>
+<span class="d">  （此工作區尚未啟動 claude）</span>`;
+  document.getElementById('term').innerHTML=b;}
+document.querySelectorAll('.act').forEach(a=>a.onclick=()=>{curView=a.dataset.view;
+  document.querySelectorAll('.act').forEach(x=>x.classList.toggle('on',x===a));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.dataset.view===curView));
+  if(!L.side){L.side=true;applyLayout();} renderActive();});
+function setT(t,b){document.documentElement.setAttribute('data-theme',t);document.querySelectorAll('.themeswitch button').forEach(x=>x.classList.remove('on'));b.classList.add('on');}
+// 版面狀態
+let L={rail:true,side:true,panel:true,max:false};
+function tog(k){ if(k==='max'){L.max=!L.max; if(L.max)L.panel=true;} else L[k]=!L[k]; applyLayout(); }
+function sash(p){return document.querySelector('.sash[data-pair="'+p+'"]')}
+function applyLayout(){
+  document.getElementById('rail').classList.toggle('lhidden',!L.rail); sash('rail').classList.toggle('lhidden',!L.rail);
+  document.getElementById('side').classList.toggle('lhidden',!L.side); sash('side').classList.toggle('lhidden',!L.side);
+  document.getElementById('editorwrap').classList.toggle('lhidden',L.max);
+  document.getElementById('panel').classList.toggle('lhidden',!L.panel);
+  document.getElementById('panel').classList.toggle('grow',L.max && L.panel);
+  sash('term').classList.toggle('lhidden', L.max || !L.panel);
+  document.getElementById('t-rail').classList.toggle('on',L.rail);
+  document.getElementById('t-side').classList.toggle('on',L.side);
+  document.getElementById('t-panel').classList.toggle('on',L.panel);
+  document.getElementById('t-max').classList.toggle('on',L.max);
+}
+function resetLayout(){L={rail:true,side:true,panel:true,max:false};const r=document.documentElement.style;r.setProperty('--rail-w','208px');r.setProperty('--side-w','248px');r.setProperty('--term-h','200px');applyLayout();}
+// 拖曳調大小
+let drag=null;
+document.querySelectorAll('.sash').forEach(s=>s.addEventListener('pointerdown',e=>{
+  drag={el:s,kind:s.dataset.resize,x:e.clientX,y:e.clientY,
+    rail:parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--rail-w')),
+    side:parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--side-w')),
+    term:parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--term-h'))};
+  s.classList.add('drag');s.setPointerCapture(e.pointerId);e.preventDefault();}));
+window.addEventListener('pointermove',e=>{if(!drag)return;const r=document.documentElement.style;
+  if(drag.kind==='rail')r.setProperty('--rail-w',Math.max(170,Math.min(360,drag.rail+(e.clientX-drag.x)))+'px');
+  if(drag.kind==='side')r.setProperty('--side-w',Math.max(180,Math.min(460,drag.side+(e.clientX-drag.x)))+'px');
+  if(drag.kind==='term')r.setProperty('--term-h',Math.max(80,Math.min(520,drag.term-(e.clientY-drag.y)))+'px');});
+window.addEventListener('pointerup',()=>{if(drag){drag.el.classList.remove('drag');drag=null;}});
+renderWS();renderActive();applyLayout();
+</script>
+</body>
+</html>

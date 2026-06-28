@@ -1,0 +1,20 @@
+appId: com.polydesk.app
+productName: Polydesk
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+# 原生模組（node-pty 等）必須落在 app.asar.unpacked 才能 dlopen（REQ-NFR-003）。
+# 預留 **/*.node；node-pty 由後續 task (X-2) 加入後一併 unpack。
+asarUnpack:
+  - "**/*.node"
+win:
+  target:
+    - nsis
+nsis:
+  perMachine: false
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+# publish/electron-updater(generic) 與簽章由 X-2 補；本骨架不實際打包。

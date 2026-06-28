@@ -1,0 +1,21 @@
+{"t":"2026-06-28T06:22:49.938Z","ev":"decision","id":"ARCH-BROWSER","choice":"拿掉被Claude驅動的內嵌瀏覽器，Claude網頁測試改純走Playwright(@playwright/mcp)，每工作區獨立profile、env注入接線","by":"auto"}
+{"t":"2026-06-28T06:22:50.056Z","ev":"decision","id":"VERIFY-LAYER","choice":"REQ-E2E-004分兩層：決定性Playwright腳本進硬閘門，真claude端到端列人工/半自動驗收不進硬閘門(journey-check核可例外)","by":"auto"}
+{"t":"2026-06-28T06:22:50.168Z","ev":"decision","id":"RES-GOV","choice":"背景dev server/PTY續跑不中斷；Playwright瀏覽器要用才開的暫態程序；背景監控有界(預設5s輪詢可調、自適應)","by":"auto"}
+{"t":"2026-06-28T06:22:50.329Z","ev":"decision","id":"WS-CLEANUP","choice":"移除工作區預設保留profile資料、可選連瀏覽資料一起刪並二次確認；不論如何都完整teardown執行中程序","by":"auto"}
+{"t":"2026-06-28T06:22:50.830Z","ev":"verify.attempt","id":"[console]::outputencoding = [text.encoding]::utf8; $outputencoding = [text.encoding]::utf8; $env:pythonioencoding=\"utf-8\"; $fs = join-path $env:userprofile \".claude\\skills\\flow-toolkit\\flow-state.mjs\"","sig":"ok","exit":0}
+{"t":"2026-06-28T07:07:54.573Z","ev":"decision","id":"MON-CLAUDE","choice":"工作區列表主狀態=Claude執行狀態(執行中/已停待接手/未啟動)，純唯讀觀察、app不控制Claude、無執行/停止按鈕；git等改於各面板呈現","by":"auto"}
+{"t":"2026-06-28T07:07:55.078Z","ev":"decision","id":"UI-DOCK","choice":"面板可拖曳調大小+展開/隱藏(左欄/側欄/終端機)+最大化終端機+拖曳重新停靠(dockable如VSCode)，版面持久化可重設；工作區可拖曳排序；搜尋結果點選自動開檔跳行高亮；每工作區多終端機可增開","by":"auto"}
+{"t":"2026-06-28T07:11:02.712Z","ev":"spec.frozen"}
+{"t":"2026-06-28T08:11:20.613Z","ev":"verify.attempt","id":"[console]::outputencoding = [text.encoding]::utf8; $outputencoding = [text.encoding]::utf8 set-location 'c:\\users\\ennvoy.lin\\documents\\我的終端機' write-output (\"cwd=\" + (get-location).path) write-output \"","sig":"ok","exit":0}
+{"t":"2026-06-28T08:17:06.396Z","ev":"task.transition","id":"P-1","from":"pending","to":"building"}
+{"t":"2026-06-28T08:17:06.409Z","ev":"task.transition","id":"P-1","from":"building","to":"verifying"}
+{"t":"2026-06-28T08:17:06.527Z","ev":"task.transition","id":"P-1","from":"verifying","to":"delivered"}
+{"t":"2026-06-28T08:17:06.731Z","ev":"verify.attempt","id":"[console]::outputencoding = [text.encoding]::utf8; $outputencoding = [text.encoding]::utf8; $env:pythonioencoding=\"utf-8\" $sp = \"c:\\users\\ennvoy.lin\\appdata\\local\\temp\\claude\\c--users-ennvoy-lin-docum","sig":"ok","exit":0}
+{"t":"2026-06-28T07:43:56.608Z","ev":"decision","id":"F9-DROP","choice":"砍除 F-9 自建接線(註冊MCP/profile/env注入)，完全沿用官方@playwright/mcp依cwd自動分流profile；app唯一責任=終端機cwd=工作區(F-3)。REQ-PW精簡、REQ-PW-002/003/008移除、REQ-TERM-004改cwd、REQ-PW驗證併入F-3","by":"auto"}
+{"t":"2026-06-28T07:43:59.465Z","ev":"verify.attempt","id":"[console]::outputencoding = [text.encoding]::utf8; $outputencoding = [text.encoding]::utf8; $env:pythonioencoding=\"utf-8\"; $fs = join-path $env:userprofile \".claude\\skills\\flow-toolkit\\flow-state.mjs\"","sig":"ok","exit":0}
+{"t":"2026-06-28T07:48:08.671Z","ev":"checkpoint","id":"P-1","phase":"dispatched","note":"Wave0 foundation 派工"}
+{"t":"2026-06-28T07:58:30.316Z","ev":"checkpoint","id":"P-1","phase":"red","note":"begin P-1 scaffold: read specs, plan StateStore TDD + IPC contract + skeleton"}
+{"t":"2026-06-28T08:08:24.328Z","ev":"verify.attempt","id":"cd \"c:/users/ennvoy.lin/documents/我的終端機\" && echo \"=== tsc ===\" && npx tsc 2>&1 | tail echo \"exit:$?\"","sig":"ok","exit":0}
+{"t":"2026-06-28T08:08:44.743Z","ev":"verify.attempt","id":"cd \"c:/users/ennvoy.lin/documents/我的終端機\" && echo \"=== vitest run ===\" && npx vitest run 2>&1 | tail echo \"exit:${pipestatus[0]}\"","sig":"ok","exit":0}
+{"t":"2026-06-28T08:09:25.849Z","ev":"checkpoint","id":"P-1","phase":"green","note":"scaffold complete: tsc/build/7 vitest tests all green; IPC contract + StateStore + single-instance + security baseline + perf hooks in place"}
+{"t":"2026-06-28T08:09:26.513Z","ev":"verify.attempt","id":"node \"$userprofile/.claude/skills/flow-toolkit/flow-state.mjs\" checkpoint p-1 green \"scaffold complete: tsc/build/7 vitest tests all green; ipc contract + statestore + single-instance + security basel","sig":"ok","exit":0}

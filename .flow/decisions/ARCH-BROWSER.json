@@ -1,0 +1,8 @@
+{
+  "id": "ARCH-BROWSER",
+  "question": "內嵌瀏覽器是否該被Claude經CDP驅動",
+  "choice": "拿掉被Claude驅動的內嵌瀏覽器，Claude網頁測試改純走Playwright(@playwright/mcp)，每工作區獨立profile、env注入接線",
+  "why": "消滅內嵌瀏覽器暴露無認證CDP端口導致工作區程式可劫持已登入瀏覽器的安全漏洞，且省工、需求100%滿足(就是Playwright)",
+  "by": "auto",
+  "at": "2026-06-28T06:22:49.926Z"
+}

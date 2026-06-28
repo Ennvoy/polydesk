@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polydesk — 原始碼控制</title>
+<style>
+:root{
+  --font-body:"Geist","Geist Sans",-apple-system,"Segoe UI",Arial,sans-serif;
+  --font-mono:"Geist Mono",ui-monospace,"SF Mono","Cascadia Code",Menlo,Monaco,"Courier New",monospace;
+  --radius-sm:6px;--radius-md:8px;--radius-pill:9999px;
+  --space-2:8px;--space-3:12px;--space-4:16px;--text-xs:12px;--text-sm:13px;--text-base:14px;
+  --focus-ring:0 0 0 2px var(--accent);--motion:160ms cubic-bezier(.2,0,0,1);
+}
+:root[data-theme="dark"]{--bg:#121316;--chrome:#17181c;--surface:#1c1e23;--surface-2:#23262c;--hover:#2a2d34;--fg:#e8eaed;--fg-2:#b4b8c0;--muted:#8a8f99;--meta:#6b7079;--border:rgba(255,255,255,.08);--border-soft:rgba(255,255,255,.045);--accent:#3b82f6;--accent-on:#fff;--success:#16a34a;--warn:#eab308;--danger:#dc2626;--add:#1f3a28;--del:#3a1f24;--addfg:#7ee2a8;--delfg:#f3a3ad}
+:root[data-theme="light"]{--bg:#fff;--chrome:#fafafa;--surface:#fff;--surface-2:#f6f7f8;--hover:#f0f1f3;--fg:#171717;--fg-2:#4d4d4d;--muted:#666;--meta:#808080;--border:rgba(0,0,0,.10);--border-soft:rgba(0,0,0,.05);--accent:#0070f3;--accent-on:#fff;--success:#16a34a;--warn:#b58900;--danger:#dc2626;--add:#e6ffec;--del:#ffebe9;--addfg:#1a7f37;--delfg:#cf222e}
+:root[data-theme="warm"]{--bg:#f5f4ed;--chrome:#efece1;--surface:#faf9f5;--surface-2:#eceadd;--hover:#e7e4d8;--fg:#141413;--fg-2:#3d3d3a;--muted:#5e5d59;--meta:#87867f;--border:rgba(20,20,19,.10);--border-soft:rgba(20,20,19,.05);--accent:#c96442;--accent-on:#faf9f5;--success:#17a34a;--warn:#b58900;--danger:#b53333;--add:#e9f2e0;--del:#f7e7df;--addfg:#4f7a2f;--delfg:#b53333}
+*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%}
+body{font-family:var(--font-body);background:var(--bg);color:var(--fg);font-size:var(--text-base);overflow:hidden;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+button:focus-visible,[tabindex]:focus-visible{outline:none;box-shadow:var(--focus-ring);border-radius:var(--radius-sm)}
+.app{display:flex;flex-direction:column;height:100vh}
+.titlebar{height:36px;background:var(--chrome);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:var(--space-3);padding:0 var(--space-3)}
+.logo{display:flex;align-items:center;gap:6px;font-weight:600;font-size:var(--text-sm)}
+.dot{width:9px;height:9px;border-radius:var(--radius-pill)}
+.spacer{flex:1}
+.themeswitch{display:flex;gap:2px;background:var(--surface-2);border-radius:var(--radius-pill);padding:3px}
+.themeswitch button{font-size:var(--text-xs);padding:3px 11px;border-radius:var(--radius-pill);color:var(--muted)}
+.themeswitch button.on{background:var(--surface);color:var(--fg);box-shadow:0 0 0 1px var(--border)}
+.body{flex:1;display:flex;min-height:0}
+.scm{width:320px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.scmhead{padding:var(--space-3) var(--space-4);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border-soft)}
+.scmhead .ttl{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;color:var(--meta)}
+.branchbar{display:flex;align-items:center;gap:8px;padding:var(--space-3) var(--space-4);font-size:var(--text-sm);border-bottom:1px solid var(--border-soft)}
+.branchbar .b{display:flex;align-items:center;gap:6px;background:var(--surface-2);padding:4px 10px;border-radius:var(--radius-pill);box-shadow:0 0 0 1px var(--border)}
+.branchbar .sync{margin-left:auto;color:var(--muted);font-family:var(--font-mono);font-size:var(--text-xs)}
+.commitbox{padding:var(--space-3) var(--space-4)}
+.commitbox textarea{width:100%;height:54px;resize:none;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-md);padding:8px 10px;font-family:inherit;font-size:var(--text-sm)}
+.commitbox textarea:focus{outline:none;box-shadow:var(--focus-ring);border-color:transparent}
+.commitbtn{width:100%;margin-top:8px;background:var(--accent);color:var(--accent-on);font-weight:600;font-size:var(--text-sm);padding:8px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;gap:6px}
+.grp{padding:var(--space-2) var(--space-4) 4px;font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.05em;color:var(--meta);display:flex;justify-content:space-between;margin-top:6px}
+.changes{flex:1;overflow:auto}
+.chg{display:flex;align-items:center;gap:8px;padding:4px var(--space-4);font-size:var(--text-sm);color:var(--fg-2)}
+.chg:hover{background:var(--hover)}
+.chg.sel{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--fg)}
+.chg .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chg .dir{color:var(--meta);font-size:var(--text-xs)}
+.chg .st{font-family:var(--font-mono);font-size:var(--text-xs);width:14px;text-align:center}
+.st.m{color:var(--warn)}.st.a{color:var(--success)}.st.d{color:var(--danger)}.st.u{color:var(--accent)}
+.chg .act{opacity:0;color:var(--muted)}.chg:hover .act{opacity:1}
+.main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+.difftop{height:38px;background:var(--chrome);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:var(--space-3);padding:0 var(--space-4);font-size:var(--text-sm)}
+.difftop .fn{font-weight:550}.difftop .meta{color:var(--meta);font-family:var(--font-mono);font-size:var(--text-xs)}
+.difftop .seg{margin-left:auto;display:flex;gap:2px;background:var(--surface-2);border-radius:var(--radius-pill);padding:3px}
+.difftop .seg button{font-size:var(--text-xs);padding:3px 10px;border-radius:var(--radius-pill);color:var(--muted)}
+.difftop .seg button.on{background:var(--surface);color:var(--fg);box-shadow:0 0 0 1px var(--border)}
+.diff{flex:1;overflow:auto;font-family:var(--font-mono);font-size:var(--text-sm);line-height:1.6}
+.dl{display:flex}.dl .ln{width:48px;text-align:right;padding:0 8px;color:var(--meta);user-select:none;flex-shrink:0}
+.dl .tx{padding:0 12px;white-space:pre;flex:1}
+.dl.add{background:var(--add)}.dl.add .tx{color:var(--addfg)}.dl.add .ln{color:var(--addfg);opacity:.7}
+.dl.del{background:var(--del)}.dl.del .tx{color:var(--delfg)}.dl.del .ln{color:var(--delfg);opacity:.7}
+.dl.hunk{background:var(--surface-2);color:var(--muted)}
+/* git 樹（commit 歷史圖） */
+.graphpanel{height:238px;flex-shrink:0;border-top:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column}
+.graphhead{height:32px;display:flex;align-items:center;gap:8px;padding:0 var(--space-4);border-bottom:1px solid var(--border-soft);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--meta)}
+.graphhead .lg{margin-left:auto;display:flex;gap:14px;text-transform:none;letter-spacing:0;font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+.graphhead .lg span{display:flex;align-items:center;gap:5px}.graphhead .lg i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.graphwrap{flex:1;overflow:auto;position:relative}
+.graphsvg{position:absolute;left:0;top:0;width:64px;height:196px}
+.glist{margin-left:64px}
+.grow{height:28px;display:flex;align-items:center;gap:10px;padding:0 var(--space-4) 0 0;font-size:var(--text-sm);border-bottom:1px solid var(--border-soft)}
+.grow:hover{background:var(--hover)}
+.grow.sel{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.gmsg{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--fg)}
+.ref{font-size:10px;font-family:var(--font-mono);padding:1px 7px;border-radius:var(--radius-pill);box-shadow:0 0 0 1px var(--border);flex-shrink:0}
+.ref.head{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
+.ref.branch{color:var(--success)}.ref.remote{color:var(--muted)}
+.gwho{font-size:11px;color:var(--muted);width:140px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+.statusbar{height:24px;background:var(--accent);color:var(--accent-on);display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-3);font-size:var(--text-xs);font-family:var(--font-mono)}
+.statusbar .right{margin-left:auto;display:flex;gap:var(--space-4)}
+svg.i{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.wbtn{width:13px;height:13px;border-radius:50%;background:var(--border)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar">
+    <span class="wbtn"></span><span class="wbtn"></span><span class="wbtn"></span>
+    <span class="logo" style="margin-left:6px"><span class="dot" style="background:var(--accent)"></span>Polydesk · 原始碼控制</span>
+    <span class="spacer"></span>
+    <div class="themeswitch" role="group" aria-label="主題切換">
+      <button onclick="setT('dark',this)" class="on">深色</button>
+      <button onclick="setT('light',this)">淺色</button>
+      <button onclick="setT('warm',this)">暖色</button>
+    </div>
+  </div>
+  <div class="body">
+    <section class="scm" aria-label="原始碼控制">
+      <div class="scmhead"><span class="ttl">原始碼控制 · polydesk</span><span style="color:var(--meta)">⟳ ⋯</span></div>
+      <div class="branchbar">
+        <span class="b"><svg class="i" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M18 11.5c0 3-4 2.5-4 5.5"/></svg> main</span>
+        <button class="b" style="color:var(--muted)">切換分支 ▾</button>
+        <span class="sync">↑2 ↓0 ⟳</span>
+      </div>
+      <div class="commitbox">
+        <textarea aria-label="commit 訊息">feat: 每工作區 Playwright profile 自動接線</textarea>
+        <button class="commitbtn"><svg class="i" viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg> 提交 (3 已暫存)</button>
+      </div>
+      <div class="grp">已暫存的變更 <span>3</span></div>
+      <div class="changes">
+        <div class="chg sel"><span class="st m">M</span><span class="nm">pw-bridge.ts</span><span class="dir">src/main</span><span class="act">−</span></div>
+        <div class="chg"><span class="st a">A</span><span class="nm">profile-store.ts</span><span class="dir">src/main</span><span class="act">−</span></div>
+        <div class="chg"><span class="st m">M</span><span class="nm">package.json</span><span class="dir">/</span><span class="act">−</span></div>
+        <div class="grp">變更 <span>2</span></div>
+        <div class="chg"><span class="st m">M</span><span class="nm">workspace.ts</span><span class="dir">src/main</span><span class="act">＋</span></div>
+        <div class="chg"><span class="st u">U</span><span class="nm">notes.md</span><span class="dir">/</span><span class="act">＋</span></div>
+      </div>
+    </section>
+    <div class="main">
+      <div class="difftop">
+        <span class="fn">pw-bridge.ts</span><span class="meta">src/main · +18 −4</span>
+        <div class="seg"><button class="on">並排</button><button>行內</button></div>
+      </div>
+      <div class="diff">
+        <div class="dl hunk"><span class="ln"></span><span class="tx">@@ -12,7 +12,9 @@ class PlaywrightBridge</span></div>
+        <div class="dl"><span class="ln">12</span><span class="tx">  async attach(ws: Workspace) {</span></div>
+        <div class="dl del"><span class="ln">13</span><span class="tx">-   const cdp = await this.openShared()</span></div>
+        <div class="dl add"><span class="ln">13</span><span class="tx">+   // 每工作區獨立 persistent profile（隔離登入/cookie）</span></div>
+        <div class="dl add"><span class="ln">14</span><span class="tx">+   const profile = this.profileDir(ws.id)</span></div>
+        <div class="dl add"><span class="ln">15</span><span class="tx">+   const ctx = await chromium.launchPersistentContext(profile, {</span></div>
+        <div class="dl add"><span class="ln">16</span><span class="tx">+     headless: false,  // headed：使用者看著它跑</span></div>
+        <div class="dl add"><span class="ln">17</span><span class="tx">+   })</span></div>
+        <div class="dl"><span class="ln">18</span><span class="tx">    return ctx</span></div>
+        <div class="dl"><span class="ln">19</span><span class="tx">  }</span></div>
+        <div class="dl hunk"><span class="ln"></span><span class="tx">@@ -28,4 +30,4 @@ class PlaywrightBridge</span></div>
+        <div class="dl del"><span class="ln">28</span><span class="tx">-   this.port = await getFreePort()</span></div>
+        <div class="dl add"><span class="ln">30</span><span class="tx">+   this.profilesRoot = app.getPath('userData')</span></div>
+      </div>
+      <div class="graphpanel">
+        <div class="graphhead">git 圖 · commit 歷史
+          <span class="lg"><span><i style="background:var(--accent)"></i>main</span><span><i style="background:var(--success)"></i>feat/pw-profile</span></span>
+        </div>
+        <div class="graphwrap">
+          <svg class="graphsvg" viewBox="0 0 64 196" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M18 14 L18 182" stroke="var(--accent)" stroke-width="2" fill="none"/>
+            <path d="M18 98 C18 84 40 84 40 70" stroke="var(--success)" stroke-width="2" fill="none"/>
+            <path d="M40 70 L40 42" stroke="var(--success)" stroke-width="2" fill="none"/>
+            <path d="M40 42 C40 28 18 28 18 14" stroke="var(--success)" stroke-width="2" fill="none"/>
+            <circle cx="18" cy="14" r="4.5" fill="var(--accent)"/>
+            <circle cx="40" cy="42" r="4.5" fill="var(--success)"/>
+            <circle cx="40" cy="70" r="4.5" fill="var(--success)"/>
+            <circle cx="18" cy="98" r="4.5" fill="var(--accent)"/>
+            <circle cx="18" cy="126" r="4" fill="var(--accent)"/>
+            <circle cx="18" cy="154" r="4" fill="var(--accent)"/>
+            <circle cx="18" cy="182" r="4" fill="var(--accent)"/>
+          </svg>
+          <div class="glist">
+            <div class="grow sel"><span class="ref head">HEAD → main</span><span class="gmsg">Merge branch 'feat/pw-profile'</span><span class="gwho">a1b2c3d · 你 · 2 小時前</span></div>
+            <div class="grow"><span class="gmsg">feat: launchPersistentContext 隔離各工作區 profile</span><span class="gwho">fd92e1a · 你 · 3 小時前</span></div>
+            <div class="grow"><span class="ref branch">feat/pw-profile</span><span class="gmsg">feat: pw-bridge 以 env 注入接線</span><span class="gwho">7c4b0f2 · 你 · 4 小時前</span></div>
+            <div class="grow"><span class="gmsg">refactor: workspace 抽出 profileDir()</span><span class="gwho">3a9d5c1 · 你 · 昨天</span></div>
+            <div class="grow"><span class="gmsg">fix: 終端機 cwd 對齊工作區路徑</span><span class="gwho">e011b8a · 你 · 昨天</span></div>
+            <div class="grow"><span class="gmsg">chore: 升級 electron 30</span><span class="gwho">b62f7d3 · 你 · 2 天前</span></div>
+            <div class="grow"><span class="ref remote">origin/main</span><span class="gmsg">init: 專案骨架</span><span class="gwho">9f013aa · 你 · 3 天前</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="statusbar">
+    <span style="display:flex;align-items:center;gap:5px"><svg class="i" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M18 11.5c0 3-4 2.5-4 5.5"/></svg> main</span>
+    <span>↑2 ↓0</span><span>5 變更</span>
+    <span class="right"><span>系統 git 2.43</span><span>UTF-8</span></span>
+  </div>
+</div>
+<script>function setT(t,b){document.documentElement.setAttribute('data-theme',t);document.querySelectorAll('.themeswitch button').forEach(x=>x.classList.remove('on'));b.classList.add('on')}</script>
+</body>
+</html>

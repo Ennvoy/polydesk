@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polydesk — 主畫面</title>
+<style>
+/* ── Vercel 基底 token（非色彩部分 verbatim）+ 三主題色彩客製 ───────────── */
+:root{
+  --font-display:"Geist","Geist Sans",-apple-system,"Segoe UI",Arial,sans-serif;
+  --font-body:"Geist","Geist Sans",-apple-system,"Segoe UI",Arial,sans-serif;
+  --font-mono:"Geist Mono",ui-monospace,"SF Mono","Cascadia Code","Roboto Mono",Menlo,Monaco,"Courier New",monospace;
+  --accent:#0070f3; --accent-on:#fff;
+  --success:#16a34a; --warn:#eab308; --danger:#dc2626; --info:#0070f3;
+  --radius-sm:6px; --radius-md:8px; --radius-lg:12px; --radius-pill:9999px;
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-6:24px;--space-8:32px;
+  --text-xs:12px;--text-sm:13px;--text-base:14px;--text-lg:16px;--text-xl:20px;
+  --focus-ring:0 0 0 2px var(--accent);
+  --motion:160ms cubic-bezier(.2,0,0,1);
+}
+/* 深色（冷調中性，預設） */
+:root[data-theme="dark"]{
+  --bg:#121316; --chrome:#17181c; --surface:#1c1e23; --surface-2:#23262c; --hover:#2a2d34;
+  --fg:#e8eaed; --fg-2:#b4b8c0; --muted:#8a8f99; --meta:#6b7079;
+  --border:rgba(255,255,255,.08); --border-soft:rgba(255,255,255,.045);
+  --accent:#3b82f6; --rail:#0e0f12;
+  --kw:#c792ea; --str:#a5d6a7; --fn:#82aaff; --num:#f78c6c; --cmt:#5f6672; --tag:#7fdbca;
+  --elev:0 8px 24px -8px rgba(0,0,0,.5);
+}
+/* 淺色（Vercel 乾淨白） */
+:root[data-theme="light"]{
+  --bg:#ffffff; --chrome:#fafafa; --surface:#ffffff; --surface-2:#f6f7f8; --hover:#f0f1f3;
+  --fg:#171717; --fg-2:#4d4d4d; --muted:#666; --meta:#808080;
+  --border:rgba(0,0,0,.10); --border-soft:rgba(0,0,0,.05);
+  --accent:#0070f3; --rail:#f0f0f0;
+  --kw:#a626a4; --str:#50a14f; --fn:#4078f2; --num:#986801; --cmt:#a0a1a7; --tag:#0184bc;
+  --elev:0 0 0 1px rgba(0,0,0,.08),0 2px 2px rgba(0,0,0,.04),0 8px 8px -8px rgba(0,0,0,.06);
+}
+/* 暖色（Claude 風格：羊皮紙米色 + 陶土 terracotta + 暖灰，編輯感淺色） */
+:root[data-theme="warm"]{
+  --bg:#f5f4ed; --chrome:#efece1; --surface:#faf9f5; --surface-2:#eceadd; --hover:#e7e4d8;
+  --fg:#141413; --fg-2:#3d3d3a; --muted:#5e5d59; --meta:#87867f;
+  --border:rgba(20,20,19,.10); --border-soft:rgba(20,20,19,.05);
+  --accent:#c96442; --accent-on:#faf9f5; --rail:#ece9dc;
+  --kw:#9a5fa0; --str:#5b7a3a; --fn:#b5651d; --num:#c96442; --cmt:#9b9684; --tag:#3f7a6f;
+  --elev:0 0 0 1px rgba(20,20,19,.08),0 4px 24px rgba(0,0,0,.05);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--font-body);background:var(--bg);color:var(--fg);font-size:var(--text-base);
+  -webkit-font-smoothing:antialiased;overflow:hidden;transition:background var(--motion),color var(--motion)}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+button:focus-visible,[tabindex]:focus-visible{outline:none;box-shadow:var(--focus-ring);border-radius:var(--radius-sm)}
+.mono{font-family:var(--font-mono)}
+
+/* ── 視窗外框 ───────────────────────────────────────────── */
+.app{display:flex;flex-direction:column;height:100vh}
+.titlebar{height:36px;background:var(--chrome);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:var(--space-3);padding:0 var(--space-3);flex-shrink:0;-webkit-app-region:drag}
+.titlebar .logo{display:flex;align-items:center;gap:6px;font-weight:600;font-size:var(--text-sm);letter-spacing:-.01em}
+.dot{width:9px;height:9px;border-radius:var(--radius-pill)}
+.titlebar .spacer{flex:1}
+.themeswitch{display:flex;gap:2px;background:var(--surface-2);border-radius:var(--radius-pill);padding:3px;-webkit-app-region:no-drag}
+.themeswitch button{font-size:var(--text-xs);padding:3px 11px;border-radius:var(--radius-pill);color:var(--muted);transition:var(--motion)}
+.themeswitch button.on{background:var(--surface);color:var(--fg);box-shadow:0 0 0 1px var(--border)}
+.wbtn{width:13px;height:13px;border-radius:50%;background:var(--border)}
+
+.body{flex:1;display:flex;min-height:0}
+
+/* ── ① 工作區列表（差異化核心） ──────────────────────────── */
+.wsrail{width:212px;background:var(--rail);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.wsrail h2{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;color:var(--meta);
+  padding:var(--space-4) var(--space-4) var(--space-2)}
+.wslist{flex:1;overflow:auto;padding:0 var(--space-2)}
+.ws{display:flex;gap:var(--space-2);align-items:flex-start;padding:var(--space-2) var(--space-2);
+  border-radius:var(--radius-md);margin-bottom:2px;transition:var(--motion);position:relative}
+.ws:hover{background:var(--hover)}
+.ws.active{background:var(--surface-2)}
+.ws.active::before{content:"";position:absolute;left:-8px;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--accent)}
+.ws .swatch{width:26px;height:26px;border-radius:7px;flex-shrink:0;display:grid;place-items:center;
+  font-size:var(--text-xs);font-weight:700;color:#fff}
+.ws .info{flex:1;min-width:0}
+.ws .name{font-size:var(--text-sm);font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws .path{font-size:11px;color:var(--meta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-family:var(--font-mono);
+  padding:1px 5px;border-radius:var(--radius-pill);background:var(--surface);box-shadow:0 0 0 1px var(--border);color:var(--fg-2)}
+.badge.git{color:var(--success)} .badge.run{color:var(--accent)} .badge.dirty{color:var(--warn)} .badge.test{color:var(--info)}
+.badge .pulse{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 0 0 currentColor;animation:pulse 1.8s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,currentColor 50%,transparent)}70%{box-shadow:0 0 0 5px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.ws.unavail{opacity:.5}
+.ws.unavail .name::after{content:" ⚠";color:var(--warn)}
+.addws{margin:var(--space-2);padding:var(--space-2);border-radius:var(--radius-md);border:1px dashed var(--border);
+  color:var(--muted);font-size:var(--text-sm);text-align:center;transition:var(--motion)}
+.addws:hover{color:var(--fg);border-color:var(--accent)}
+
+/* ── ② 活動列 ──────────────────────────────────────────── */
+.activity{width:48px;background:var(--chrome);border-right:1px solid var(--border);display:flex;flex-direction:column;
+  align-items:center;padding-top:var(--space-2);gap:2px;flex-shrink:0}
+.act{width:40px;height:40px;border-radius:var(--radius-md);display:grid;place-items:center;color:var(--muted);transition:var(--motion);position:relative}
+.act:hover{color:var(--fg);background:var(--hover)}
+.act.on{color:var(--fg)}
+.act.on::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:2px;background:var(--accent);border-radius:2px}
+.act svg{width:20px;height:20px}
+
+/* ── ③ 側欄（檔案總管） ─────────────────────────────────── */
+.side{width:248px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.side h3{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;color:var(--meta);padding:var(--space-3) var(--space-4) var(--space-2);display:flex;justify-content:space-between}
+.tree{flex:1;overflow:auto;padding:0 var(--space-2) var(--space-4)}
+.row{display:flex;align-items:center;gap:6px;padding:3px var(--space-2);border-radius:var(--radius-sm);font-size:var(--text-sm);color:var(--fg-2);cursor:default}
+.row:hover{background:var(--hover)}
+.row.sel{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--fg)}
+.row .ind{display:inline-block}
+.row .ic{width:15px;text-align:center;opacity:.85}
+.row .g{margin-left:auto;font-size:11px;font-family:var(--font-mono)}
+.row .g.m{color:var(--warn)} .row .g.a{color:var(--success)} .row .g.u{color:var(--accent)}
+
+/* ── ④ 編輯區 ──────────────────────────────────────────── */
+.main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+.tabs{height:38px;background:var(--chrome);border-bottom:1px solid var(--border);display:flex;align-items:stretch;flex-shrink:0}
+.tab{display:flex;align-items:center;gap:7px;padding:0 var(--space-4);font-size:var(--text-sm);color:var(--muted);
+  border-right:1px solid var(--border);position:relative}
+.tab.on{background:var(--bg);color:var(--fg)}
+.tab.on::after{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--accent)}
+.tab .close{opacity:.5;font-size:12px} .tab.dirty .close{display:none} .tab.dirty .dt{width:7px;height:7px;border-radius:50%;background:var(--fg-2)}
+.split{flex:1;display:flex;min-height:0}
+.editor{flex:1;display:flex;overflow:hidden;min-width:0}
+.gutter{padding:var(--space-3) var(--space-2);text-align:right;color:var(--meta);font-family:var(--font-mono);font-size:var(--text-sm);line-height:1.6;user-select:none;background:var(--bg)}
+.code{flex:1;padding:var(--space-3) var(--space-4);font-family:var(--font-mono);font-size:var(--text-sm);line-height:1.6;overflow:auto;white-space:pre}
+.code .k{color:var(--kw)}.code .s{color:var(--str)}.code .f{color:var(--fn)}.code .n{color:var(--num)}.code .c{color:var(--cmt)}.code .t{color:var(--tag)}
+.editor+.editor{border-left:1px solid var(--border)}
+.editor .splitlabel{position:absolute;top:42px;font-size:10px;color:var(--meta);padding:2px 6px}
+
+/* ── ⑤ 終端機面板 ──────────────────────────────────────── */
+.panel{height:210px;background:var(--surface);border-top:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.panel .ptabs{height:32px;display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-4);border-bottom:1px solid var(--border-soft);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.05em}
+.panel .ptab{color:var(--muted);padding:8px 0;border-bottom:2px solid transparent}
+.panel .ptab.on{color:var(--fg);border-bottom-color:var(--accent)}
+.panel .pspacer{flex:1}
+.shellpill{font-size:11px;font-family:var(--font-mono);color:var(--muted);text-transform:none;letter-spacing:0;display:flex;align-items:center;gap:5px}
+.term{flex:1;overflow:auto;padding:var(--space-3) var(--space-4);font-family:var(--font-mono);font-size:var(--text-sm);line-height:1.55}
+.term .p{color:var(--success)} .term .pa{color:var(--accent)} .term .d{color:var(--muted)} .term .cl{color:var(--fn)} .term .ok{color:var(--success)} .term .cur{display:inline-block;width:8px;height:15px;background:var(--fg);vertical-align:-3px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* ── ⑥ 狀態列 ──────────────────────────────────────────── */
+.statusbar{height:24px;background:var(--accent);color:var(--accent-on,#fff);display:flex;align-items:center;gap:var(--space-4);
+  padding:0 var(--space-3);font-size:var(--text-xs);flex-shrink:0;font-family:var(--font-mono)}
+:root[data-theme="light"] .statusbar{--accent-on:#fff}
+.statusbar .si{display:flex;align-items:center;gap:5px}
+.statusbar .right{margin-left:auto;display:flex;gap:var(--space-4)}
+svg.i{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 標題列 + 主題切換 -->
+  <div class="titlebar">
+    <span class="wbtn"></span><span class="wbtn"></span><span class="wbtn"></span>
+    <span class="logo" style="margin-left:6px"><span class="dot" style="background:var(--accent)"></span>Polydesk</span>
+    <span class="spacer"></span>
+    <div class="themeswitch" role="group" aria-label="主題切換">
+      <button onclick="setT('dark',this)" class="on">深色</button>
+      <button onclick="setT('light',this)">淺色</button>
+      <button onclick="setT('warm',this)">暖色</button>
+    </div>
+  </div>
+
+  <div class="body">
+    <!-- ① 工作區列表 -->
+    <nav class="wsrail" aria-label="工作區列表">
+      <h2>工作區</h2>
+      <div class="wslist">
+        <div class="ws active" tabindex="0">
+          <div class="swatch" style="background:#3b82f6">PD</div>
+          <div class="info">
+            <div class="name">polydesk</div>
+            <div class="path">~/Documents/我的終端機</div>
+            <div class="badges">
+              <span class="badge git">⎇ main</span>
+              <span class="badge dirty">●3</span>
+              <span class="badge run"><span class="pulse"></span>dev</span>
+            </div>
+          </div>
+        </div>
+        <div class="ws" tabindex="0">
+          <div class="swatch" style="background:#16a34a">AP</div>
+          <div class="info">
+            <div class="name">api-server</div>
+            <div class="path">~/work/api-server</div>
+            <div class="badges">
+              <span class="badge git">⎇ feat/auth ↑2</span>
+              <span class="badge test"><span class="pulse"></span>測試中</span>
+            </div>
+          </div>
+        </div>
+        <div class="ws" tabindex="0">
+          <div class="swatch" style="background:#e6a23c">SH</div>
+          <div class="info">
+            <div class="name">shop-web</div>
+            <div class="path">~/work/shop-web</div>
+            <div class="badges">
+              <span class="badge git">⎇ main ✓</span>
+            </div>
+          </div>
+        </div>
+        <div class="ws unavail" tabindex="0">
+          <div class="swatch" style="background:#6b7079">D</div>
+          <div class="info">
+            <div class="name">old-demo</div>
+            <div class="path">E:/ (隨身碟未接)</div>
+          </div>
+        </div>
+      </div>
+      <button class="addws">＋ 新增工作區</button>
+    </nav>
+
+    <!-- ② 活動列 -->
+    <div class="activity" role="tablist" aria-label="功能">
+      <button class="act on" aria-label="檔案總管"><svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+      <button class="act" aria-label="搜尋"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+      <button class="act" aria-label="原始碼控制"><svg class="i" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M18 11.5c0 3-4 2.5-4 5.5"/></svg></button>
+      <button class="act" aria-label="測試 / Claude"><svg class="i" viewBox="0 0 24 24"><path d="M5 3v6l-2 9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2l-2-9V3"/><path d="M4 9h16"/></svg></button>
+    </div>
+
+    <!-- ③ 檔案總管 -->
+    <aside class="side" aria-label="檔案總管">
+      <h3>polydesk <span style="color:var(--meta)">⋯</span></h3>
+      <div class="tree">
+        <div class="row"><span class="ic">▾</span><span class="ic">📁</span>src</div>
+        <div class="row" style="padding-left:22px"><span class="ic">▾</span><span class="ic">📁</span>main</div>
+        <div class="row sel" style="padding-left:40px"><span class="ic">📄</span>workspace.ts<span class="g m">M</span></div>
+        <div class="row" style="padding-left:40px"><span class="ic">📄</span>terminal.ts</div>
+        <div class="row" style="padding-left:40px"><span class="ic">📄</span>pw-bridge.ts<span class="g u">U</span></div>
+        <div class="row" style="padding-left:22px"><span class="ic">▸</span><span class="ic">📁</span>renderer</div>
+        <div class="row" style="padding-left:22px"><span class="ic">▸</span><span class="ic">📁</span>editor</div>
+        <div class="row"><span class="ic">▸</span><span class="ic">📁</span>resources</div>
+        <div class="row"><span class="ic" style="width:15px"></span><span class="ic">📄</span>package.json<span class="g m">M</span></div>
+        <div class="row"><span class="ic" style="width:15px"></span><span class="ic">📄</span>tsconfig.json</div>
+        <div class="row"><span class="ic" style="width:15px"></span><span class="ic">📄</span>README.md<span class="g a">A</span></div>
+      </div>
+    </aside>
+
+    <!-- ④ 編輯區 + ⑤ 終端機 -->
+    <div class="main">
+      <div class="tabs">
+        <div class="tab on dirty"><span class="dt"></span>workspace.ts</div>
+        <div class="tab">pw-bridge.ts<span class="close">×</span></div>
+        <div class="tab">package.json<span class="close">×</span></div>
+      </div>
+      <div class="split">
+        <div class="editor">
+          <div class="gutter">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12</div>
+          <div class="code"><span class="c">// 每個工作區綁定自己的 Playwright profile（零 repo 足跡）</span>
+<span class="k">export</span> <span class="k">class</span> <span class="f">Workspace</span> {
+  <span class="k">constructor</span>(<span class="k">readonly</span> path: <span class="t">string</span>, <span class="k">readonly</span> id: <span class="t">string</span>) {}
+
+  <span class="k">async</span> <span class="f">openTerminal</span>(shell = <span class="s">'pwsh'</span>): <span class="t">Promise</span>&lt;<span class="t">Terminal</span>&gt; {
+    <span class="k">const</span> env = { ...process.env,
+      POLYDESK_PW_PROFILE: <span class="k">this</span>.profileDir,   <span class="c">// 接線：注入給 claude</span>
+    }
+    <span class="k">return</span> <span class="f">spawnPty</span>(shell, { cwd: <span class="k">this</span>.path, env })
+  }
+}</div>
+        </div>
+        <div class="editor">
+          <div class="gutter">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12</div>
+          <div class="code"><span class="c"># 分割編輯器並排（同一文件共享 buffer）</span>
+<span class="c"># README.md</span>
+
+<span class="t"># Polydesk</span>
+
+多工作區開發終端機。
+
+- 左側<span class="k">工作區列表</span>切換／監控
+- 每工作區獨立<span class="k">終端機 + Playwright</span>
+- Monaco 編輯器 + 多語言 LSP
+- 完整 git GUI</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="ptabs">
+          <span class="ptab on">終端機</span>
+          <span class="ptab">問題</span>
+          <span class="ptab">輸出</span>
+          <span class="pspacer"></span>
+          <span class="shellpill"><span class="dot" style="background:var(--success)"></span>pwsh · polydesk ＋</span>
+        </div>
+        <div class="term">
+<span class="p">PS ~/Documents/我的終端機</span><span class="d">&gt;</span> <span class="cl">claude</span>
+<span class="d">  ╭─ Claude Code ─ 已接線到本工作區 Playwright profile ✓</span>
+<span class="pa">›</span> 幫我測試登入頁，輸入帳密後驗證導向 /dashboard
+<span class="d">  ⏺ 開啟 Playwright（headed）… 你會看到瀏覽器視窗</span>
+<span class="d">  ⏺ navigate → http://localhost:3000/login</span>
+<span class="d">  ⏺ fill #email, #password · click 登入</span>
+<span class="ok">  ✓ 已導向 /dashboard（測試通過）</span>
+<span class="p">PS ~/Documents/我的終端機</span><span class="d">&gt;</span> <span class="cur"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑥ 狀態列 -->
+  <div class="statusbar">
+    <span class="si"><svg class="i" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M18 11.5c0 3-4 2.5-4 5.5"/></svg> main</span>
+    <span class="si">↑2 ↓0</span>
+    <span class="si">✗ 0  ⚠ 1</span>
+    <span class="si">TypeScript · LSP ✓</span>
+    <span class="right">
+      <span class="si">Playwright 操控中 · polydesk</span>
+      <span class="si">UTF-8</span>
+      <span class="si">LF</span>
+      <span class="si">行 8, 欄 24</span>
+    </span>
+  </div>
+</div>
+<script>
+function setT(t,btn){document.documentElement.setAttribute('data-theme',t);
+  document.querySelectorAll('.themeswitch button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');}
+</script>
+</body>
+</html>

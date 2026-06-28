@@ -1,0 +1,8 @@
+{
+  "id": "F9-DROP",
+  "question": "F-9接線層是否需要",
+  "choice": "砍除 F-9 自建接線(註冊MCP/profile/env注入)，完全沿用官方@playwright/mcp依cwd自動分流profile；app唯一責任=終端機cwd=工作區(F-3)。REQ-PW精簡、REQ-PW-002/003/008移除、REQ-TERM-004改cwd、REQ-PW驗證併入F-3",
+  "why": "使用者實戰：多專案只用官方mcp、除偶發port外無打架；官方依claude cwd自動per-workspace隔離已滿足隔離+平行+零足跡，F-9是重造輪子(Simplicity First)",
+  "by": "auto",
+  "at": "2026-06-28T07:43:56.578Z"
+}
