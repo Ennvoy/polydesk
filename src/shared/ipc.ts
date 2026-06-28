@@ -68,9 +68,16 @@ export interface InvokeChannels {
     res: { searchId: string };
   };
   'search:cancel': { req: { searchId: string }; res: { ok: true } };
-  // LSP
+  // LSP（自製 bridge：main spawn 語言伺服器 stdio + vscode-jsonrpc，橋到 renderer monaco）
   'lsp:probe': { req: { langId: string }; res: LspServerInfo };
   'lsp:install': { req: { langId: string }; res: { ok: true } | { error: string; manual: string } };
+  /** renderer monaco provider 經此向語言伺服器發 request（completion/hover/definition…）。 */
+  'lsp:request': { req: { wsId: string; langId: string; method: string; params: unknown }; res: { result?: unknown; error?: string } };
+  /** 同步文件生命週期到語言伺服器（didOpen/didChange/didClose）。 */
+  'lsp:sync': {
+    req: { wsId: string; langId: string; uri: string; version: number; kind: 'open' | 'change' | 'close'; text?: string };
+    res: { ok: true };
+  };
   // Playwright 接線
   'playwright:wire': { req: { wsId: string }; res: McpWireResult };
   'playwright:status': { req: void; res: { registered: boolean; conflict?: ConflictInfo } };
@@ -99,6 +106,7 @@ export interface EventChannels {
   'fs:externalEdit': { wsId: string; path: string };
   'pty:exit': { termId: string; exitCode: number };
   'search:result': { searchId: string; hits: SearchHit[]; done: boolean; truncated: boolean };
+  'lsp:diagnostics': { wsId: string; uri: string; diagnostics: unknown[] };
   'workspace:lost': { wsId: string };
   'update:progress': { percent: number; state: 'checking' | 'downloading' | 'ready' };
 }

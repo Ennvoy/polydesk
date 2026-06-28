@@ -34,6 +34,8 @@ export const INVOKE_CHANNELS = [
   'search:cancel',
   'lsp:probe',
   'lsp:install',
+  'lsp:request',
+  'lsp:sync',
   'playwright:wire',
   'playwright:status',
   'store:getState',
@@ -52,6 +54,7 @@ export const EVENT_CHANNELS = [
   'fs:externalEdit',
   'pty:exit',
   'search:result',
+  'lsp:diagnostics',
   'workspace:lost',
   'update:progress',
 ] as const satisfies readonly EventChannel[];
