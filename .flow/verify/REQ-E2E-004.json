@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-004",
+  "status": "n/a",
+  "evidence": "app 不接線(F9-DROP)：cwd=工作區已於 F-3 PtyManager 單元驗證；真 claude×playwright 端到端=人工驗收(VERIFY-LAYER 核可例外)",
+  "by": "evaluator",
+  "at": "2026-06-28T11:44:04.397Z"
+}

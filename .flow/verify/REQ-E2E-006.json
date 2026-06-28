@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-006",
+  "status": "pass",
+  "evidence": "e2e/search.spec 真綠(真 ripgrep 串流/排除 node_modules/點命中跳檔)",
+  "by": "evaluator",
+  "at": "2026-06-28T11:44:04.232Z"
+}

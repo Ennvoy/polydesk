@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-010",
+  "status": "n/a",
+  "evidence": "profile 隔離由官方 @playwright/mcp 依 cwd 自動分流(app 零接線 F9-DROP)；跨工作區登入隔離=人工驗收",
+  "by": "evaluator",
+  "at": "2026-06-28T11:44:04.659Z"
+}

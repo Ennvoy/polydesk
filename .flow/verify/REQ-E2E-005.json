@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-005",
+  "status": "n/a",
+  "evidence": "monitor 三態分類/process-tree probe/自適應間隔/emit-on-change 由 ClaudeStatusMonitor+processProbe 單元真綠；真 claude 程序樹端到端=人工驗收(MON-CLAUDE/REQ-E2E-NOTE)",
+  "by": "evaluator",
+  "at": "2026-06-28T11:44:04.501Z"
+}

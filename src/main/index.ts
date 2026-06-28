@@ -128,6 +128,7 @@ if (!gotTheLock) {
   // 結束前完整 teardown 所有工作區執行中程序/監看（避免殭屍程序，REQ-WS-009）。
   app.on('before-quit', () => {
     if (!services) return;
+    services.monitor.stop(); // 先停輪詢，避免關閉中再起一次 probe
     for (const w of services.workspaces.list()) void services.lifecycle.teardown(w.id);
   });
 }

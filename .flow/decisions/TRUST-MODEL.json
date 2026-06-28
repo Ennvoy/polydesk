@@ -1,0 +1,8 @@
+{
+  "id": "TRUST-MODEL",
+  "question": "",
+  "choice": "工作區 trusted 預設 true（加入後即信任）不改：F-5 紅軍 A1 建議的『預設 untrusted + 獨立 code-exec 閘門』比 spec 更嚴，但 REQ-WS-008 明定加入工作區=一次信任授權，且 F-1 TrustConfirm 已強制加入前明確同意；故 trusted:true 是使用者同意後狀態，LSP/terminal/git spawn 屬已同意。LSP 的 untrusted-不-spawn 防線保留為縱深防禦；X-4 再複核",
+  "why": "對齊凍結 REQ-WS-008（add=trust grant）+ 已有 TrustConfirm 同意閘門；renderer 自身受 CSP/sandbox/contextIsolation 保護(F-1-A1 已測)，半可信對手是工作區內容非 renderer",
+  "by": "auto",
+  "at": "2026-06-28T11:25:42.368Z"
+}

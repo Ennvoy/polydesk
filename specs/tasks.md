@@ -63,14 +63,14 @@
       conflictZone：src/renderer/components/Editor/、src/main/fs/fileService.ts
       verify：Playwright 開 TS 檔輸入觸發自動完成、存檔徽章消失（對齊 REQ-E2E-002 前半）；開 Big5 檔不亂碼；外部改檔走「保留我的/重載」各一次（對齊 REQ-E2E-009）；開 1MB 檔埋點 p95 <500ms。
 
-- [ ] **F-5 LSP 橋接自動偵測（語言登錄表 + PATH 探測 + 缺件不擋路降級 + 一鍵安裝）**
+- [x] **F-5 LSP 橋接自動偵測（語言登錄表 + PATH 探測 + 缺件不擋路降級 + 一鍵安裝）**
       story：開某語言檔→main serverProbe 探測對應語言伺服器（Python/Pyright、Go/gopls、Rust/rust-analyzer、C/C++/clangd、Java/jdtls、C#）→可用則啟用完整 IntelliSense（完成/跳定義/診斷/hover）；探測不到仍語法高亮 + 編輯存檔，顯示不擋路提示「缺 X，[一鍵安裝]/[顯示指令+連結]」，不靜默失敗；語言伺服器一律 main spawn(stdio) 橋接 renderer。
       reqRefs：REQ-EDIT-003/004/005、REQ-NFR-001、REQ-E2E-002
       blockedBy：F-4
       conflictZone：src/main/lsp/（LspManager.ts、languageRegistry.ts、serverProbe.ts）、src/renderer/components/Editor/lsp/
       verify：開保證未裝該 LSP 的檔案→顯示語法高亮 + 彈缺件提示且仍可編輯存檔（對齊 REQ-E2E-002 後半）；裝有 Pyright 環境開 .py 檔出現自動完成/診斷。
 
-- [ ] **F-6 全域搜尋（ripgrep 串流 + 可取消 + 取代 + 點選開檔跳行高亮）**
+- [x] **F-6 全域搜尋（ripgrep 串流 + 可取消 + 取代 + 點選開檔跳行高亮）**
       story：開全域搜尋→輸入字串→ripgrep 串流列出跨檔結果（略過 node_modules/.git、可調、結果上限/截斷提示、隨時取消不卡 UI）→點結果自動開檔、跳對應行並高亮該列；支援跨檔取代。
       reqRefs：REQ-SEARCH-001/002/003/004/005、REQ-E2E-006
       blockedBy：F-4
@@ -84,7 +84,7 @@
       conflictZone：src/renderer/components/SourceControl/、src/main/git/（GitService.ts、gitSafeArgs.ts、gitSerialQueue.ts）
       verify：fixture（已設 upstream、≥2 分支）走 編輯→變更出現→diff→stage→commit→未推送 +1→切分支再切回（對齊 REQ-E2E-003）；非 repo 顯示 init 引導；惡意分支名被格式驗證擋下。
 
-- [ ] **F-8 Claude 狀態監控（process tree 查詢 + activity 輔助 + 前景即時/背景輪詢自適應）**
+- [x] **F-8 Claude 狀態監控（process tree 查詢 + activity 輔助 + 前景即時/背景輪詢自適應）**
       story：工作區列表徽章顯示該工作區 Claude 三態——執行中（綠脈動）/已停·待接手（琥珀）/未啟動（灰）；以乾淨子程序查 PTY 之下 claude 程序存在性 + 最近輸出活動（strip ANSI）判定，不刮可見輸出做語意推測；當前工作區即時、背景輪詢預設 5s 隨工作區數自適應放大；經 `claude:status` 事件推給 F-1 的徽章（不改 UI 元件）。
       reqRefs：REQ-MON-001/002/004/005/006、REQ-E2E-005
       blockedBy：F-1、F-3
@@ -93,7 +93,7 @@
 
 > **F-9 已砍除**（decision `F9-DROP`）：原「自建接線層（註冊 MCP / 管 profile / 注入 env）」完全沿用官方 `@playwright/mcp` 依 cwd 自動分流取代；app 唯一責任 = 終端機 cwd=工作區（併入 F-3）。REQ-PW 已精簡、REQ-PW-002/003/008 移除、REQ-TERM-004 改 cwd。
 
-- [ ] **F-10 dockable 版面拖曳停靠 + 持久化（resize/上下左右停靠重排/顯隱/終端機最大化 + serialize 重啟還原 + 一鍵重設）**
+- [x] **F-10 dockable 版面拖曳停靠 + 持久化（resize/上下左右停靠重排/顯隱/終端機最大化 + serialize 重啟還原 + 一鍵重設）**
       story：面板可拖曳調整大小、拖曳重新停靠/重排（如 VSCode 上下左右）、展開/隱藏左欄/側欄/終端機、最大化終端機（全高暫隱編輯區）；版面 toJSON 存 userData、重啟 fromJSON 還原（失敗 fallback 預設不 brick）、一鍵重設回預設 layout。
       reqRefs：REQ-UI-002/003、REQ-PERSIST-003
       blockedBy：P-2

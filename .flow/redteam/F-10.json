@@ -1,0 +1,13 @@
+{ "attacks": [
+  { "id":"F-10-A1","severity":"medium","scenario":"還原後 panel 不存在時 toggle/重加 throw 破壞版面","failSafeTest":"togglePanel 對缺 panel 不 throw 且重加；連續 toggle 不 throw" },
+  { "id":"F-10-A2","severity":"medium","scenario":"持久化 envelope round-trip 遺失 UI 狀態/與 legacy 純樹不相容","failSafeTest":"serialize→parse→deserialize round-trip 還原同 ui；相容 legacy 純 dockview 樹" },
+  { "id":"F-10-A3","severity":"low","scenario":"最大化狀態無法可逆/還原失敗 brick","failSafeTest":"toggleTerminalMaximize 用原生 maximize/exitMaximize；還原失敗退回非最大化保留全 panel" },
+  { "id":"F-10-A4","severity":"high","scenario":"損毀/惡意 layout JSON(NaN 尺寸/巨量 panel/深巢狀) → 還原崩潰或 OOM","failSafeTest":"validateLayout 拒 NaN/負尺寸/panel>50/深度>8/非物件 → 回 null 走預設不 brick" },
+  { "id":"F-10-A5","severity":"low","scenario":"去抖視窗內關閉 → 最新版面遺失","failSafeTest":"LayoutPersistController flush(beforeunload/pagehide/unmount)以最新送一次" }
+], "coverage":[
+  {"attackId":"F-10-A1","status":"covered","testFile":"src/renderer/layout/layoutPersist.test.ts"},
+  {"attackId":"F-10-A2","status":"covered","testFile":"src/renderer/layout/layoutPersist.test.ts"},
+  {"attackId":"F-10-A3","status":"covered","testFile":"src/renderer/layout/layoutPersist.test.ts"},
+  {"attackId":"F-10-A4","status":"covered","testFile":"src/renderer/layout/layoutPersist.test.ts"},
+  {"attackId":"F-10-A5","status":"covered","testFile":"src/renderer/layout/layoutPersist.test.ts"}
+]}

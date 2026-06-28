@@ -1,4 +1,5 @@
-// IPC 通道註冊表（channel registry）：store/workspace/fs/pty/git 真實實作；search/lsp/playwright/update 預連空樁。
+// IPC 通道註冊表（channel registry）：store/workspace/fs/pty/git/search/lsp 真實實作；
+// playwright（無接線、僅缺件偵測）/update（X-2）預連空樁。Claude 狀態監控啟動於此。
 
 import { ipcMain } from 'electron';
 import type { StateStore } from '../store/StateStore';
@@ -10,12 +11,10 @@ import { registerFsTreeAndWatch, type FileWatcher } from '../fs/FileWatcher';
 import { registerFileService } from '../fs/fileService';
 import { registerPtyHandlers, type PtyManager } from '../pty/PtyManager';
 import { registerGitHandlers } from '../git/GitService';
-import {
-  registerSearchHandlers,
-  registerLspHandlers,
-  registerPlaywrightHandlers,
-  registerUpdateHandlers,
-} from './stubHandlers';
+import { registerSearchHandlers } from '../search/SearchService';
+import { registerLspHandlers } from '../lsp/LspManager';
+import { ClaudeStatusMonitor } from '../monitor/ClaudeStatusMonitor';
+import { registerPlaywrightHandlers, registerUpdateHandlers } from './stubHandlers';
 
 /** main 端服務（供 app 生命週期 teardown / 後續波次取用）。 */
 export interface MainServices {
@@ -23,6 +22,7 @@ export interface MainServices {
   workspaces: WorkspaceManager;
   pty: PtyManager;
   fileWatcher: FileWatcher;
+  monitor: ClaudeStatusMonitor;
 }
 
 export function registerIpcHandlers(store: StateStore, userDataDir: string): MainServices {
@@ -36,12 +36,16 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
   registerFileService(ipcMain, workspaces); // fs:read / fs:write
   const pty = registerPtyHandlers(ipcMain, workspaces, lifecycle); // pty:*
   registerGitHandlers(ipcMain, workspaces); // git:*
+  registerSearchHandlers(ipcMain, workspaces); // search:*
+  registerLspHandlers(ipcMain, workspaces, lifecycle); // lsp:*
 
-  // 空樁（後續 task 取代）
-  registerSearchHandlers(ipcMain);
-  registerLspHandlers(ipcMain);
+  // Claude 狀態監控（唯讀；emit claude:status；F-1 徽章訂閱）
+  const monitor = new ClaudeStatusMonitor(workspaces, pty, undefined, undefined, { lifecycle });
+  monitor.start();
+
+  // 空樁（後續 task 取代 / 無接線）
   registerPlaywrightHandlers(ipcMain);
   registerUpdateHandlers(ipcMain);
 
-  return { lifecycle, workspaces, pty, fileWatcher };
+  return { lifecycle, workspaces, pty, fileWatcher, monitor };
 }

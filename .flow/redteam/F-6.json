@@ -1,0 +1,13 @@
+{ "attacks": [
+  { "id":"F-6-A1","severity":"high","scenario":"惡意 RIPGREP_CONFIG_PATH/env 或把 query 當 flag 注入 rg","failSafeTest":"白名單最小 env(剔 RIPGREP_*)+-e/-- 隔離 query；真 rg 驗 config 未生效、--foo 當字面" },
+  { "id":"F-6-A2","severity":"high","scenario":"取代經 workspace 內 junction 寫到外部機密檔；lost-update 覆蓋","failSafeTest":"resolveSafe skip outside + writeFileSafe conflict；真 fs 驗外部檔 byte 不變" },
+  { "id":"F-6-A3","severity":"medium","scenario":"取代破壞 Big5/CRLF 編碼或誤改二進位檔","failSafeTest":"保留編碼/EOL byte-identical、二進位 skip" },
+  { "id":"F-6-A4","severity":"medium","scenario":"連續搜尋殘留 rg 程序洩漏/cancel 後仍 emit","failSafeTest":"注入 fake spawn：存活 child≤1、cancel 後不再 emit、Map 清空" },
+  { "id":"F-6-A5","severity":"low","scenario":"超長無換行行/壞 rgPath 卡 UI/記憶體爆","failSafeTest":"maxLineBytes 丟棄、ENOENT 仍 done、0 命中 done 非錯" }
+], "coverage":[
+  {"attackId":"F-6-A1","status":"covered","testFile":"src/main/search/SearchService.test.ts"},
+  {"attackId":"F-6-A2","status":"covered","testFile":"src/main/search/SearchService.test.ts"},
+  {"attackId":"F-6-A3","status":"covered","testFile":"src/main/search/SearchService.test.ts"},
+  {"attackId":"F-6-A4","status":"covered","testFile":"src/main/search/SearchService.test.ts"},
+  {"attackId":"F-6-A5","status":"covered","testFile":"src/main/search/SearchService.test.ts"}
+]}

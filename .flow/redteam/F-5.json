@@ -1,0 +1,13 @@
+{ "attacks": [
+  { "id":"F-5-A1","severity":"high","scenario":"開未信任 repo 即 spawn 語言伺服器(RCE-on-open)","failSafeTest":"受信任閘門：未信任工作區 spawn 0 次+降級；信任後才 spawn(對齊 TRUST-MODEL)" },
+  { "id":"F-5-A2","severity":"high","scenario":"工作區內放 gopls.cmd 等 → cwd 執行檔劫持","failSafeTest":"serverProbe 排除工作區目錄、只認 PATH/絕對；放工作區內執行檔 available:false 不 spawn" },
+  { "id":"F-5-A3","severity":"high","scenario":"renderer 經 lsp:request 轉發 workspace/executeCommand 等越權方法","failSafeTest":"唯讀方法白名單；executeCommand 不轉發回 error 不 spawn" },
+  { "id":"F-5-A4","severity":"medium","scenario":"巨檔/惡意 Content-Length framing → 記憶體爆","failSafeTest":"open text>maxFileBytes 不 spawn；framing 上限保護" },
+  { "id":"F-5-A5","severity":"medium","scenario":"語言伺服器卡死/crash → request 永久 pending/編輯被擋","failSafeTest":"request 逾時回 {error:'timeout'}；crash 只降級不影響編輯/存檔" }
+], "coverage":[
+  {"attackId":"F-5-A1","status":"covered","testFile":"src/main/lsp/LspManager.test.ts"},
+  {"attackId":"F-5-A2","status":"covered","testFile":"src/main/lsp/serverProbe.test.ts"},
+  {"attackId":"F-5-A3","status":"covered","testFile":"src/main/lsp/LspManager.test.ts"},
+  {"attackId":"F-5-A4","status":"covered","testFile":"src/main/lsp/LspManager.test.ts"},
+  {"attackId":"F-5-A5","status":"covered","testFile":"src/main/lsp/LspManager.test.ts"}
+]}

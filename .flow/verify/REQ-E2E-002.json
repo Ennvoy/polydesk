@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-002",
+  "status": "pass",
+  "evidence": "e2e/workspace.spec(前半:開檔/輸入/存檔)+e2e/lsp.spec(後半:缺件提示+仍可編輯存檔) 真綠",
+  "by": "evaluator",
+  "at": "2026-06-28T11:44:04.087Z"
+}

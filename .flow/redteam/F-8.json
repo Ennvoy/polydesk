@@ -1,0 +1,13 @@
+{ "attacks": [
+  { "id":"F-8-A1","severity":"high","scenario":"程序列舉 spawn bare 'powershell'/落 workspace cwd 被劫持、傳機密 env","failSafeTest":"絕對路徑 powershell.exe+shell:false+固定 systemRoot cwd+白名單 env；spy 斷言" },
+  { "id":"F-8-A2","severity":"medium","scenario":"Win32_Process JSON 缺欄/null/單物件 → parse 崩潰","failSafeTest":"parseProcessJson 容錯：單物件/陣列/null name·cmd 一律不丟例外、當不匹配" },
+  { "id":"F-8-A3","severity":"medium","scenario":"'node claude-x.js'/路徑含 claude 子字串誤判 running","failSafeTest":"matchClaude 綁可執行 token(name/argv0 結尾)+只收 root 子樹；誤判案例全不匹配" },
+  { "id":"F-8-A4","severity":"medium","scenario":"lister hang → 輪詢卡死/重入堆疊","failSafeTest":"single-flight + withTimeout backstop：永不 resolve 的 lister 放棄該輪沿用上次" },
+  { "id":"F-8-A5","severity":"low","scenario":"工作區數極大 → 輪詢退化忙迴圈/CPU 暴衝","failSafeTest":"computePollInterval n=0/NaN/負/Infinity 皆落 [base,60s] 上界(REQ-MON-006)" }
+], "coverage":[
+  {"attackId":"F-8-A1","status":"covered","testFile":"src/main/monitor/processProbe.test.ts"},
+  {"attackId":"F-8-A2","status":"covered","testFile":"src/main/monitor/processProbe.test.ts"},
+  {"attackId":"F-8-A3","status":"covered","testFile":"src/main/monitor/processProbe.test.ts"},
+  {"attackId":"F-8-A4","status":"covered","testFile":"src/main/monitor/ClaudeStatusMonitor.test.ts"},
+  {"attackId":"F-8-A5","status":"covered","testFile":"src/main/monitor/ClaudeStatusMonitor.test.ts"}
+]}
