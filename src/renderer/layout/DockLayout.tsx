@@ -100,9 +100,38 @@ export function buildDefaultLayout(api: DockviewApi): void {
   sidebar?.api.setSize({ width: 280 });
 }
 
-/** 一鍵重設版面回預設（REQ-UI-003，F-10 接 UI）。 */
+/**
+ * 一鍵重設版面回預設（REQ-UI-003，F-10 接 UI）。
+ * 關鍵：不 api.clear() 重建（那會 dispose 編輯器/終端機 component → 開啟的檔與終端機 PTY/內容全消失）；
+ * 改為「補齊被隱藏的面板 + 把既有面板移回預設相對位置」（moveTo 只搬 group、不 dispose），保住工作狀態。
+ */
 export function resetLayout(): void {
-  if (layoutApi) buildDefaultLayout(layoutApi);
+  const api = layoutApi;
+  if (!api) return;
+  // 1. 退出任何最大化（最大化態下 move 行為不可預期）。
+  try {
+    api.exitMaximizedGroup();
+  } catch {
+    /* 無最大化 */
+  }
+  // 2. 補齊預設三面板（被隱藏/不存在者加回；既有者保留＝不 dispose → 保住編輯器開檔 + 終端機 session/內容）。
+  if (!api.getPanel(EDITOR_ID)) addEditor(api);
+  if (!api.getPanel(SIDEBAR_ID)) addSidebar(api);
+  if (!api.getPanel(TERMINAL_ID)) addTerminal(api);
+  if (!api.getPanel(EDITOR_ID)) return;
+  // 3. 重排回預設相對位置（moveTo 只搬 group、不 dispose component）：sidebar 左、terminal 下。
+  try {
+    const sidebar = api.getPanel(SIDEBAR_ID);
+    const editorGroup1 = api.getPanel(EDITOR_ID)?.api.group;
+    if (sidebar && editorGroup1) sidebar.api.moveTo({ group: editorGroup1, position: 'left' });
+    const terminal = api.getPanel(TERMINAL_ID);
+    const editorGroup2 = api.getPanel(EDITOR_ID)?.api.group;
+    if (terminal && editorGroup2) terminal.api.moveTo({ group: editorGroup2, position: 'bottom' });
+  } catch {
+    /* 重排失敗：至少三面板都在（不致命，使用者可手動拖動）。 */
+  }
+  // 4. 側欄寬度回預設。
+  api.getPanel(SIDEBAR_ID)?.api.setSize({ width: 280 });
 }
 
 /** 供標題列「檢視」選單切換面板顯隱（toolbar 視覺態經 dockview onDidLayoutChange 自動 re-sync）。 */
