@@ -105,9 +105,9 @@ export const HOOK_SCRIPT = `#!/usr/bin/env node
 // Polydesk Claude 狀態 hook（自動產生，勿手改）。由 ~/.claude/settings.json 的 hook 呼叫。
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const state = process.argv[2] || 'done';
-const statusDir = path.join(os.homedir(), '.claude', 'polydesk', 'status');
+// statusDir 相對本腳本位置（<home>/.claude/polydesk/status）——不假設 os.homedir，與主程序 claudePaths 一致。
+const statusDir = path.join(__dirname, 'status');
 let buf = '';
 let done = false;
 function flush() {

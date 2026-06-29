@@ -2,6 +2,7 @@
 // 保留全部既有 hook、冪等、壞檔不覆寫；remove 只移除 Polydesk 項。
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mergeStatusHooks, removeStatusHooks, installClaudeStatusHooks, claudePaths, SCRIPT_MARKER } from './statusHooks';
@@ -126,6 +127,29 @@ describe('installClaudeStatusHooks — 真實 fs 安裝（temp HOME）', () => {
       const r2 = await installClaudeStatusHooks(home);
       expect(r2.changed).toBe(false);
       expect(JSON.parse(readFileSync(settingsPath, 'utf8')).hooks.PreToolUse).toHaveLength(3);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('安裝後的 hook 腳本實跑：餵 stdin JSON → 寫出狀態檔（state/cwd/sessionId）', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'pd-hooks-'));
+    try {
+      mkdirSync(join(home, '.claude'), { recursive: true });
+      await installClaudeStatusHooks(home);
+      const { scriptPath, statusDir } = claudePaths(home);
+      // 模擬 Claude Code 呼叫 hook：argv 狀態 + stdin JSON
+      execFileSync('node', [scriptPath, 'awaiting'], {
+        input: JSON.stringify({ session_id: 'abc123', cwd: 'C:/p/a', hook_event_name: 'Notification' }),
+        encoding: 'utf8',
+      });
+      const f = join(statusDir, 'abc123.json');
+      expect(existsSync(f)).toBe(true);
+      const j = JSON.parse(readFileSync(f, 'utf8'));
+      expect(j.state).toBe('awaiting');
+      expect(j.cwd).toBe('C:/p/a');
+      expect(j.sessionId).toBe('abc123');
+      expect(typeof j.ts).toBe('number');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
