@@ -62,6 +62,21 @@ function addTerminal(api: DockviewApi): void {
   } else {
     api.addPanel({ id: TERMINAL_ID, component: 'terminal', title: '終端機' });
   }
+  hideTerminalHeader(api);
+}
+
+/**
+ * 隱藏終端機面板所在 group 的 dockview 分頁列（「終端機 ✕」那條）。終端機面板自帶標頭（含標題/分割/＋/隱藏），
+ * 避免兩條重複的「終端機」列；也移除「✕ 會 dispose 終端機」的入口——隱藏改由面板自帶的 × 走 setVisible。
+ */
+function hideTerminalHeader(api: DockviewApi): void {
+  const t = api.getPanel(TERMINAL_ID);
+  if (!t) return;
+  try {
+    t.api.group.header.hidden = true;
+  } catch {
+    /* 無法隱藏不致命 */
+  }
 }
 
 function addEditor(api: DockviewApi): void {
@@ -98,6 +113,7 @@ export function buildDefaultLayout(api: DockviewApi): void {
   // 側欄較窄
   const sidebar = api.getPanel(SIDEBAR_ID);
   sidebar?.api.setSize({ width: 280 });
+  hideTerminalHeader(api);
 }
 
 /**
@@ -114,19 +130,11 @@ export function resetLayout(): void {
   } catch {
     /* 無最大化 */
   }
-  // 2. 補齊預設三面板（被隱藏/不存在者加回；既有者保留＝不 dispose → 保住編輯器開檔 + 終端機 session/內容）。
+  // 2. 補齊預設三面板（被隱藏/不存在者加回顯示；既有者保留＝move 不 dispose → 保住編輯器開檔 + 終端機）。
   if (!api.getPanel(EDITOR_ID)) addEditor(api);
   if (!api.getPanel(SIDEBAR_ID)) addSidebar(api);
   if (!api.getPanel(TERMINAL_ID)) addTerminal(api);
   if (!api.getPanel(EDITOR_ID)) return;
-  // 2b. 確保三面板都「可見」（被 toggle 以 setVisible(false) 隱藏的 group 顯示回來）。
-  for (const id of TOGGLEABLE) {
-    try {
-      api.getPanel(id)?.api.group.api.setVisible(true);
-    } catch {
-      /* 設可見失敗不致命 */
-    }
-  }
   // 3. 重排回預設相對位置（moveTo 只搬 group、不 dispose component）：sidebar 左、terminal 下。
   try {
     const sidebar = api.getPanel(SIDEBAR_ID);
@@ -140,6 +148,7 @@ export function resetLayout(): void {
   }
   // 4. 側欄寬度回預設。
   api.getPanel(SIDEBAR_ID)?.api.setSize({ width: 280 });
+  hideTerminalHeader(api);
 }
 
 /** 供標題列「檢視」選單切換面板顯隱（toolbar 視覺態經 dockview onDidLayoutChange 自動 re-sync）。 */
@@ -156,15 +165,16 @@ export function toggleTerminalMax(): void {
   if (layoutApi) toggleTerminalMaximize(layoutApi, TERMINAL_ID);
 }
 
-/** A2/A3：還原時套用 UI 狀態—依 hidden 以 setVisible(false) 隱藏（不 dispose，保住 component），再依 maximized 最大化終端機。 */
+
+/** A2/A3：還原時套用 UI 狀態—依 hidden 移除（與序列化樹對齊），再依 maximized 以原生 API 最大化終端機。 */
 function applyUi(api: DockviewApi, ui: LayoutUiState): void {
   for (const id of ui.hidden) {
     const p = api.getPanel(id);
     if (p) {
       try {
-        p.api.group.api.setVisible(false);
+        api.removePanel(p);
       } catch {
-        /* 隱藏失敗不致命 */
+        /* 移除失敗不致命 */
       }
     }
   }
@@ -229,6 +239,7 @@ export function DockLayout(): React.JSX.Element {
           }
           if (!restored) buildDefaultLayout(api);
           applyUi(api, ui);
+          hideTerminalHeader(api); // 還原既有佈局時，終端機分頁列也隱藏（避免重複標頭）
           syncToolbar();
         })
         .catch(() => {

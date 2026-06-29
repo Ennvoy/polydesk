@@ -8,6 +8,7 @@
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { SerializeAddon } from '@xterm/addon-serialize';
 import '@xterm/xterm/css/xterm.css';
 import { ipc } from '../../ipc/client';
 import { record } from '../../../shared/perf';
@@ -40,6 +41,17 @@ function readTerminalTheme(el: HTMLElement): ITheme {
   }
 }
 
+/**
+ * 跨「面板隱藏（removePanel→dispose）→重開（reattach）」保留終端機畫面（scrollback）：模組級快取，鍵=termId。
+ * 隱藏前序列化 xterm 內容存入；重開掛載時寫回還原（PTY 本就存活、再加還原畫面＝完整「原地隱藏」）。
+ */
+const scrollbackCache = new Map<string, string>();
+
+/** 終端機真正關閉/重啟時清掉其畫面快取（避免殘留 / termId 重用誤還原）。 */
+export function forgetTerminalScrollback(termId: string): void {
+  scrollbackCache.delete(termId);
+}
+
 export function TerminalView({ termId, visible, exitCode, onRestart }: Props): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -53,10 +65,16 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
 
     const term = new Terminal(createSecureTerminalOptions(readTerminalTheme(host)));
     const fit = new FitAddon();
+    const serialize = new SerializeAddon();
     term.loadAddon(fit);
+    term.loadAddon(serialize);
     term.open(host);
     termRef.current = term;
     fitRef.current = fit;
+
+    // 重開（reattach）時還原隱藏前的畫面（scrollback）；新建（無快取）則略過。寫在 PTY 新資料訂閱前。
+    const cached = scrollbackCache.get(termId);
+    if (cached) term.write(cached);
 
     // WebGL 加速（可選；不支援則靜默略過，回退 canvas/DOM renderer）。
     let disposed = false;
@@ -111,6 +129,12 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
       ro.disconnect();
       onDataDisp.dispose();
       offData();
+      // dispose 前序列化畫面存入快取（隱藏/重排造成的卸載 → 重開可還原）。
+      try {
+        scrollbackCache.set(termId, serialize.serialize());
+      } catch {
+        /* 序列化失敗：略過（重開為空畫面，不致命） */
+      }
       webglDispose?.();
       term.dispose();
       termRef.current = null;

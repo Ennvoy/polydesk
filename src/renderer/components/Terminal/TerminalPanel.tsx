@@ -9,7 +9,8 @@ import { Group, Panel, Separator } from 'react-resizable-panels';
 import { ipc } from '../../ipc/client';
 import { useAppState } from '../../state/appStore';
 import { registerPanel, SLOT } from '../../layout/panelRegistry';
-import { TerminalView } from './TerminalView';
+import { toggleLayoutPanel } from '../../layout/DockLayout';
+import { TerminalView, forgetTerminalScrollback } from './TerminalView';
 import './terminal.css';
 import type { ShellKind } from '../../../shared/types';
 
@@ -98,6 +99,7 @@ export function TerminalPanel(): React.JSX.Element {
 
   const closeTerm = useCallback(async (entry: TermEntry): Promise<void> => {
     await ipc.pty.close({ termId: entry.termId }).catch(() => undefined);
+    forgetTerminalScrollback(entry.termId); // 真正關閉 → 清畫面快取（不在重開時誤還原）
     setTerms((prev) => prev.filter((t) => t.termId !== entry.termId));
   }, []);
 
@@ -105,6 +107,7 @@ export function TerminalPanel(): React.JSX.Element {
   const restartTerm = useCallback(async (entry: TermEntry): Promise<void> => {
     try {
       const { termId } = await ipc.pty.create({ wsId: entry.wsId, shell: entry.shell });
+      forgetTerminalScrollback(entry.termId); // 舊 termId 已換 → 清舊畫面快取
       setTerms((prev) => prev.map((t) => (t.termId === entry.termId ? { ...t, termId, alive: true, exitCode: null } : t)));
     } catch {
       /* 重啟失敗：維持結束狀態 */
@@ -172,6 +175,16 @@ export function TerminalPanel(): React.JSX.Element {
             style={{ padding: '2px 10px' }}
           >
             ＋
+          </button>
+          {/* 隱藏整個終端機面板（原地隱藏＝setVisible，不 dispose；可從上方「終端機」鈕再開）。 */}
+          <button
+            className="pd-btn"
+            aria-label="隱藏終端機面板"
+            title="隱藏終端機面板（可從上方「終端機」鈕再開）"
+            onClick={() => toggleLayoutPanel('terminal')}
+            style={{ padding: '2px 8px' }}
+          >
+            ✕
           </button>
         </div>
       </div>
