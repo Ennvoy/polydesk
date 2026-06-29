@@ -215,6 +215,51 @@
   white-space: nowrap;
 }
 
+/* PE-1：commit hover 卡片（完整訊息 + 作者/時間/完整 hash）*/
+.pd-scm-hovercard {
+  position: fixed;
+  z-index: 1200;
+  width: 320px;
+  max-height: 360px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.45));
+  padding: var(--space-3);
+  pointer-events: none; /* 純資訊、不擋滑鼠 */
+}
+.pd-scm-hovercard-subject { color: var(--fg); font-size: var(--text-sm); font-weight: 600; margin-bottom: 6px; }
+.pd-scm-hovercard-body { color: var(--fg-2); font-size: var(--text-xs); white-space: pre-wrap; line-height: 1.5; margin-bottom: 8px; }
+.pd-scm-hovercard-meta { color: var(--meta); font-size: var(--text-xs); display: flex; flex-direction: column; gap: 2px; }
+.pd-scm-hovercard-hash { font-family: var(--font-mono); word-break: break-all; }
+
+/* PE-1：commit 右鍵選單 */
+.pd-scm-ctxmenu {
+  position: fixed;
+  z-index: 1300;
+  min-width: 196px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.45));
+  padding: 4px;
+}
+.pd-scm-ctxitem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--fg-2);
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+.pd-scm-ctxitem:hover { background: var(--accent); color: var(--accent-on); }
+.pd-scm-ctxitem:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
 /* 分支列 */
 .pd-scm-branchrow { width: 100%; border: none; background: transparent; text-align: left; }
 .pd-scm-branchrow:disabled { cursor: default; }

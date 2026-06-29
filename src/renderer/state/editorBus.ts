@@ -10,12 +10,14 @@ export interface OpenFileRequest {
   split?: boolean;
 }
 
-/** 在編輯器區開啟某檔的差異（SCM 點變更檔用，工作樹 vs HEAD；like VSCode）。 */
+/** 在編輯器區開啟差異（SCM 點變更檔＝工作樹 vs HEAD；或整個 commit 的 diff）。 */
 export interface OpenDiffRequest {
   wsId: string;
   path: string;
-  /** 已暫存的差異（--cached）vs 未暫存。 */
+  /** 已暫存的差異（--cached）vs 未暫存（檔案 diff 用）。 */
   staged: boolean;
+  /** 若給＝開整個 commit 的 diff（git show <commit>）；此時 path 僅作顯示標籤（PE-1）。 */
+  commit?: string;
 }
 
 type Listener = (req: OpenFileRequest) => void;

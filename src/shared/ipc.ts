@@ -51,10 +51,12 @@ export interface InvokeChannels {
   'git:push': { req: { wsId: string }; res: { ok: true } | { error: string } };
   'git:pull': { req: { wsId: string }; res: { ok: true } | { error: string } };
   'git:branch': {
-    req: { wsId: string; op: 'list' | 'create' | 'checkout'; name?: string };
+    req: { wsId: string; op: 'list' | 'create' | 'checkout'; name?: string; startPoint?: string };
     res: { branches: string[]; current: string } | { ok: true };
   };
   'git:log': { req: { wsId: string; limit: number }; res: GitLogEntry[] };
+  /** 單一 commit 的完整差異（git show <ref>）；PE-1 右鍵「開啟此 commit 變更」用。 */
+  'git:show': { req: { wsId: string; ref: string }; res: { patch: string } };
   'git:stash': { req: { wsId: string; op: 'push' | 'pop' | 'list'; includeUntracked?: boolean }; res: unknown };
   'git:init': { req: { wsId: string }; res: { ok: true } };
   // 終端機（控制訊息走 invoke；資料流走 stream）

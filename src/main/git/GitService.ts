@@ -326,6 +326,7 @@ export class GitService {
     wsId: string,
     op: 'list' | 'create' | 'checkout',
     name?: string,
+    startPoint?: string,
   ): Promise<{ branches: string[]; current: string } | { ok: true }> {
     const cwd = this.path(wsId);
     if (!cwd) throw new Error('workspace not found');
@@ -357,11 +358,29 @@ export class GitService {
     if (!validateRef(name)) throw new Error('invalid branch name');
     const safe = name as string;
     if (op === 'create') {
-      await this.run(['branch', safe], { cwd, env: writeEnv() });
+      // 可選 startPoint（從某 commit/分支建立，PE-1「從此 commit 建分支」）；同樣 validateRef 擋注入。
+      if (startPoint !== undefined) {
+        if (!validateRef(startPoint)) throw new Error('invalid start point');
+        await this.run(['branch', safe, startPoint as string], { cwd, env: writeEnv() });
+      } else {
+        await this.run(['branch', safe], { cwd, env: writeEnv() });
+      }
     } else {
       await this.run(['checkout', safe], { cwd, env: writeEnv() });
     }
     return { ok: true };
+  }
+
+  /** PE-1：單一 commit 完整 diff（git show <ref>，唯讀；ref 經 validateRef 擋注入、--no-textconv 防 RCE）。 */
+  async show(wsId: string, ref: string): Promise<{ patch: string }> {
+    const cwd = this.path(wsId);
+    if (!cwd) throw new Error('workspace not found');
+    if (!validateRef(ref)) throw new Error('invalid ref');
+    const { stdout } = await this.run(
+      [...readHardeningArgs(), 'show', '--no-textconv', '--no-color', ref as string],
+      { cwd, env: readEnv() },
+    );
+    return { patch: stdout };
   }
 
   /** REQ-SCM：歷史（NUL 分隔 record + unit-separator 欄位；空 repo 回 []）。 */
@@ -369,8 +388,8 @@ export class GitService {
     const cwd = this.path(wsId);
     if (!cwd) return [];
     const n = Math.max(1, Math.min(1000, Math.floor(limit) || 50));
-    // 欄位以 unit-separator(\x1f) 分隔；%P=parents（空白分隔），放 subject 之前（subject 可能含任意字元、留最後）。
-    const fmt = '%H%x1f%an%x1f%at%x1f%P%x1f%s';
+    // 欄位以 unit-separator(\x1f) 分隔；%P=parents（空白分隔）；%s=subject、%b=body（hover 完整訊息用）放最後。
+    const fmt = '%H%x1f%an%x1f%at%x1f%P%x1f%s%x1f%b';
     try {
       const { stdout } = await this.run(
         // --topo-order：保證任何父都不早於其子出現（rebase/cherry-pick/時鐘偏移下，預設 date order 會讓
@@ -382,13 +401,14 @@ export class GitService {
         .split('\0')
         .filter((r) => r.length > 0)
         .map((rec) => {
-          const [hash, author, at, parents, subject] = rec.split('\x1f');
+          const [hash, author, at, parents, subject, body] = rec.split('\x1f');
           return {
             hash: hash ?? '',
             author: author ?? '',
             date: (parseInt(at ?? '0', 10) || 0) * 1000,
             subject: subject ?? '',
             parents: (parents ?? '').trim().split(/\s+/).filter((p) => p.length > 0),
+            body: (body ?? '').trim(),
           };
         });
     } catch (e) {
@@ -458,10 +478,13 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
     enqueue(req.wsId, () => svc.pull(req.wsId)),
   );
   ipc.handle('git:branch', (_e, req: InvokeReq<'git:branch'>) =>
-    enqueue(req.wsId, () => svc.branch(req.wsId, req.op, req.name)),
+    enqueue(req.wsId, () => svc.branch(req.wsId, req.op, req.name, req.startPoint)),
   );
   ipc.handle('git:log', (_e, req: InvokeReq<'git:log'>) =>
     enqueue(req.wsId, () => svc.log(req.wsId, req.limit)),
+  );
+  ipc.handle('git:show', (_e, req: InvokeReq<'git:show'>) =>
+    enqueue(req.wsId, () => svc.show(req.wsId, req.ref)),
   );
   ipc.handle('git:stash', (_e, req: InvokeReq<'git:stash'>) =>
     enqueue(req.wsId, () => svc.stash(req.wsId, req.op, req.includeUntracked)),

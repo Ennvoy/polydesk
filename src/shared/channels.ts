@@ -24,6 +24,7 @@ export const INVOKE_CHANNELS = [
   'git:pull',
   'git:branch',
   'git:log',
+  'git:show',
   'git:stash',
   'git:init',
   'pty:create',

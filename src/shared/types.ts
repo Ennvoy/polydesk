@@ -53,6 +53,8 @@ export interface GitLogEntry {
   subject: string;
   /** parent commit hashes（0=root、1=一般、≥2=merge）；供 commit 線圖 lane 計算。 */
   parents: string[];
+  /** commit 訊息 body（標題以外的內文；hover 卡片顯示完整訊息用，PE-1）。 */
+  body: string;
 }
 
 export interface TermState {

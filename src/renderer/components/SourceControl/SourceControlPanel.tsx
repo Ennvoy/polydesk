@@ -106,6 +106,8 @@ export function SourceControlPanel(): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('changes');
   const [log, setLog] = useState<GitLogEntry[]>([]);
   const [branches, setBranches] = useState<{ list: string[]; current: string }>({ list: [], current: '' });
+  const [hover, setHover] = useState<{ c: GitLogEntry; top: number; left: number } | null>(null); // PE-1 hover 卡
+  const [commitMenu, setCommitMenu] = useState<{ c: GitLogEntry; x: number; y: number } | null>(null); // PE-1 右鍵選單
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!wsId) {
@@ -147,6 +149,21 @@ export function SourceControlPanel(): React.JSX.Element {
       off();
     };
   }, [wsId, status?.isRepo, refresh]);
+
+  // PE-1：commit 右鍵選單 — 點外 / Esc 關閉。
+  useEffect(() => {
+    if (!commitMenu) return undefined;
+    const close = (): void => setCommitMenu(null);
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setCommitMenu(null);
+    };
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [commitMenu]);
 
   // 切到歷史/分支頁時載入對應資料。
   useEffect(() => {
@@ -289,6 +306,43 @@ export function SourceControlPanel(): React.JSX.Element {
       await ipc.git.stash({ wsId, op });
       await refresh();
     });
+
+  // PE-1：簽出某 commit（分離 HEAD；hash 經後端 validateRef）。
+  const onCheckoutCommit = (c: GitLogEntry): Promise<void> =>
+    run(async () => {
+      if (!wsId) return;
+      const ok = await dialog.confirm({
+        title: '簽出此 commit（分離 HEAD）',
+        body: `將進入「分離 HEAD」狀態（不在任何分支上）。確定簽出 ${c.hash.slice(0, 7)}？`,
+        confirmText: '簽出',
+        cancelText: '取消',
+      });
+      if (!ok) return;
+      try {
+        await ipc.git.branch({ wsId, op: 'checkout', name: c.hash });
+      } catch (e) {
+        setError(errText(e));
+        return;
+      }
+      await refresh();
+      const r = await ipc.git.branch({ wsId, op: 'list' });
+      if ('branches' in r) setBranches({ list: r.branches, current: r.current });
+    });
+
+  // PE-1：從某 commit 建立分支（git branch <name> <commit> → checkout）。
+  const onBranchFromCommit = async (c: GitLogEntry): Promise<void> => {
+    if (!wsId) return;
+    const name = (await dialog.open((close) => <CreateBranchForm onDone={close} />)) as string | undefined;
+    if (!name) return;
+    await run(async () => {
+      await ipc.git.branch({ wsId, op: 'create', name, startPoint: c.hash });
+      await ipc.git.branch({ wsId, op: 'checkout', name });
+      await refresh();
+      const r = await ipc.git.branch({ wsId, op: 'list' });
+      if ('branches' in r) setBranches({ list: r.branches, current: r.current });
+      setTab('branches');
+    });
+  };
 
   // 點變更檔 → 在編輯器區開差異分頁（工作樹 vs HEAD，like VSCode），不再佔用側欄面板。
   const openDiff = (c: GitChange): void => {
@@ -471,7 +525,21 @@ export function SourceControlPanel(): React.JSX.Element {
               const graphW = graph.maxLanes * GRAPH_LANE_W + 6;
               return log.map((c, i) => (
                 // 列高單一真相＝GRAPH_ROW_H（與 SVG 高同源）；列高===SVG高才能跨列無縫不斷線。
-                <div key={c.hash} className="pd-scm-logrow" title={c.hash} style={{ height: GRAPH_ROW_H }}>
+                <div
+                  key={c.hash}
+                  className="pd-scm-logrow"
+                  style={{ height: GRAPH_ROW_H }}
+                  onMouseEnter={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    setHover({ c, top: r.top, left: r.right + 8 });
+                  }}
+                  onMouseLeave={() => setHover(null)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setHover(null);
+                    setCommitMenu({ c, x: e.clientX, y: e.clientY });
+                  }}
+                >
                   <GitGraphCell row={graph.rows[i]} width={graphW} />
                   <div className="pd-scm-logtext">
                     <span className="pd-scm-logsubject">{c.subject}</span>
@@ -483,6 +551,7 @@ export function SourceControlPanel(): React.JSX.Element {
               ));
             })()
           )}
+          {hover && <CommitHoverCard c={hover.c} top={hover.top} left={hover.left} />}
         </div>
       )}
 
@@ -514,7 +583,70 @@ export function SourceControlPanel(): React.JSX.Element {
           )}
         </div>
       )}
+
+      {commitMenu && (
+        <div
+          className="pd-scm-ctxmenu"
+          role="menu"
+          aria-label="commit 操作"
+          style={{ top: Math.min(commitMenu.y, window.innerHeight - 210), left: Math.min(commitMenu.x, window.innerWidth - 220) }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {(
+            [
+              ['複製雜湊', () => void navigator.clipboard?.writeText(commitMenu.c.hash).catch(() => {})],
+              [
+                '複製訊息',
+                () =>
+                  void navigator.clipboard
+                    ?.writeText(commitMenu.c.body ? `${commitMenu.c.subject}\n\n${commitMenu.c.body}` : commitMenu.c.subject)
+                    .catch(() => {}),
+              ],
+              [
+                '開啟此 commit 變更',
+                () => {
+                  if (wsId) editorBus.openDiff({ wsId, path: commitMenu.c.hash.slice(0, 7), staged: false, commit: commitMenu.c.hash });
+                },
+              ],
+              ['簽出此 commit（分離 HEAD）', () => void onCheckoutCommit(commitMenu.c)],
+              ['從此 commit 建立分支…', () => void onBranchFromCommit(commitMenu.c)],
+            ] as [string, () => void][]
+          ).map(([label, act]) => (
+            <button
+              key={label}
+              type="button"
+              role="menuitem"
+              className="pd-scm-ctxitem"
+              onClick={() => {
+                setCommitMenu(null);
+                act();
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
     </section>
+  );
+}
+
+/** PE-1：commit hover 卡片（完整訊息 + 作者/時間/完整 hash）。固定定位於列右側、夾在視窗內。 */
+function CommitHoverCard({ c, top, left }: { c: GitLogEntry; top: number; left: number }): React.JSX.Element {
+  return (
+    <div
+      className="pd-scm-hovercard"
+      role="tooltip"
+      style={{ top: Math.min(top, window.innerHeight - 220), left: Math.min(left, window.innerWidth - 340) }}
+    >
+      <div className="pd-scm-hovercard-subject">{c.subject}</div>
+      {c.body && <div className="pd-scm-hovercard-body">{c.body}</div>}
+      <div className="pd-scm-hovercard-meta">
+        <span>{c.author}</span>
+        <span> · {new Date(c.date).toLocaleString()}</span>
+        <span className="pd-scm-hovercard-hash">{c.hash}</span>
+      </div>
+    </div>
   );
 }
 
