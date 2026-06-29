@@ -144,15 +144,25 @@ export class ClaudeStatusMonitor {
     if (this.inFlight) return; // 防衛：正常流程不會重入（僅完成後排程）
     this.inFlight = true;
     try {
+      // 先處理「無 alive PTY ⇒ 必為 idle」——這不需程序探測（沒有終端機就不可能有 PTY 下的 claude）。
+      // 關鍵：放在探測之外，故即使 lister 逾時/失敗，剛關掉終端機的工作區仍會立刻回 idle，
+      // 不會卡在上次的 running（修「claude 關掉後狀態永遠卡執行中」）。
+      const withPty: { wsId: string; rootPids: number[] }[] = [];
+      for (const ws of this.workspaces.list()) {
+        const rootPids = this.pty.pidsOf(ws.id);
+        if (rootPids.length === 0) this.applyState(ws.id, 'idle', undefined);
+        else withPty.push({ wsId: ws.id, rootPids });
+      }
+
+      // 仍每輪只列舉一次整機程序表（REQ-MON-006 單次列舉）；無 PTY 的工作區上面已先回 idle。
       const processes = await this.withTimeout(this.lister(), this.probeTimeoutMs);
       if (this.started && processes) {
-        for (const ws of this.workspaces.list()) {
-          const rootPids = this.pty.pidsOf(ws.id);
+        for (const { wsId, rootPids } of withPty) {
           const { claudePids, hasActiveChildren } = matchClaude(rootPids, processes);
-          this.applyState(ws.id, classifyClaude(claudePids, hasActiveChildren), claudePids[0]);
+          this.applyState(wsId, classifyClaude(claudePids, hasActiveChildren), claudePids[0]);
         }
       }
-      // processes === null（逾時）或 lister reject → 降級沿用上次狀態，不 emit、不崩潰。
+      // processes === null（逾時）或 lister reject → 有 PTY 的工作區降級沿用上次狀態，不 emit、不崩潰。
     } catch {
       /* lister 例外：隔離，不讓背景監控打斷 main / 中止迴圈（REQ-NFR-002） */
     } finally {

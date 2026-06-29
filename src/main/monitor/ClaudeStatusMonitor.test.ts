@@ -101,6 +101,40 @@ describe('ClaudeStatusMonitor — 三態分類 + 變才 emit', () => {
     mon.stop();
     expect(notes).toEqual([{ wsId: 'ws1', name: 'ws1' }]);
   });
+
+  it('關掉終端機（無 alive PTY）即使探測逾時/失敗也回 idle，不卡在上次 running', async () => {
+    vi.useFakeTimers();
+    const workspaces = { list: () => wsList(['ws1']) };
+    let pids: number[] = [100]; // 一開始有 PTY 跑 claude
+    const pty = { pidsOf: (): number[] => pids };
+    const running: ProcessInfo[] = [
+      { pid: 100, ppid: 1, name: 'powershell.exe', cmd: 'powershell.exe' },
+      { pid: 101, ppid: 100, name: 'claude.exe', cmd: 'claude.exe' },
+      { pid: 102, ppid: 101, name: 'node.exe', cmd: 'node x' }, // claude+子 → running
+    ];
+    let listerFails = false;
+    const emitted: StatusEvent[] = [];
+    const mon = new ClaudeStatusMonitor(
+      workspaces,
+      pty,
+      (p) => emitted.push(p),
+      async () => {
+        if (listerFails) throw new Error('WMI 探測逾時（模擬忙碌系統）');
+        return running;
+      },
+      { basePollMs: 5000, probeTimeoutMs: 30000 },
+    );
+    mon.start();
+    await vi.advanceTimersByTimeAsync(1); // poll1：有 PTY + claude + 子 → running
+    expect(emitted.at(-1)?.status.state).toBe('running');
+
+    // 關掉終端機：pidsOf 回 []，且從此探測一律失敗（模擬 WMI 持續逾時）。
+    pids = [];
+    listerFails = true;
+    await vi.advanceTimersByTimeAsync(5000); // poll2：無 PTY → 走探測外的快路徑直接 idle（不受探測失敗影響）
+    mon.stop();
+    expect(emitted.at(-1)?.status.state).toBe('idle');
+  });
 });
 
 describe('ClaudeStatusMonitor — 去抖（狀態不變不重複 emit，REQ-MON-006）', () => {
