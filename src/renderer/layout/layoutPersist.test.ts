@@ -17,6 +17,7 @@ import {
   toggleTerminalMaximize,
   deriveToolbarState,
   deriveUiState,
+  panelVisibleById,
   LayoutPersistController,
   type PanelLike,
   type PersistedLayout,
@@ -24,12 +25,14 @@ import {
 
 // ── fake-但-真演算法 dockview api ──
 class FakePanel implements PanelLike {
+  visible = true; // group 可見性（每 panel 一 group 簡化模型；setVisible 切換、不移除 panel）
   readonly api: PanelLike['api'] & { setSize: (o: { width?: number; height?: number }) => void };
   constructor(
     public readonly id: string,
     public readonly component: string,
     host: FakeApi,
   ) {
+    const self = this;
     this.api = {
       isMaximized: () => host.maximizedId === id,
       maximize: () => {
@@ -40,6 +43,16 @@ class FakePanel implements PanelLike {
       },
       setSize: () => {
         /* no-op；尺寸不影響本測 */
+      },
+      group: {
+        api: {
+          setVisible: (v: boolean) => {
+            self.visible = v;
+          },
+          get isVisible() {
+            return self.visible;
+          },
+        },
       },
     };
   }
@@ -231,15 +244,15 @@ describe('A1 — 顯隱單一真相 + 去重防 duplicate id', () => {
     expect(api.getPanel('sidebar')).toBeDefined();
   });
 
-  it('連續呼叫 togglePanel 兩次不 throw duplicate panel id（隱藏↔顯示）', () => {
+  it('連續 togglePanel（隱藏↔顯示）以 setVisible 切換、不移除 panel（不 dispose component）', () => {
     const api = new FakeApi([
       { id: 'editor', component: 'editor' },
       { id: 'sidebar', component: 'sidebar' },
     ]);
-    expect(() => {
-      togglePanel(api, 'sidebar', addSidebar(api)); // 隱藏
-      togglePanel(api, 'sidebar', addSidebar(api)); // 顯示
-    }).not.toThrow();
+    expect(togglePanel(api, 'sidebar', addSidebar(api))).toBe(false); // 隱藏
+    expect(api.getPanel('sidebar')).toBeDefined(); // 未移除（panel 還在）
+    expect(api.removed).not.toContain('sidebar'); // 關鍵：未 dispose（終端機 PTY/編輯器開檔不會消失）
+    expect(togglePanel(api, 'sidebar', addSidebar(api))).toBe(true); // 顯示
     expect(api.getPanel('sidebar')).toBeDefined();
   });
 
@@ -252,7 +265,7 @@ describe('A1 — 顯隱單一真相 + 去重防 duplicate id', () => {
     expect(api.panels.filter((p) => p.id === 'sidebar').length).toBe(1);
   });
 
-  it('工具列 is-active 等於 api.getPanel!=null（不依賴獨立 boolean）', () => {
+  it('工具列 is-active＝panel 存在且 group 可見；顯隱用 setVisible 不移除 panel（不 dispose）', () => {
     const api = new FakeApi([
       { id: 'editor', component: 'editor' },
       { id: 'sidebar', component: 'sidebar' },
@@ -260,16 +273,21 @@ describe('A1 — 顯隱單一真相 + 去重防 duplicate id', () => {
     ]);
     const ids = { sidebar: 'sidebar', editor: 'editor', terminal: 'terminal' };
     let st = deriveToolbarState(api, ids);
-    expect(st.sidebarVisible).toBe(api.getPanel('sidebar') != null);
-    expect(st.editorVisible).toBe(api.getPanel('editor') != null);
-    expect(st.terminalVisible).toBe(api.getPanel('terminal') != null);
-    togglePanel(api, 'sidebar', addSidebar(api)); // 隱藏 sidebar
-    togglePanel(api, 'editor', () => api.addPanel({ id: 'editor', component: 'editor' })); // 隱藏 editor
+    expect(st.sidebarVisible).toBe(true);
+    expect(st.terminalVisible).toBe(true);
+
+    // 隱藏 sidebar（setVisible(false)）→ 視覺態 false，但「不移除 panel」(component 不 dispose)。
+    expect(togglePanel(api, 'sidebar', addSidebar(api))).toBe(false);
     st = deriveToolbarState(api, ids);
     expect(st.sidebarVisible).toBe(false);
-    expect(st.sidebarVisible).toBe(api.getPanel('sidebar') != null);
-    expect(st.editorVisible).toBe(false);
-    expect(st.editorVisible).toBe(api.getPanel('editor') != null);
+    expect(st.sidebarVisible).toBe(panelVisibleById(api, 'sidebar'));
+    // 關鍵 bug 修復：隱藏不 dispose（終端機 PTY / 編輯器開檔保留）。
+    expect(api.getPanel('sidebar')).toBeDefined();
+    expect(api.removed).not.toContain('sidebar');
+
+    // 再 toggle 回來 → 顯示。
+    expect(togglePanel(api, 'sidebar', addSidebar(api))).toBe(true);
+    expect(deriveToolbarState(api, ids).sidebarVisible).toBe(true);
   });
 });
 

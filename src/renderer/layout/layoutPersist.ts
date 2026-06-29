@@ -47,6 +47,13 @@ export interface PanelLike {
     isMaximized(): boolean;
     maximize(): void;
     exitMaximized(): void;
+    /** panel 所屬 group（顯隱以 group 為單位；setVisible 隱藏但不 dispose component）。 */
+    readonly group: {
+      readonly api: {
+        setVisible(visible: boolean): void;
+        readonly isVisible: boolean;
+      };
+    };
   };
 }
 
@@ -153,15 +160,36 @@ function safeIsMaximized(panel: PanelLike): boolean {
   }
 }
 
+/** group 是否可見（取不到視為可見，保守不誤判隱藏）。 */
+function safeIsVisible(panel: PanelLike): boolean {
+  try {
+    return panel.api.group.api.isVisible;
+  } catch {
+    return true;
+  }
+}
+
+/** 顯隱單一真相：panel「存在且其 group 可見」才算顯示（隱藏＝group setVisible(false)，panel 不移除）。 */
+export function panelVisibleById(api: DockApiLike, id: string): boolean {
+  const p = api.getPanel(id);
+  return p != null && safeIsVisible(p);
+}
+
 /**
- * A1：以 dockview 為單一真相切換 panel 顯隱。存在→移除（隱藏）；不存在→重加（顯示）。
- * 回傳切換後是否「可見」。add 由呼叫端提供（封裝重建位置/尺寸），內部仍 ensurePanel 去重防 duplicate id。
+ * A1：切換 panel 顯隱。已存在→以 group.api.setVisible 切換可見（隱藏但**不 dispose** component，
+ * 保住終端機 PTY/scrollback、編輯器開檔/未存編輯）；不存在（如舊持久化無此 panel）→ 以 add 重建。
+ * 回傳切換後是否「可見」。
  */
 export function togglePanel(api: DockApiLike, id: string, add: () => void): boolean {
   const existing = api.getPanel(id);
   if (existing) {
-    api.removePanel(existing);
-    return false;
+    const next = !safeIsVisible(existing);
+    try {
+      existing.api.group.api.setVisible(next);
+    } catch {
+      /* setVisible 失敗不致命 */
+    }
+    return next;
   }
   ensurePanel(api, id, add);
   return true;
@@ -203,7 +231,8 @@ export function deriveUiState(
   toggleableIds: readonly string[],
   maximizeTargetId: string,
 ): LayoutUiState {
-  const hidden = toggleableIds.filter((id) => !api.getPanel(id));
+  // hidden = 可切換但目前不可見（不存在 or group 被 setVisible(false)）。
+  const hidden = toggleableIds.filter((id) => !panelVisibleById(api, id));
   const target = api.getPanel(maximizeTargetId);
   return { hidden, maximized: target ? safeIsMaximized(target) : false };
 }
@@ -215,16 +244,16 @@ export interface ToolbarState {
   maximized: boolean;
 }
 
-/** A1：工具列視覺態一律由 dockview getPanel 直接推導（不依賴獨立 boolean，避免狀態機去同步）。 */
+/** A1：工具列視覺態一律由 dockview 即時推導（顯隱＝panel 存在且 group 可見；不依賴獨立 boolean）。 */
 export function deriveToolbarState(
   api: DockApiLike,
   ids: { sidebar: string; editor: string; terminal: string },
 ): ToolbarState {
   const term = api.getPanel(ids.terminal);
   return {
-    sidebarVisible: api.getPanel(ids.sidebar) != null,
-    editorVisible: api.getPanel(ids.editor) != null,
-    terminalVisible: term != null,
+    sidebarVisible: panelVisibleById(api, ids.sidebar),
+    editorVisible: panelVisibleById(api, ids.editor),
+    terminalVisible: panelVisibleById(api, ids.terminal),
     maximized: term ? safeIsMaximized(term) : false,
   };
 }

@@ -119,6 +119,14 @@ export function resetLayout(): void {
   if (!api.getPanel(SIDEBAR_ID)) addSidebar(api);
   if (!api.getPanel(TERMINAL_ID)) addTerminal(api);
   if (!api.getPanel(EDITOR_ID)) return;
+  // 2b. 確保三面板都「可見」（被 toggle 以 setVisible(false) 隱藏的 group 顯示回來）。
+  for (const id of TOGGLEABLE) {
+    try {
+      api.getPanel(id)?.api.group.api.setVisible(true);
+    } catch {
+      /* 設可見失敗不致命 */
+    }
+  }
   // 3. 重排回預設相對位置（moveTo 只搬 group、不 dispose component）：sidebar 左、terminal 下。
   try {
     const sidebar = api.getPanel(SIDEBAR_ID);
@@ -148,15 +156,15 @@ export function toggleTerminalMax(): void {
   if (layoutApi) toggleTerminalMaximize(layoutApi, TERMINAL_ID);
 }
 
-/** A2/A3：還原時套用 UI 狀態—先依 hidden 移除（與序列化樹對齊），再依 maximized 以原生 API 最大化終端機。 */
+/** A2/A3：還原時套用 UI 狀態—依 hidden 以 setVisible(false) 隱藏（不 dispose，保住 component），再依 maximized 最大化終端機。 */
 function applyUi(api: DockviewApi, ui: LayoutUiState): void {
   for (const id of ui.hidden) {
     const p = api.getPanel(id);
     if (p) {
       try {
-        api.removePanel(p);
+        p.api.group.api.setVisible(false);
       } catch {
-        /* 移除失敗不致命 */
+        /* 隱藏失敗不致命 */
       }
     }
   }
