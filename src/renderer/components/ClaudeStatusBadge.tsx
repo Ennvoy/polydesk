@@ -50,13 +50,19 @@ export function ClaudeStatusBadge({ wsId }: { wsId: string }): React.JSX.Element
       role="status"
       aria-label={`Claude 狀態：${v.label}`}
       title={`Claude：${v.label}`}
-      style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
     >
       <span
         className={`pdws-claude-dot${v.pulse ? ' is-pulse' : ''}`}
         style={{ background: v.color, color: v.color }}
         aria-hidden="true"
       />
+      {/* PE-2：非未啟動才顯示文字標籤（執行中/待接手＝需注意的狀態，draw attention；idle 只留灰點不擾）。 */}
+      {state !== 'idle' && (
+        <span aria-hidden="true" style={{ fontSize: 'var(--text-xs)', color: v.color, whiteSpace: 'nowrap', flexShrink: 0 }}>
+          {v.label}
+        </span>
+      )}
     </span>
   );
 }

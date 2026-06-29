@@ -19,6 +19,7 @@ import type { EventChannels } from '../../shared/ipc';
 import type { ClaudeState } from '../../shared/types';
 import { DEFAULT_BACKGROUND_POLL_MS } from '../../shared/constants';
 import { emit } from '../ipc/broadcast';
+import { Notification } from 'electron';
 import { matchClaude, defaultProcessLister, type ProcessLister } from './processProbe';
 
 /** 輪詢間隔自適應：每 SCALE_K 個工作區 ×base。 */
@@ -35,6 +36,8 @@ export interface ClaudeStatusMonitorOptions {
   maxPollMs?: number;
   scaleK?: number;
   probeTimeoutMs?: number;
+  /** 待接手桌面通知（PE-2）；預設 Electron Notification，測試可注入。 */
+  notifyAwait?: AwaitNotifier;
 }
 
 /** 只用到的工作區/PTY 介面（縮窄依賴，測試可注入 fake；對齊真實 WorkspaceManager/PtyManager 簽名）。 */
@@ -42,6 +45,21 @@ type WorkspacesView = Pick<WorkspaceManager, 'list'>;
 type PtyView = Pick<PtyManager, 'pidsOf'>;
 
 type EmitFn = (payload: EventChannels['claude:status']) => void;
+
+/** 待接手桌面通知（PE-2）：claude 跑完進入待接手時呼叫；預設走 Electron Notification（測試可注入 spy）。 */
+type AwaitNotifier = (info: { wsId: string; name: string }) => void;
+function defaultNotifyAwait(info: { wsId: string; name: string }): void {
+  try {
+    if (Notification.isSupported()) {
+      new Notification({
+        title: 'Claude 待接手',
+        body: `工作區「${info.name}」的 Claude 已停，等待你接手。`,
+      }).show();
+    }
+  } catch {
+    /* 通知失敗不致命 */
+  }
+}
 
 /**
  * 自適應輪詢間隔（純函式、可單測）：clamp(base*ceil(n/k), base, max)。
@@ -77,6 +95,7 @@ export class ClaudeStatusMonitor {
   private readonly maxPollMs: number;
   private readonly scaleK: number;
   private readonly probeTimeoutMs: number;
+  private readonly notifyAwait: AwaitNotifier;
 
   constructor(
     private readonly workspaces: WorkspacesView,
@@ -89,6 +108,7 @@ export class ClaudeStatusMonitor {
     this.maxPollMs = opts.maxPollMs ?? DEFAULT_MAX_POLL_MS;
     this.scaleK = opts.scaleK ?? DEFAULT_SCALE_K;
     this.probeTimeoutMs = opts.probeTimeoutMs ?? DEFAULT_PROBE_BACKSTOP_MS;
+    this.notifyAwait = opts.notifyAwait ?? defaultNotifyAwait;
     opts.lifecycle?.register('monitor', (wsId) => {
       this.lastState.delete(wsId);
     });
@@ -150,6 +170,11 @@ export class ClaudeStatusMonitor {
       wsId,
       status: pid !== undefined ? { state, pid } : { state },
     });
+    // PE-2：claude 跑完進入「待接手」（running→stopped-await）→ 推桌面通知（管多專案不用一直盯）。
+    if (prev === 'running' && state === 'stopped-await') {
+      const name = this.workspaces.list().find((w) => w.id === wsId)?.name ?? wsId;
+      this.notifyAwait({ wsId, name });
+    }
   }
 
   private computeInterval(n: number): number {

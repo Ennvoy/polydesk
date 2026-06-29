@@ -72,6 +72,35 @@ describe('ClaudeStatusMonitor — 三態分類 + 變才 emit', () => {
     expect(emitted.find((e) => e.wsId === 'ws1')).toBeUndefined(); // idle == 預設 → 不 emit
     expect(emitted.find((e) => e.wsId === 'ws2')?.status.pid).toBe(201);
   });
+
+  it('PE-2：running→stopped-await 觸發一次待接手通知；進入 running 不觸發', async () => {
+    vi.useFakeTimers();
+    const workspaces = { list: () => wsList(['ws1']) };
+    const pty = ptyFromMap({ ws1: [100] });
+    const running: ProcessInfo[] = [
+      { pid: 100, ppid: 1, name: 'powershell.exe', cmd: 'powershell.exe' },
+      { pid: 101, ppid: 100, name: 'claude.exe', cmd: 'claude.exe' },
+      { pid: 102, ppid: 101, name: 'rg.exe', cmd: 'rg x' }, // claude+子 → running
+    ];
+    const awaiting: ProcessInfo[] = [
+      { pid: 100, ppid: 1, name: 'powershell.exe', cmd: 'powershell.exe' },
+      { pid: 101, ppid: 100, name: 'claude.exe', cmd: 'claude.exe' }, // claude 無子 → stopped-await
+    ];
+    let snap = running;
+    const notes: { wsId: string; name: string }[] = [];
+    const mon = new ClaudeStatusMonitor(workspaces, pty, () => {}, async () => snap, {
+      basePollMs: 5000,
+      probeTimeoutMs: 30000,
+      notifyAwait: (info) => notes.push(info),
+    });
+    mon.start();
+    await vi.advanceTimersByTimeAsync(1); // poll1：running（進入 running 不通知）
+    expect(notes).toHaveLength(0);
+    snap = awaiting;
+    await vi.advanceTimersByTimeAsync(5000); // poll2：stopped-await（running→await 通知一次）
+    mon.stop();
+    expect(notes).toEqual([{ wsId: 'ws1', name: 'ws1' }]);
+  });
 });
 
 describe('ClaudeStatusMonitor — 去抖（狀態不變不重複 emit，REQ-MON-006）', () => {
