@@ -1,7 +1,10 @@
 // statusHooks 合併安全性單測：對使用者真實 Flow settings 結構，merge 只追加 Polydesk 項、
 // 保留全部既有 hook、冪等、壞檔不覆寫；remove 只移除 Polydesk 項。
 import { describe, it, expect } from 'vitest';
-import { mergeStatusHooks, removeStatusHooks, SCRIPT_MARKER } from './statusHooks';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { mergeStatusHooks, removeStatusHooks, installClaudeStatusHooks, claudePaths, SCRIPT_MARKER } from './statusHooks';
 
 const SCRIPT = 'C:/Users/u/.claude/polydesk/polydesk-claude-status.cjs';
 
@@ -88,5 +91,57 @@ describe('statusHooks — 合併安全性', () => {
     expect(hooks.Notification).toBeUndefined(); // 純 Polydesk 事件被整個移除
     expect(hooks.Stop).toBeUndefined();
     expect(hooks.SessionStart).toHaveLength(1); // Flow 未動
+  });
+});
+
+describe('installClaudeStatusHooks — 真實 fs 安裝（temp HOME）', () => {
+  it('注入到 settings.json（保留 Flow）、寫腳本、備份、冪等', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'pd-hooks-'));
+    try {
+      mkdirSync(join(home, '.claude'), { recursive: true });
+      const settingsPath = join(home, '.claude', 'settings.json');
+      const original = JSON.stringify(flowSettings(), null, 2);
+      writeFileSync(settingsPath, original, 'utf8');
+
+      // 第一次安裝 → changed
+      const r1 = await installClaudeStatusHooks(home);
+      expect(r1.changed).toBe(true);
+
+      // hook 腳本已寫
+      const { scriptPath } = claudePaths(home);
+      expect(existsSync(scriptPath)).toBe(true);
+      expect(readFileSync(scriptPath, 'utf8')).toContain('polydesk');
+
+      // settings.json 含 Polydesk hook + 保留 Flow
+      const after = JSON.parse(readFileSync(settingsPath, 'utf8'));
+      expect(after.hooks.PreToolUse).toHaveLength(3);
+      expect(after.hooks.PreToolUse[0].hooks[0].command).toContain('flow-verify-gate');
+      expect(after.hooks.Stop[0].hooks[0].command).toContain(SCRIPT_MARKER);
+      expect(after.statusLine).toBeDefined(); // 其他設定保留
+
+      // 備份 = 原始內容
+      expect(readFileSync(`${settingsPath}.polydesk-bak`, 'utf8')).toBe(original);
+
+      // 第二次安裝 → 冪等（無變更、不重複）
+      const r2 = await installClaudeStatusHooks(home);
+      expect(r2.changed).toBe(false);
+      expect(JSON.parse(readFileSync(settingsPath, 'utf8')).hooks.PreToolUse).toHaveLength(3);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('settings.json 壞檔 → 放棄注入、不覆寫', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'pd-hooks-'));
+    try {
+      mkdirSync(join(home, '.claude'), { recursive: true });
+      const settingsPath = join(home, '.claude', 'settings.json');
+      writeFileSync(settingsPath, '{ this is not valid json', 'utf8');
+      const r = await installClaudeStatusHooks(home);
+      expect(r.changed).toBe(false);
+      expect(readFileSync(settingsPath, 'utf8')).toBe('{ this is not valid json'); // 原樣未動
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });

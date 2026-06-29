@@ -6,6 +6,7 @@ import type { ClaudeState } from '../../shared/types';
 export interface ClaudeCounts {
   running: number;
   awaiting: number;
+  done: number;
   idle: number;
 }
 
@@ -20,6 +21,7 @@ export function useClaudeCounts(): ClaudeCounts {
   return {
     running: vals.filter((s) => s === 'running').length,
     awaiting: vals.filter((s) => s === 'stopped-await').length,
+    done: vals.filter((s) => s === 'done').length,
     idle: vals.filter((s) => s === 'idle').length,
   };
 }

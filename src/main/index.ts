@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { StateStore } from './store/StateStore';
 import { registerIpcHandlers, type MainServices } from './ipc/router';
 import { checkForUpdatesOnStartup } from './update/AutoUpdater';
+import { installClaudeStatusHooks } from './claude/statusHooks';
 import { setMainWindow, emit } from './ipc/broadcast';
 import { mark, measure, getMeasures } from '../shared/perf';
 import { APP_NAME, STATE_FILE_NAME } from '../shared/constants';
@@ -132,6 +133,8 @@ if (!gotTheLock) {
     applyContentSecurityPolicy();
     services = registerIpcHandlers(store, app.getPath('userData'));
     createWindow();
+    // F-8：注入 Claude Code 狀態 hooks（merge-safe、冪等、壞檔不覆寫）→ 精準三態靠 hook 真實信號。
+    void installClaudeStatusHooks().catch(() => undefined);
     // REQ-NFR-004：啟動觸發一次更新檢查（electron-updater 不自輪詢）；僅打包正式版（dev 無 provider）。
     if (app.isPackaged) checkForUpdatesOnStartup();
 

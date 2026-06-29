@@ -13,9 +13,10 @@ import { ipc } from '../ipc/client';
 import type { ClaudeState } from '../../shared/types';
 
 const VIEW: Record<ClaudeState, { color: string; label: string; pulse: boolean }> = {
-  running: { color: 'var(--success)', label: '執行中', pulse: true },
-  'stopped-await': { color: 'var(--warn)', label: '已停待接手', pulse: false },
-  idle: { color: 'var(--meta)', label: '未啟動', pulse: false },
+  running: { color: 'var(--success)', label: '執行中', pulse: true }, // 跑工具/subagent/workflow
+  'stopped-await': { color: 'var(--warn)', label: '待確認', pulse: true }, // 問你問題/要權限（需注意 → 脈動）
+  done: { color: 'var(--info, #5b9bd5)', label: '已停止', pulse: false }, // 整個回合完成、你的回合
+  idle: { color: 'var(--meta)', label: '未啟動', pulse: false }, // 無 claude session
 };
 
 const STYLE_ID = 'pdws-claude-badge-style';

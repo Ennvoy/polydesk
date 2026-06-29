@@ -1,220 +1,188 @@
-// Claude 狀態監控（F-8：REQ-MON-001/002/004/005/006、REQ-E2E-005）。唯讀觀察、不控制 Claude。
+// Claude 執行狀態監控（F-8，REQ-MON-001/002/005/006）。
+// 改為「讀 Claude Code hooks 真實信號」：hook 腳本把每個 session 狀態（working/awaiting/done）寫成狀態檔，
+// 本監控 watch 該目錄 + 便宜的週期重算（pidsOf 閘門，無 WMI）→ 聚合成每工作區 ClaudeState → 變才 emit。
 //
-// 每輪：單次批量列舉一次全機程序表（昂貴的 powershell spawn 只跑一次），再以同一份快照逐工作區跑
-// 純樹演算法分類三態（資源有界 REQ-MON-006）：
-//   無 claude → 'idle'；有 claude 且其下仍有子程序 → 'running'；有 claude 但無子程序（停在提示等待）
-//   → 'stopped-await'。狀態與上次比較，**變才 emit('claude:status')**（去抖、降載 REQ-MON-006）。
-//
-// 自適應 + 有界輪詢（REQ-MON-006）：間隔 = clamp(base*ceil(n/k), base, max)，n=工作區數。
-//   n=0 → base（不退化成 0ms 忙迴圈，F-8-A5）；n 極大 → 夾在硬上限（不退化成近乎不更新）。
-//
-// single-flight + 逾時 backstop（F-8-A4）：下一輪只在上一輪「完成後」才排程（禁裸 setInterval 重入）；
-//   注入式 lister 若 hang，withTimeout backstop 放棄該輪、沿用上次狀態、不阻塞迴圈（真實 lister 另有
-//   自帶子程序逾時 kill）。
+// 取代舊的「猜程序樹（Get-CimInstance Win32_Process）」：那在忙碌系統常逾時、且無法分辨 claude 忙碌 vs 待確認。
+// 精準四態（執行中/待確認/已停止/未啟動）來自 hooks（見 statusHooks.ts、claudeHookState.ts）。
+// pidsOf 閘門（無 alive PTY → idle，cheap、非 WMI）保留：關掉終端機立即清掉 hook 殘留狀態。
 
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
 import type { PtyManager } from '../pty/PtyManager';
 import type { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
 import type { EventChannels } from '../../shared/ipc';
 import type { ClaudeState } from '../../shared/types';
-import { DEFAULT_BACKGROUND_POLL_MS } from '../../shared/constants';
 import { emit } from '../ipc/broadcast';
 import { Notification } from 'electron';
-import { matchClaude, defaultProcessLister, type ProcessLister } from './processProbe';
+import { readdir, readFile, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import chokidar, { type FSWatcher } from 'chokidar';
+import { aggregateWorkspaceStates, type SessionStatus } from './claudeHookState';
+import { claudePaths } from '../claude/statusHooks';
 
-/** 輪詢間隔自適應：每 SCALE_K 個工作區 ×base。 */
-const DEFAULT_SCALE_K = 4;
-/** 輪詢間隔硬上限（REQ-MON-006，避免 n 極大時近乎不更新）。 */
-const DEFAULT_MAX_POLL_MS = 60_000;
-/** 單輪 lister 逾時 backstop（> 真實 lister 自帶逾時，僅防注入式/壞掉的 lister hang）。 */
-const DEFAULT_PROBE_BACKSTOP_MS = 12_000;
+/** 週期重算間隔（cheap：只讀已快取 sessions + pidsOf，不掃整機程序）。catches 關終端機→idle。 */
+const DEFAULT_RECOMPUTE_MS = 3_000;
 
-export interface ClaudeStatusMonitorOptions {
-  /** teardown 協調：註冊 'monitor' concern，移除工作區時清該 ws 狀態快取。 */
-  lifecycle?: WorkspaceLifecycle;
-  basePollMs?: number;
-  maxPollMs?: number;
-  scaleK?: number;
-  probeTimeoutMs?: number;
-  /** 待接手桌面通知（PE-2）；預設 Electron Notification，測試可注入。 */
-  notifyAwait?: AwaitNotifier;
-}
-
-/** 只用到的工作區/PTY 介面（縮窄依賴，測試可注入 fake；對齊真實 WorkspaceManager/PtyManager 簽名）。 */
 type WorkspacesView = Pick<WorkspaceManager, 'list'>;
 type PtyView = Pick<PtyManager, 'pidsOf'>;
-
 type EmitFn = (payload: EventChannels['claude:status']) => void;
 
-/** 待接手桌面通知（PE-2）：claude 跑完進入待接手時呼叫；預設走 Electron Notification（測試可注入 spy）。 */
+/** 待確認桌面通知（PE-2）；預設 Electron Notification，測試可注入。 */
 type AwaitNotifier = (info: { wsId: string; name: string }) => void;
 function defaultNotifyAwait(info: { wsId: string; name: string }): void {
   try {
     if (Notification.isSupported()) {
-      new Notification({
-        title: 'Claude 待接手',
-        body: `工作區「${info.name}」的 Claude 已停，等待你接手。`,
-      }).show();
+      new Notification({ title: 'Claude 待確認', body: `工作區「${info.name}」的 Claude 需要你確認。` }).show();
     }
   } catch {
     /* 通知失敗不致命 */
   }
 }
 
-/**
- * 自適應輪詢間隔（純函式、可單測）：clamp(base*ceil(n/k), base, max)。
- * n<=0 / 非有限 → 視為 0 → factor=1 → 回 base（絕不回 0ms，F-8-A5）。
- */
-export function computePollInterval(
-  n: number,
-  basePollMs: number,
-  maxPollMs: number,
-  scaleK: number,
-): number {
-  const safeN = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
-  const k = scaleK > 0 ? scaleK : 1;
-  const factor = Math.max(1, Math.ceil(safeN / k));
-  const raw = basePollMs * factor;
-  return Math.min(maxPollMs, Math.max(basePollMs, raw));
-}
+/** 讀目前所有 session 狀態（預設掃 statusDir 的 *.json）；測試可注入。 */
+type SessionReader = () => Promise<SessionStatus[]>;
+/** watch 工廠（預設 chokidar）；測試可注入 no-op。回傳含 close()。 */
+type WatchFactory = (dir: string, onChange: () => void) => { close: () => void };
 
-/** 三態分類（REQ-MON-001/002）。 */
-export function classifyClaude(claudePids: readonly number[], hasActiveChildren: boolean): ClaudeState {
-  if (claudePids.length === 0) return 'idle';
-  return hasActiveChildren ? 'running' : 'stopped-await';
+export interface ClaudeStatusMonitorOptions {
+  lifecycle?: WorkspaceLifecycle;
+  statusDir?: string;
+  recomputeMs?: number;
+  notifyAwait?: AwaitNotifier;
+  readSessions?: SessionReader;
+  watchFactory?: WatchFactory;
 }
 
 export class ClaudeStatusMonitor {
-  /** 每工作區上次 emit 的狀態（去抖比對基準；預設視為 'idle'＝renderer 徽章預設）。 */
+  /** 每工作區上次 emit 的狀態（去抖比對基準；預設 'idle'）。 */
   private readonly lastState = new Map<string, ClaudeState>();
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private watcher: { close: () => void } | null = null;
   private started = false;
-  private inFlight = false;
+  private recomputing = false;
 
-  private readonly basePollMs: number;
-  private readonly maxPollMs: number;
-  private readonly scaleK: number;
-  private readonly probeTimeoutMs: number;
+  private readonly statusDir: string;
+  private readonly recomputeMs: number;
   private readonly notifyAwait: AwaitNotifier;
+  private readonly readSessions: SessionReader;
+  private readonly watchFactory: WatchFactory;
 
   constructor(
     private readonly workspaces: WorkspacesView,
     private readonly pty: PtyView,
     private readonly emitFn: EmitFn = (p) => emit('claude:status', p),
-    private readonly lister: ProcessLister = defaultProcessLister,
     opts: ClaudeStatusMonitorOptions = {},
   ) {
-    this.basePollMs = opts.basePollMs ?? DEFAULT_BACKGROUND_POLL_MS;
-    this.maxPollMs = opts.maxPollMs ?? DEFAULT_MAX_POLL_MS;
-    this.scaleK = opts.scaleK ?? DEFAULT_SCALE_K;
-    this.probeTimeoutMs = opts.probeTimeoutMs ?? DEFAULT_PROBE_BACKSTOP_MS;
+    this.statusDir = opts.statusDir ?? claudePaths().statusDir;
+    this.recomputeMs = opts.recomputeMs ?? DEFAULT_RECOMPUTE_MS;
     this.notifyAwait = opts.notifyAwait ?? defaultNotifyAwait;
+    this.readSessions = opts.readSessions ?? (() => this.defaultReadSessions());
+    this.watchFactory = opts.watchFactory ?? defaultWatchFactory;
     opts.lifecycle?.register('monitor', (wsId) => {
       this.lastState.delete(wsId);
     });
   }
 
-  /** 啟動輪詢（冪等）。 */
+  /** 啟動（冪等）：建 statusDir + watch（hook 寫檔即時重算）+ 週期重算（catches 關終端機→idle）。 */
   start(): void {
     if (this.started) return;
     this.started = true;
-    this.scheduleNext(0);
+    void mkdir(this.statusDir, { recursive: true }).catch(() => undefined);
+    this.watcher = this.watchFactory(this.statusDir, () => void this.recompute());
+    this.timer = setInterval(() => void this.recompute(), this.recomputeMs);
+    if (typeof this.timer.unref === 'function') this.timer.unref();
+    void this.recompute();
   }
 
-  /** 停止輪詢（app before-quit / 測試用）。 */
+  /** 停止（app before-quit / 測試用）。 */
   stop(): void {
     this.started = false;
     if (this.timer) {
-      clearTimeout(this.timer);
+      clearInterval(this.timer);
       this.timer = null;
     }
-  }
-
-  private scheduleNext(delayMs: number): void {
-    if (!this.started) return;
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => {
-      void this.tick();
-    }, delayMs);
-    if (typeof this.timer.unref === 'function') this.timer.unref();
-  }
-
-  /** 一輪探測：單次列舉 → 同快照逐工作區分類 → 變才 emit。下一輪只在本輪完成後排程（single-flight）。 */
-  private async tick(): Promise<void> {
-    if (this.inFlight) return; // 防衛：正常流程不會重入（僅完成後排程）
-    this.inFlight = true;
-    try {
-      // 先處理「無 alive PTY ⇒ 必為 idle」——這不需程序探測（沒有終端機就不可能有 PTY 下的 claude）。
-      // 關鍵：放在探測之外，故即使 lister 逾時/失敗，剛關掉終端機的工作區仍會立刻回 idle，
-      // 不會卡在上次的 running（修「claude 關掉後狀態永遠卡執行中」）。
-      const withPty: { wsId: string; rootPids: number[] }[] = [];
-      for (const ws of this.workspaces.list()) {
-        const rootPids = this.pty.pidsOf(ws.id);
-        if (rootPids.length === 0) this.applyState(ws.id, 'idle', undefined);
-        else withPty.push({ wsId: ws.id, rootPids });
+    if (this.watcher) {
+      try {
+        this.watcher.close();
+      } catch {
+        /* 關閉失敗不致命 */
       }
-
-      // 仍每輪只列舉一次整機程序表（REQ-MON-006 單次列舉）；無 PTY 的工作區上面已先回 idle。
-      const processes = await this.withTimeout(this.lister(), this.probeTimeoutMs);
-      if (this.started && processes) {
-        for (const { wsId, rootPids } of withPty) {
-          const { claudePids, hasActiveChildren } = matchClaude(rootPids, processes);
-          this.applyState(wsId, classifyClaude(claudePids, hasActiveChildren), claudePids[0]);
-        }
-      }
-      // processes === null（逾時）或 lister reject → 有 PTY 的工作區降級沿用上次狀態，不 emit、不崩潰。
-    } catch {
-      /* lister 例外：隔離，不讓背景監控打斷 main / 中止迴圈（REQ-NFR-002） */
-    } finally {
-      this.inFlight = false;
-      if (this.started) this.scheduleNext(this.computeInterval(this.workspaces.list().length));
+      this.watcher = null;
     }
   }
 
-  /** 狀態變才 emit（去抖，REQ-MON-006）；基準預設 'idle'（對齊 renderer 徽章預設，首輪 idle 不空打）。 */
-  private applyState(wsId: string, state: ClaudeState, pid: number | undefined): void {
+  /** 重算所有工作區狀態 → 變才 emit。single-flight 防重入。 */
+  async recompute(): Promise<void> {
+    if (this.recomputing) return;
+    this.recomputing = true;
+    try {
+      let sessions: SessionStatus[] = [];
+      try {
+        sessions = await this.readSessions();
+      } catch {
+        sessions = [];
+      }
+      const states = aggregateWorkspaceStates(this.workspaces.list(), sessions, (id) => this.pty.pidsOf(id).length > 0);
+      for (const [wsId, state] of states) this.applyState(wsId, state);
+    } finally {
+      this.recomputing = false;
+    }
+  }
+
+  /** 預設 session 讀取：掃 statusDir 的 *.json（壞檔/缺欄略過，永不丟例外）。 */
+  private async defaultReadSessions(): Promise<SessionStatus[]> {
+    let files: string[];
+    try {
+      files = await readdir(this.statusDir);
+    } catch {
+      return []; // 目錄不存在（尚無 claude 跑過）
+    }
+    const out: SessionStatus[] = [];
+    for (const f of files) {
+      if (!f.endsWith('.json')) continue;
+      try {
+        const raw = await readFile(join(this.statusDir, f), 'utf8');
+        const j = JSON.parse(raw) as Partial<SessionStatus>;
+        if (typeof j.cwd === 'string' && typeof j.state === 'string') {
+          out.push({
+            sessionId: typeof j.sessionId === 'string' ? j.sessionId : f,
+            cwd: j.cwd,
+            state: j.state as SessionStatus['state'],
+            ts: typeof j.ts === 'number' ? j.ts : 0,
+          });
+        }
+      } catch {
+        /* 壞檔略過 */
+      }
+    }
+    return out;
+  }
+
+  /** 狀態變才 emit（去抖，REQ-MON-006）；running→stopped-await（待確認）推桌面通知。 */
+  private applyState(wsId: string, state: ClaudeState): void {
     const prev = this.lastState.get(wsId) ?? 'idle';
     if (prev === state) return;
     this.lastState.set(wsId, state);
-    this.emitFn({
-      wsId,
-      status: pid !== undefined ? { state, pid } : { state },
-    });
-    // PE-2：claude 跑完進入「待接手」（running→stopped-await）→ 推桌面通知（管多專案不用一直盯）。
-    if (prev === 'running' && state === 'stopped-await') {
+    this.emitFn({ wsId, status: { state } });
+    if (prev !== 'stopped-await' && state === 'stopped-await') {
       const name = this.workspaces.list().find((w) => w.id === wsId)?.name ?? wsId;
       this.notifyAwait({ wsId, name });
     }
   }
-
-  private computeInterval(n: number): number {
-    return computePollInterval(n, this.basePollMs, this.maxPollMs, this.scaleK);
-  }
-
-  /** 包逾時 backstop：逾時/reject 一律解析 null（呼叫端降級），不阻塞迴圈（F-8-A4）。 */
-  private withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
-    return new Promise<T | null>((resolve) => {
-      let settled = false;
-      const t = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        resolve(null);
-      }, ms);
-      if (typeof t.unref === 'function') t.unref();
-      p.then(
-        (v) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(t);
-          resolve(v);
-        },
-        () => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(t);
-          resolve(null);
-        },
-      );
-    });
-  }
 }
+
+/** 預設 chokidar watch（去抖 200ms 合併多檔事件）。 */
+const defaultWatchFactory: WatchFactory = (dir, onChange) => {
+  let t: ReturnType<typeof setTimeout> | null = null;
+  const debounced = (): void => {
+    if (t) clearTimeout(t);
+    t = setTimeout(onChange, 200);
+  };
+  const w: FSWatcher = chokidar.watch(dir, { ignoreInitial: false, depth: 0 });
+  w.on('add', debounced).on('change', debounced).on('unlink', debounced);
+  return {
+    close: () => {
+      if (t) clearTimeout(t);
+      void w.close();
+    },
+  };
+};

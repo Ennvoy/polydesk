@@ -26,8 +26,8 @@ function StatusBar(): React.JSX.Element {
           </span>
         )}
         {awaiting > 0 && (
-          <span style={{ color: 'var(--warn)' }} aria-label={`${awaiting} 個工作區 Claude 待接手`}>
-            {awaiting} 待接手
+          <span style={{ color: 'var(--warn)' }} aria-label={`${awaiting} 個工作區 Claude 待確認`}>
+            {awaiting} 待確認
           </span>
         )}
         <span>工作區 {workspaces.length}</span>

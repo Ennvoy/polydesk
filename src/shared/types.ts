@@ -6,8 +6,12 @@ export type ShellKind = 'powershell' | 'cmd' | 'pwsh' | 'gitbash' | 'wsl';
 export type FileEncoding = 'utf-8' | 'utf-8-bom' | 'big5' | 'utf-16le' | 'utf-16be';
 export type Eol = 'crlf' | 'lf';
 
-/** Claude 執行狀態（REQ-MON-001/002）：執行中 / 已停待接手 / 未啟動。 */
-export type ClaudeState = 'running' | 'stopped-await' | 'idle';
+/**
+ * Claude 執行狀態（REQ-MON-001/002）。精準四態（由 Claude Code hooks 推導，F-8）：
+ *  running=執行中（送指令/跑工具/subagent/workflow）、stopped-await=待確認（Notification 權限/問題）、
+ *  done=已停止（Stop，整個回合完成沒事做）、idle=未啟動（無 claude session）。
+ */
+export type ClaudeState = 'running' | 'stopped-await' | 'done' | 'idle';
 export interface ClaudeStatus {
   state: ClaudeState;
   pid?: number;

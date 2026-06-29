@@ -41,8 +41,8 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
   registerSearchHandlers(ipcMain, workspaces); // search:*
   registerLspHandlers(ipcMain, workspaces, lifecycle); // lsp:*
 
-  // Claude 狀態監控（唯讀；emit claude:status；F-1 徽章訂閱）
-  const monitor = new ClaudeStatusMonitor(workspaces, pty, undefined, undefined, { lifecycle });
+  // Claude 狀態監控（讀 Claude Code hooks 狀態檔；emit claude:status；F-1 徽章訂閱）
+  const monitor = new ClaudeStatusMonitor(workspaces, pty, undefined, { lifecycle });
   monitor.start();
 
   registerUpdateHandlers(ipcMain); // update:*（electron-updater）
