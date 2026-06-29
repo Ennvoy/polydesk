@@ -10,8 +10,18 @@ export interface OpenFileRequest {
   split?: boolean;
 }
 
+/** 在編輯器區開啟某檔的差異（SCM 點變更檔用，工作樹 vs HEAD；like VSCode）。 */
+export interface OpenDiffRequest {
+  wsId: string;
+  path: string;
+  /** 已暫存的差異（--cached）vs 未暫存。 */
+  staged: boolean;
+}
+
 type Listener = (req: OpenFileRequest) => void;
+type DiffListener = (req: OpenDiffRequest) => void;
 const listeners = new Set<Listener>();
+const diffListeners = new Set<DiffListener>();
 
 export const editorBus = {
   openFile(req: OpenFileRequest): void {
@@ -20,5 +30,13 @@ export const editorBus = {
   subscribe(l: Listener): () => void {
     listeners.add(l);
     return () => listeners.delete(l);
+  },
+  /** 在編輯器區開啟差異分頁（編輯器 F-4 訂閱）。 */
+  openDiff(req: OpenDiffRequest): void {
+    for (const l of diffListeners) l(req);
+  },
+  subscribeDiff(l: DiffListener): () => void {
+    diffListeners.add(l);
+    return () => diffListeners.delete(l);
   },
 };

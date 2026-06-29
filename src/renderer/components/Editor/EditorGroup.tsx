@@ -5,7 +5,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as monaco from 'monaco-editor';
 import { ipc } from '../../ipc/client';
-import { editorBus, type OpenFileRequest } from '../../state/editorBus';
+import { editorBus, type OpenFileRequest, type OpenDiffRequest } from '../../state/editorBus';
+import { DiffView } from '../SourceControl/DiffView';
 import { dialog } from '../Dialogs/host';
 import { useTheme } from '../../theme/ThemeProvider';
 import { mark, measure } from '../../../shared/perf';
@@ -18,11 +19,15 @@ interface Tab {
   wsId: string;
   path: string;
   name: string;
+  /** 'file'=可編輯檔；'diff'=唯讀差異檢視（SCM 點變更檔開啟，工作樹 vs HEAD）。 */
+  kind: 'file' | 'diff';
   language: string;
   encoding: FileEncoding;
   eol: Eol;
   readonly: boolean;
   dirty: boolean;
+  /** diff 分頁的 unified diff 內容（kind==='diff'）。 */
+  patch?: string;
 }
 
 const SELF_WRITE_ECHO_MS = 1500;
@@ -164,6 +169,7 @@ export function EditorGroup(): React.JSX.Element {
       wsId: req.wsId,
       path: req.path,
       name: baseName(req.path),
+      kind: 'file',
       language,
       encoding: r.encoding,
       eol: r.eol,
@@ -177,12 +183,43 @@ export function EditorGroup(): React.JSX.Element {
     measure('fileOpen', startMark); // REQ-PERF-003：開檔到首屏
   }, []);
 
+  // ── 開差異分頁（SCM 點變更檔；工作樹 vs HEAD，唯讀 Monaco diff）──
+  const openDiff = useCallback(async (req: OpenDiffRequest) => {
+    const key = `diff::${tabKey(req.wsId, req.path)}::${req.staged ? 'staged' : 'unstaged'}`;
+    if (tabsRef.current.some((t) => t.key === key)) {
+      setActiveKey(key);
+      return;
+    }
+    let patch = '';
+    try {
+      patch = (await ipc.git.diff({ wsId: req.wsId, path: req.path, staged: req.staged })).patch;
+    } catch (e) {
+      showError('無法載入差異', e instanceof Error ? e.message : String(e));
+      return;
+    }
+    const tab: Tab = {
+      key,
+      wsId: req.wsId,
+      path: req.path,
+      name: `${baseName(req.path)}${req.staged ? '（已暫存差異）' : '（差異）'}`,
+      kind: 'diff',
+      language: langFromPath(req.path),
+      encoding: 'utf-8', // placeholder：diff 分頁唯讀、不存檔（saveActive 已 guard）
+      eol: 'lf',
+      readonly: true,
+      dirty: false,
+      patch,
+    };
+    setTabs((prev) => [...prev, tab]);
+    setActiveKey(key);
+  }, []);
+
   // ── 存檔（Ctrl+S） ──
   const saveActive = useCallback(async () => {
     const key = activeKeyRef.current;
     if (!key) return;
     const tab = tabsRef.current.find((t) => t.key === key);
-    if (!tab) return;
+    if (!tab || tab.kind === 'diff') return; // diff 分頁唯讀、不可存
     const model = monaco.editor.getModel(modelUri(tab.wsId, tab.path));
     if (!model) return;
 
@@ -293,6 +330,11 @@ export function EditorGroup(): React.JSX.Element {
       if (ed.getModel()) ed.setModel(null);
       return;
     }
+    if (active.kind === 'diff') {
+      if (ed.getModel()) ed.setModel(null); // diff 分頁不綁檔 model（改由 DiffView 渲染）
+      lastFocusKeyRef.current = activeKey;
+      return;
+    }
     const model = monaco.editor.getModel(modelUri(active.wsId, active.path));
     if (ed.getModel() !== model) ed.setModel(model ?? null); // 避免 dirty 變動觸發無謂 setModel（重置游標）
     ed.updateOptions({ readOnly: active.readonly });
@@ -337,10 +379,15 @@ export function EditorGroup(): React.JSX.Element {
     ed.updateOptions({ readOnly: active?.readonly ?? false });
   }, [active, split]);
 
-  // ── editorBus 訂閱 ──
+  // ── editorBus 訂閱（開檔 + 開差異）──
   useEffect(() => {
-    return editorBus.subscribe((req) => void openFile(req));
-  }, [openFile]);
+    const offFile = editorBus.subscribe((req) => void openFile(req));
+    const offDiff = editorBus.subscribeDiff((req) => void openDiff(req));
+    return () => {
+      offFile();
+      offDiff();
+    };
+  }, [openFile, openDiff]);
 
   // ── 外部修改事件（F-2 watcher 發 fs:change） ──
   useEffect(() => {
@@ -449,8 +496,28 @@ export function EditorGroup(): React.JSX.Element {
       </div>
 
       <div className="pd-editor-panes">
-        <div ref={primaryElRef} className="pd-editor-pane" role="group" aria-label="編輯區" />
-        {split && <div ref={secondaryElRef} className="pd-editor-pane pd-editor-pane-split" role="group" aria-label="分割編輯區" />}
+        {/* diff 分頁時隱藏 Monaco 檔案 pane（保持掛載，model 已卸），改 overlay DiffView。 */}
+        <div
+          ref={primaryElRef}
+          className="pd-editor-pane"
+          role="group"
+          aria-label="編輯區"
+          style={active?.kind === 'diff' ? { display: 'none' } : undefined}
+        />
+        {split && (
+          <div
+            ref={secondaryElRef}
+            className="pd-editor-pane pd-editor-pane-split"
+            role="group"
+            aria-label="分割編輯區"
+            style={active?.kind === 'diff' ? { display: 'none' } : undefined}
+          />
+        )}
+        {active?.kind === 'diff' && active.patch !== undefined && (
+          <div className="pd-editor-pane pd-editor-diffpane" role="group" aria-label={`差異：${active.name}`}>
+            <DiffView key={active.key} path={active.path} patch={active.patch} />
+          </div>
+        )}
         {tabs.length === 0 && (
           <div className="pd-editor-empty" aria-hidden="true">
             <p>尚未開啟檔案</p>

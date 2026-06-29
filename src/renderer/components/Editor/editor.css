@@ -109,6 +109,8 @@
   height: 100%;
 }
 .pd-editor-pane-split { border-left: 1px solid var(--border); }
+/* diff 分頁：用 flex column 撐出高度，內含的 .pd-scm-diffwrap(flex:1) 才能填滿 Monaco diff。 */
+.pd-editor-diffpane { display: flex; flex-direction: column; }
 
 .pd-editor-empty {
   position: absolute;

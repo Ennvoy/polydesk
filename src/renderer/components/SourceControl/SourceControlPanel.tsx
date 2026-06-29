@@ -7,8 +7,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ipc } from '../../ipc/client';
 import { useAppState } from '../../state/appStore';
 import { dialog } from '../Dialogs/host';
+import { editorBus } from '../../state/editorBus';
 import type { GitStatus, GitChange, GitLogEntry } from '../../../shared/types';
-import { DiffView } from './DiffView';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
 
 type Tab = 'changes' | 'history' | 'branches';
@@ -66,10 +66,6 @@ function GitGraphCell({ row, width }: { row: GitGraphRow; width: number }): Reac
     </svg>
   );
 }
-interface Selected {
-  path: string;
-  staged: boolean;
-}
 
 function errText(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -110,9 +106,6 @@ export function SourceControlPanel(): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('changes');
   const [log, setLog] = useState<GitLogEntry[]>([]);
   const [branches, setBranches] = useState<{ list: string[]; current: string }>({ list: [], current: '' });
-  const [selected, setSelected] = useState<Selected | null>(null);
-  const [patch, setPatch] = useState('');
-  const [diffLoading, setDiffLoading] = useState(false);
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!wsId) {
@@ -133,10 +126,8 @@ export function SourceControlPanel(): React.JSX.Element {
     }
   }, [wsId]);
 
-  // 工作區切換 → 重置選取並刷新。
+  // 工作區切換 → 回變更分頁並刷新。
   useEffect(() => {
-    setSelected(null);
-    setPatch('');
     setTab('changes');
     void refresh();
   }, [refresh]);
@@ -245,6 +236,15 @@ export function SourceControlPanel(): React.JSX.Element {
       try {
         await ipc.git.branch({ wsId, op: 'checkout', name });
       } catch (e) {
+        const emsg = errText(e);
+        // 該分支已在其他 git worktree 簽出：git 禁止同一分支兩處同時簽出（stash 無濟於事）→ 友善告知。
+        if (/already used by worktree|already checked out/i.test(emsg)) {
+          const wt = emsg.match(/worktree at '([^']+)'/)?.[1];
+          setError(
+            `分支「${name}」已在其他 git worktree 簽出${wt ? `（${wt}）` : ''}，無法在此同時簽出。請改到該 worktree 操作，或先在那裡切走此分支。`,
+          );
+          return;
+        }
         // checkout 失敗：以「結構化 status」判斷是否因工作區有未提交變更被擋——不靠 git 錯誤字串
         // （在地化 locale 會翻譯、untracked 也含 'overwritten by checkout'，字串比對兩頭不可靠）。
         const cur = await ipc.git.changes({ wsId }).catch(() => [] as GitChange[]);
@@ -290,19 +290,10 @@ export function SourceControlPanel(): React.JSX.Element {
       await refresh();
     });
 
+  // 點變更檔 → 在編輯器區開差異分頁（工作樹 vs HEAD，like VSCode），不再佔用側欄面板。
   const openDiff = (c: GitChange): void => {
     if (!wsId) return;
-    setSelected({ path: c.path, staged: c.staged });
-    setDiffLoading(true);
-    setError(null);
-    void ipc.git
-      .diff({ wsId, path: c.path, staged: c.staged })
-      .then((r) => setPatch(r.patch))
-      .catch((e) => {
-        setError(errText(e));
-        setPatch('');
-      })
-      .finally(() => setDiffLoading(false));
+    editorBus.openDiff({ wsId, path: c.path, staged: c.staged });
   };
 
   // ── 渲染分支 ──
@@ -347,36 +338,6 @@ export function SourceControlPanel(): React.JSX.Element {
 
   const staged = changes.filter((c) => c.staged);
   const unstaged = changes.filter((c) => !c.staged);
-
-  // 選取檔 → 全面板 diff（含返回）。
-  if (selected) {
-    return (
-      <section className="pd-scm">
-        <div className="pd-panel-header">
-          <button
-            className="pd-btn pd-scm-back"
-            aria-label="返回變更清單"
-            onClick={() => {
-              setSelected(null);
-              setPatch('');
-            }}
-          >
-            ← 返回
-          </button>
-          <span className="pd-scm-difftitle" title={selected.path}>
-            {selected.path}
-          </span>
-        </div>
-        {diffLoading ? (
-          <div className="pd-scm-empty" aria-busy="true">
-            載入差異中…
-          </div>
-        ) : (
-          <DiffView path={selected.path} patch={patch} />
-        )}
-      </section>
-    );
-  }
 
   return (
     <section className="pd-scm">
