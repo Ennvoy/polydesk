@@ -186,7 +186,7 @@ export function EditorGroup(): React.JSX.Element {
   // ── 開差異分頁（SCM 點變更檔；工作樹 vs HEAD，唯讀 Monaco diff）──
   const openDiff = useCallback(async (req: OpenDiffRequest) => {
     const key = req.commit
-      ? `diff::commit::${req.wsId}::${req.commit}`
+      ? `diff::commit::${req.wsId}::${req.commit}::${req.commitPath ?? ''}`
       : `diff::${tabKey(req.wsId, req.path)}::${req.staged ? 'staged' : 'unstaged'}`;
     if (tabsRef.current.some((t) => t.key === key)) {
       setActiveKey(key);
@@ -195,7 +195,7 @@ export function EditorGroup(): React.JSX.Element {
     let patch = '';
     try {
       patch = req.commit
-        ? (await ipc.git.show({ wsId: req.wsId, ref: req.commit })).patch
+        ? (await ipc.git.show({ wsId: req.wsId, ref: req.commit, path: req.commitPath })).patch
         : (await ipc.git.diff({ wsId: req.wsId, path: req.path, staged: req.staged })).patch;
     } catch (e) {
       showError('無法載入差異', e instanceof Error ? e.message : String(e));
@@ -206,10 +206,12 @@ export function EditorGroup(): React.JSX.Element {
       wsId: req.wsId,
       path: req.path,
       name: req.commit
-        ? `commit ${req.commit.slice(0, 7)} 變更`
+        ? req.commitPath
+          ? `${baseName(req.commitPath)} @ ${req.commit.slice(0, 7)}`
+          : `commit ${req.commit.slice(0, 7)} 變更`
         : `${baseName(req.path)}${req.staged ? '（已暫存差異）' : '（差異）'}`,
       kind: 'diff',
-      language: langFromPath(req.path),
+      language: langFromPath(req.commitPath ?? req.path),
       encoding: 'utf-8', // placeholder：diff 分頁唯讀、不存檔（saveActive 已 guard）
       eol: 'lf',
       readonly: true,

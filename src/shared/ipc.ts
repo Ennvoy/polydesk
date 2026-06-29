@@ -47,6 +47,10 @@ export interface InvokeChannels {
   'git:changes': { req: { wsId: string }; res: GitChange[] };
   'git:diff': { req: { wsId: string; path: string; staged: boolean }; res: { patch: string } };
   'git:stage': { req: { wsId: string; paths: string[]; staged: boolean }; res: { ok: true } };
+  /** 取消變更（discard）：tracked 還原到 HEAD、untracked 刪除（破壞性，前端附確認）。 */
+  'git:discard': { req: { wsId: string; paths: string[] }; res: { ok: true } };
+  /** 將路徑加入工作區根 .gitignore。 */
+  'git:ignore': { req: { wsId: string; paths: string[] }; res: { ok: true } };
   'git:commit': { req: { wsId: string; message: string }; res: { ok: true; hash: string } | { error: string } };
   'git:push': { req: { wsId: string }; res: { ok: true } | { error: string } };
   'git:pull': { req: { wsId: string }; res: { ok: true } | { error: string } };
@@ -55,8 +59,10 @@ export interface InvokeChannels {
     res: { branches: string[]; current: string } | { ok: true };
   };
   'git:log': { req: { wsId: string; limit: number }; res: GitLogEntry[] };
-  /** 單一 commit 的完整差異（git show <ref>）；PE-1 右鍵「開啟此 commit 變更」用。 */
-  'git:show': { req: { wsId: string; ref: string }; res: { patch: string } };
+  /** commit diff（git show <ref>；給 path 則限定單檔）；PE-1 右鍵/展開檔案用。 */
+  'git:show': { req: { wsId: string; ref: string; path?: string }; res: { patch: string } };
+  /** 某 commit 變更的檔案清單 + 狀態（點 commit 展開檔案用，PE-1）。 */
+  'git:commitFiles': { req: { wsId: string; ref: string }; res: { files: { path: string; status: string }[] } };
   'git:stash': { req: { wsId: string; op: 'push' | 'pop' | 'list'; includeUntracked?: boolean }; res: unknown };
   'git:init': { req: { wsId: string }; res: { ok: true } };
   // 終端機（控制訊息走 invoke；資料流走 stream）

@@ -3,7 +3,7 @@
 // 分支切換/建立；歷史；stash。點檔開 monaco diff。操作進行中顯示「進行中」、失敗顯示明確錯誤。
 // 全用既有 pd-* class + var(--*) token + scm.css；每互動元素具 aria-label 與微狀態。
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ipc } from '../../ipc/client';
 import { useAppState } from '../../state/appStore';
 import { dialog } from '../Dialogs/host';
@@ -108,6 +108,10 @@ export function SourceControlPanel(): React.JSX.Element {
   const [branches, setBranches] = useState<{ list: string[]; current: string }>({ list: [], current: '' });
   const [hover, setHover] = useState<{ c: GitLogEntry; top: number; left: number } | null>(null); // PE-1 hover 卡
   const [commitMenu, setCommitMenu] = useState<{ c: GitLogEntry; x: number; y: number } | null>(null); // PE-1 右鍵選單
+  const [changeMenu, setChangeMenu] = useState<{ c: GitChange; x: number; y: number } | null>(null); // 變更檔右鍵選單
+  const [expanded, setExpanded] = useState<string | null>(null); // PE-1 展開檔案清單的 commit hash
+  const [cFiles, setCFiles] = useState<Record<string, { path: string; status: string }[]>>({}); // commit→檔案清單快取
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null); // hover 延遲關閉計時器（滑入卡片可取消）
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!wsId) {
@@ -150,12 +154,15 @@ export function SourceControlPanel(): React.JSX.Element {
     };
   }, [wsId, status?.isRepo, refresh]);
 
-  // PE-1：commit 右鍵選單 — 點外 / Esc 關閉。
+  // 右鍵選單（commit / 變更檔）— 點外 / Esc 關閉。
   useEffect(() => {
-    if (!commitMenu) return undefined;
-    const close = (): void => setCommitMenu(null);
+    if (!commitMenu && !changeMenu) return undefined;
+    const close = (): void => {
+      setCommitMenu(null);
+      setChangeMenu(null);
+    };
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setCommitMenu(null);
+      if (e.key === 'Escape') close();
     };
     window.addEventListener('mousedown', close);
     window.addEventListener('keydown', onKey);
@@ -163,7 +170,7 @@ export function SourceControlPanel(): React.JSX.Element {
       window.removeEventListener('mousedown', close);
       window.removeEventListener('keydown', onKey);
     };
-  }, [commitMenu]);
+  }, [commitMenu, changeMenu]);
 
   // 切到歷史/分支頁時載入對應資料。
   useEffect(() => {
@@ -307,6 +314,29 @@ export function SourceControlPanel(): React.JSX.Element {
       await refresh();
     });
 
+  // 取消變更（discard）：破壞性、不可復原 → 確認後才執行。
+  const onDiscard = (paths: string[], label: string): Promise<void> =>
+    run(async () => {
+      if (!wsId || paths.length === 0) return;
+      const ok = await dialog.confirm({
+        title: '取消變更',
+        body: `將捨棄${label}的未提交變更（含刪除未追蹤的新檔），此操作無法復原。確定？`,
+        confirmText: '捨棄變更',
+        cancelText: '取消',
+      });
+      if (!ok) return;
+      await ipc.git.discard({ wsId, paths: [...new Set(paths)] });
+      await refresh();
+    });
+
+  // 加到 .gitignore（非破壞性）。
+  const onIgnore = (paths: string[]): Promise<void> =>
+    run(async () => {
+      if (!wsId || paths.length === 0) return;
+      await ipc.git.ignore({ wsId, paths });
+      await refresh();
+    });
+
   // PE-1：簽出某 commit（分離 HEAD；hash 經後端 validateRef）。
   const onCheckoutCommit = (c: GitLogEntry): Promise<void> =>
     run(async () => {
@@ -348,6 +378,30 @@ export function SourceControlPanel(): React.JSX.Element {
   const openDiff = (c: GitChange): void => {
     if (!wsId) return;
     editorBus.openDiff({ wsId, path: c.path, staged: c.staged });
+  };
+
+  // PE-1：hover 卡片延遲關閉 — 離開列後延遲 200ms 才關，期間滑入卡片可取消（才能滾動卡片內容）。
+  const cancelHoverClose = (): void => {
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+  };
+  const scheduleHoverClose = (): void => {
+    cancelHoverClose();
+    hoverTimer.current = setTimeout(() => setHover(null), 200);
+  };
+
+  // PE-1：點 commit → 展開/收合該 commit 變更的檔案清單（like VSCode）；首次展開載入並快取。
+  const toggleExpand = (c: GitLogEntry): void => {
+    if (!wsId) return;
+    setExpanded((prev) => (prev === c.hash ? null : c.hash));
+    if (cFiles[c.hash] === undefined) {
+      void ipc.git
+        .commitFiles({ wsId, ref: c.hash })
+        .then((r) => setCFiles((prev) => ({ ...prev, [c.hash]: r.files })))
+        .catch(() => setCFiles((prev) => ({ ...prev, [c.hash]: [] })));
+    }
   };
 
   // ── 渲染分支 ──
@@ -481,6 +535,19 @@ export function SourceControlPanel(): React.JSX.Element {
             </button>
           </div>
 
+          {changes.length > 0 && (
+            <div className="pd-scm-changesbar">
+              <button
+                className="pd-scm-link pd-scm-link-danger"
+                aria-label="全部取消變更"
+                onClick={() => void onDiscard(changes.map((c) => c.path), '全部')}
+                disabled={busy}
+              >
+                全部取消變更
+              </button>
+            </div>
+          )}
+
           <ChangeGroup
             title="已暫存的變更"
             items={staged}
@@ -490,6 +557,7 @@ export function SourceControlPanel(): React.JSX.Element {
             onAll={staged.length ? () => void onStageAll(false, staged.map((c) => c.path)) : undefined}
             allLabel="全部取消暫存"
             onOpen={openDiff}
+            onContext={(c, e) => setChangeMenu({ c, x: e.clientX, y: e.clientY })}
           />
           <ChangeGroup
             title="變更"
@@ -500,6 +568,7 @@ export function SourceControlPanel(): React.JSX.Element {
             onAll={unstaged.length ? () => void onStageAll(true, unstaged.map((c) => c.path)) : undefined}
             allLabel="全部暫存"
             onOpen={openDiff}
+            onContext={(c, e) => setChangeMenu({ c, x: e.clientX, y: e.clientY })}
           />
 
           {changes.length === 0 && <div className="pd-scm-empty">沒有變更。</div>}
@@ -523,35 +592,89 @@ export function SourceControlPanel(): React.JSX.Element {
             (() => {
               const graph = computeGitGraph(log);
               const graphW = graph.maxLanes * GRAPH_LANE_W + 6;
-              return log.map((c, i) => (
-                // 列高單一真相＝GRAPH_ROW_H（與 SVG 高同源）；列高===SVG高才能跨列無縫不斷線。
-                <div
-                  key={c.hash}
-                  className="pd-scm-logrow"
-                  style={{ height: GRAPH_ROW_H }}
-                  onMouseEnter={(e) => {
-                    const r = e.currentTarget.getBoundingClientRect();
-                    setHover({ c, top: r.top, left: r.right + 8 });
-                  }}
-                  onMouseLeave={() => setHover(null)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setHover(null);
-                    setCommitMenu({ c, x: e.clientX, y: e.clientY });
-                  }}
-                >
-                  <GitGraphCell row={graph.rows[i]} width={graphW} />
-                  <div className="pd-scm-logtext">
-                    <span className="pd-scm-logsubject">{c.subject}</span>
-                    <span className="pd-scm-logmeta">
-                      {c.author} · {new Date(c.date).toLocaleString()} · {c.hash.slice(0, 7)}
-                    </span>
-                  </div>
-                </div>
-              ));
+              return log.map((c, i) => {
+                const files = cFiles[c.hash];
+                return (
+                  <React.Fragment key={c.hash}>
+                    {/* 列高單一真相＝GRAPH_ROW_H（與 SVG 高同源）；列高===SVG高才能跨列無縫不斷線。 */}
+                    <div
+                      className={`pd-scm-logrow${expanded === c.hash ? ' is-expanded' : ''}`}
+                      style={{ height: GRAPH_ROW_H }}
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={expanded === c.hash}
+                      aria-label={`commit：${c.subject}（點擊展開變更檔案）`}
+                      onMouseEnter={(e) => {
+                        cancelHoverClose();
+                        const r = e.currentTarget.getBoundingClientRect();
+                        setHover({ c, top: r.top, left: r.right + 8 });
+                      }}
+                      onMouseLeave={scheduleHoverClose}
+                      onClick={() => toggleExpand(c)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleExpand(c);
+                        }
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        cancelHoverClose();
+                        setHover(null);
+                        setCommitMenu({ c, x: e.clientX, y: e.clientY });
+                      }}
+                    >
+                      <GitGraphCell row={graph.rows[i]} width={graphW} />
+                      <div className="pd-scm-logtext">
+                        <span className="pd-scm-logsubject">{c.subject}</span>
+                        <span className="pd-scm-logmeta">
+                          {c.author} · {new Date(c.date).toLocaleString()} · {c.hash.slice(0, 7)}
+                        </span>
+                      </div>
+                    </div>
+                    {expanded === c.hash && (
+                      <div className="pd-scm-commitfiles" role="list" aria-label={`commit ${c.hash.slice(0, 7)} 變更檔案`}>
+                        {files === undefined ? (
+                          <div className="pd-scm-commitfiles-empty">載入中…</div>
+                        ) : files.length === 0 ? (
+                          <div className="pd-scm-commitfiles-empty">無檔案變更。</div>
+                        ) : (
+                          files.map((f) => (
+                            <button
+                              key={f.path}
+                              type="button"
+                              role="listitem"
+                              className="pd-scm-commitfile"
+                              aria-label={`開啟差異：${f.path}`}
+                              title={f.path}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (wsId) editorBus.openDiff({ wsId, path: f.path, staged: false, commit: c.hash, commitPath: f.path });
+                              }}
+                            >
+                              <span className={`pd-scm-cfstatus pd-scm-cf-${f.status}`} aria-hidden="true">
+                                {f.status}
+                              </span>
+                              <span className="pd-scm-cfpath">{f.path}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              });
             })()
           )}
-          {hover && <CommitHoverCard c={hover.c} top={hover.top} left={hover.left} />}
+          {hover && (
+            <CommitHoverCard
+              c={hover.c}
+              top={hover.top}
+              left={hover.left}
+              onEnter={cancelHoverClose}
+              onLeave={scheduleHoverClose}
+            />
+          )}
         </div>
       )}
 
@@ -627,17 +750,65 @@ export function SourceControlPanel(): React.JSX.Element {
           ))}
         </div>
       )}
+
+      {changeMenu && (
+        <div
+          className="pd-scm-ctxmenu"
+          role="menu"
+          aria-label="變更檔操作"
+          style={{ top: Math.min(changeMenu.y, window.innerHeight - 160), left: Math.min(changeMenu.x, window.innerWidth - 200) }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {(
+            [
+              [
+                changeMenu.c.staged ? '取消暫存' : '暫存',
+                () => void onStage(changeMenu.c.path, !changeMenu.c.staged),
+              ],
+              ['取消變更（捨棄）', () => void onDiscard([changeMenu.c.path], `「${changeMenu.c.path}」`)],
+              ['加到 .gitignore', () => void onIgnore([changeMenu.c.path])],
+            ] as [string, () => void][]
+          ).map(([label, act]) => (
+            <button
+              key={label}
+              type="button"
+              role="menuitem"
+              className="pd-scm-ctxitem"
+              onClick={() => {
+                setChangeMenu(null);
+                act();
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
 
-/** PE-1：commit hover 卡片（完整訊息 + 作者/時間/完整 hash）。固定定位於列右側、夾在視窗內。 */
-function CommitHoverCard({ c, top, left }: { c: GitLogEntry; top: number; left: number }): React.JSX.Element {
+/** PE-1：commit hover 卡片（完整訊息 + 作者/時間/完整 hash）。固定定位於列右側、夾在視窗內；可滑入滾動（延遲關閉）。 */
+function CommitHoverCard({
+  c,
+  top,
+  left,
+  onEnter,
+  onLeave,
+}: {
+  c: GitLogEntry;
+  top: number;
+  left: number;
+  onEnter: () => void;
+  onLeave: () => void;
+}): React.JSX.Element {
   return (
     <div
       className="pd-scm-hovercard"
       role="tooltip"
       style={{ top: Math.min(top, window.innerHeight - 220), left: Math.min(left, window.innerWidth - 340) }}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
     >
       <div className="pd-scm-hovercard-subject">{c.subject}</div>
       {c.body && <div className="pd-scm-hovercard-body">{c.body}</div>}
@@ -659,6 +830,7 @@ function ChangeGroup(props: {
   onAll?: () => void;
   allLabel: string;
   onOpen: (c: GitChange) => void;
+  onContext?: (c: GitChange, e: React.MouseEvent) => void;
 }): React.JSX.Element | null {
   if (props.items.length === 0) return null;
   return (
@@ -674,7 +846,18 @@ function ChangeGroup(props: {
         )}
       </div>
       {props.items.map((c) => (
-        <div key={`${c.staged}:${c.path}`} className="pd-row pd-scm-change">
+        <div
+          key={`${c.staged}:${c.path}`}
+          className="pd-row pd-scm-change"
+          onContextMenu={
+            props.onContext
+              ? (e) => {
+                  e.preventDefault();
+                  props.onContext?.(c, e);
+                }
+              : undefined
+          }
+        >
           <button
             className="pd-scm-changemain"
             aria-label={`檢視差異：${c.path}`}

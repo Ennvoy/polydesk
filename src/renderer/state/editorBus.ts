@@ -16,8 +16,10 @@ export interface OpenDiffRequest {
   path: string;
   /** 已暫存的差異（--cached）vs 未暫存（檔案 diff 用）。 */
   staged: boolean;
-  /** 若給＝開整個 commit 的 diff（git show <commit>）；此時 path 僅作顯示標籤（PE-1）。 */
+  /** 若給＝開 commit 的 diff（git show <commit>）；此時 path 僅作顯示標籤（PE-1）。 */
   commit?: string;
+  /** commit 模式下限定單一檔（git show <commit> -- <commitPath>）；點展開的檔案用（PE-1）。 */
+  commitPath?: string;
 }
 
 type Listener = (req: OpenFileRequest) => void;

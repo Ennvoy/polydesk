@@ -29,6 +29,8 @@ import {
 } from './gitSafeArgs';
 import { enqueue } from './gitSerialQueue';
 import { buildSpawnEnv } from '../security/spawnEnv';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join as pathJoin } from 'node:path';
 
 const GIT_BIN = 'git';
 const MAX_BUFFER = 64 * 1024 * 1024;
@@ -84,6 +86,25 @@ const NOT_REPO: GitStatus = {
 };
 
 /** porcelain v2 status code → GitChange.status。 */
+/** 解析 `diff-tree --name-status -z` 的 NUL 分隔輸出（rename/copy 取新路徑）。 */
+function parseNameStatusZ(out: string): { path: string; status: string }[] {
+  const toks = out.split('\0').filter((t) => t.length > 0);
+  const files: { path: string; status: string }[] = [];
+  let i = 0;
+  while (i < toks.length) {
+    const status = toks[i++];
+    if (status === undefined) break;
+    const code = status[0] ?? '?';
+    if ((code === 'R' || code === 'C') && i + 1 < toks.length) {
+      i++; // 舊路徑（略）
+      files.push({ path: toks[i++] ?? '', status: code }); // 新路徑
+    } else {
+      files.push({ path: toks[i++] ?? '', status: code });
+    }
+  }
+  return files;
+}
+
 function mapCode(c: string): GitChange['status'] {
   switch (c) {
     case 'A':
@@ -262,11 +283,87 @@ export class GitService {
     ];
     try {
       const { stdout } = await this.run(withPathspecs(base, [path]), { cwd, env: readEnv() });
+      if (staged || stdout.trim().length > 0) return { patch: stdout };
+      // 非 staged 且空 → 可能是 untracked 檔（git diff 不顯示未追蹤）→ 顯示「整檔新增」（like VSCode）。
+      if (await this.isUntracked(cwd, path)) return { patch: await this.noIndexDiff(cwd, path) };
       return { patch: stdout };
     } catch (e) {
       if (isNotARepo(e)) return { patch: '' };
       throw e;
     }
+  }
+
+  /** 該 path 是否未被 git 追蹤（ls-files --error-unmatch 退出非零＝untracked）。 */
+  private async isUntracked(cwd: string, path: string): Promise<boolean> {
+    try {
+      await this.run(withPathspecs([...readHardeningArgs(), 'ls-files', '--error-unmatch'], [path]), {
+        cwd,
+        env: readEnv(),
+      });
+      return false;
+    } catch {
+      return true;
+    }
+  }
+
+  /** untracked 檔的「整檔新增」diff（git diff --no-index 對比 /dev/null；有差異會 exit 1，從 stdout 取 patch）。 */
+  private async noIndexDiff(cwd: string, path: string): Promise<string> {
+    try {
+      const { stdout } = await this.run(
+        [...readHardeningArgs(), 'diff', '--no-index', '--no-color', '--no-textconv', '--', '/dev/null', path],
+        { cwd, env: readEnv() },
+      );
+      return stdout;
+    } catch (e) {
+      if (e instanceof GitError) return e.stdout; // --no-index 有差異 exit 1，stdout 才是 patch 本體
+      throw e;
+    }
+  }
+
+  /** PE-2：取消變更（discard）——tracked 用 checkout HEAD 還原、untracked 用 clean -fd 刪除（破壞性，前端附確認）。 */
+  async discard(wsId: string, paths: string[]): Promise<{ ok: true }> {
+    const cwd = this.path(wsId);
+    if (!cwd) throw new Error('workspace not found');
+    if (paths.length === 0) return { ok: true };
+    const tracked: string[] = [];
+    const untracked: string[] = [];
+    for (const p of paths) {
+      if (await this.isUntracked(cwd, p)) untracked.push(p);
+      else tracked.push(p);
+    }
+    if (tracked.length > 0) {
+      // checkout HEAD -- <paths>：index + 工作樹都還原到 HEAD（徹底丟棄該檔變更）。
+      await this.run(withPathspecs([...readHardeningArgs(), 'checkout', 'HEAD'], tracked), { cwd, env: writeEnv() });
+    }
+    if (untracked.length > 0) {
+      // clean -fd -- <paths>：只刪指定的 untracked 檔/目錄（git 內建限 repo 內 + literal pathspec）。
+      await this.run(withPathspecs([...readHardeningArgs(), 'clean', '-fd'], untracked), { cwd, env: writeEnv() });
+    }
+    return { ok: true };
+  }
+
+  /** PE-2：將路徑加入工作區根 .gitignore（去重、各一行、確保結尾換行；非執行、純檔寫入）。 */
+  async ignore(wsId: string, paths: string[]): Promise<{ ok: true }> {
+    const cwd = this.path(wsId);
+    if (!cwd) throw new Error('workspace not found');
+    const giPath = pathJoin(cwd, '.gitignore');
+    let existing = '';
+    try {
+      existing = await readFile(giPath, 'utf8');
+    } catch {
+      /* 無 .gitignore → 新建 */
+    }
+    const have = new Set(
+      existing
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0),
+    );
+    const toAdd = paths.map((p) => p.replace(/\\/g, '/')).filter((p) => p.length > 0 && !have.has(p));
+    if (toAdd.length === 0) return { ok: true };
+    const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+    await writeFile(giPath, `${existing}${prefix}${toAdd.join('\n')}\n`, 'utf8');
+    return { ok: true };
   }
 
   /** REQ-SCM-004：stage / unstage（literal pathspec；add 不觸發 hook）。 */
@@ -371,16 +468,33 @@ export class GitService {
     return { ok: true };
   }
 
-  /** PE-1：單一 commit 完整 diff（git show <ref>，唯讀；ref 經 validateRef 擋注入、--no-textconv 防 RCE）。 */
-  async show(wsId: string, ref: string): Promise<{ patch: string }> {
+  /** PE-1：commit diff（git show <ref>；給 path 則限定單檔）。ref validateRef、path 走 literal pathspec、--no-textconv 防 RCE。 */
+  async show(wsId: string, ref: string, path?: string): Promise<{ patch: string }> {
     const cwd = this.path(wsId);
     if (!cwd) throw new Error('workspace not found');
     if (!validateRef(ref)) throw new Error('invalid ref');
-    const { stdout } = await this.run(
-      [...readHardeningArgs(), 'show', '--no-textconv', '--no-color', ref as string],
-      { cwd, env: readEnv() },
-    );
+    // --format=：抑制 commit header，只留 diff（parseUnifiedDiff 反正跳過 header，但較乾淨）。
+    const base = [...readHardeningArgs(), 'show', '--no-textconv', '--no-color', '--format=', ref as string];
+    const args = path !== undefined ? withPathspecs(base, [path]) : base;
+    const { stdout } = await this.run(args, { cwd, env: readEnv() });
     return { patch: stdout };
+  }
+
+  /** PE-1：某 commit 變更的檔案清單 + 狀態（點 commit 展開用；diff-tree -z 解析，空 repo/初始 commit 安全）。 */
+  async commitFiles(wsId: string, ref: string): Promise<{ files: { path: string; status: string }[] }> {
+    const cwd = this.path(wsId);
+    if (!cwd) return { files: [] };
+    if (!validateRef(ref)) throw new Error('invalid ref');
+    try {
+      const { stdout } = await this.run(
+        [...readHardeningArgs(), 'diff-tree', '--no-commit-id', '--name-status', '-r', '-z', '--root', ref as string],
+        { cwd, env: readEnv() },
+      );
+      return { files: parseNameStatusZ(stdout) };
+    } catch (e) {
+      if (isNotARepo(e)) return { files: [] };
+      throw e;
+    }
   }
 
   /** REQ-SCM：歷史（NUL 分隔 record + unit-separator 欄位；空 repo 回 []）。 */
@@ -468,6 +582,12 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
   ipc.handle('git:stage', (_e, req: InvokeReq<'git:stage'>) =>
     enqueue(req.wsId, () => svc.stage(req.wsId, req.paths, req.staged)),
   );
+  ipc.handle('git:discard', (_e, req: InvokeReq<'git:discard'>) =>
+    enqueue(req.wsId, () => svc.discard(req.wsId, req.paths)),
+  );
+  ipc.handle('git:ignore', (_e, req: InvokeReq<'git:ignore'>) =>
+    enqueue(req.wsId, () => svc.ignore(req.wsId, req.paths)),
+  );
   ipc.handle('git:commit', (_e, req: InvokeReq<'git:commit'>) =>
     enqueue(req.wsId, () => svc.commit(req.wsId, req.message)),
   );
@@ -484,7 +604,10 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
     enqueue(req.wsId, () => svc.log(req.wsId, req.limit)),
   );
   ipc.handle('git:show', (_e, req: InvokeReq<'git:show'>) =>
-    enqueue(req.wsId, () => svc.show(req.wsId, req.ref)),
+    enqueue(req.wsId, () => svc.show(req.wsId, req.ref, req.path)),
+  );
+  ipc.handle('git:commitFiles', (_e, req: InvokeReq<'git:commitFiles'>) =>
+    enqueue(req.wsId, () => svc.commitFiles(req.wsId, req.ref)),
   );
   ipc.handle('git:stash', (_e, req: InvokeReq<'git:stash'>) =>
     enqueue(req.wsId, () => svc.stash(req.wsId, req.op, req.includeUntracked)),
