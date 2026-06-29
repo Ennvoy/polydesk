@@ -310,7 +310,8 @@ export function SourceControlPanel(): React.JSX.Element {
   const onStash = (op: 'push' | 'pop'): Promise<void> =>
     run(async () => {
       if (!wsId) return;
-      await ipc.git.stash({ wsId, op });
+      // push 帶 -u（含 untracked）：與變更清單顯示一致（含新檔），不會「點了沒反應」；pop 忽略此旗標。
+      await ipc.git.stash({ wsId, op, includeUntracked: true });
       await refresh();
     });
 
