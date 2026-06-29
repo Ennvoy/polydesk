@@ -58,7 +58,7 @@ test('a11y：開工作區 + 開檔 + 終端機 主介面無 serious/critical 違
   await page.getByText('note.txt', { exact: true }).first().click();
   await expect(page.locator('.monaco-editor').first()).toBeVisible({ timeout: 15000 });
   await page.locator('button[aria-label="新增終端機"]').click();
-  await expect(page.locator('[role="tab"][aria-label^="PowerShell 終端機"]')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.pd-term-pane-label', { hasText: 'PowerShell' }).first()).toBeVisible({ timeout: 15000 });
 
   // monaco 內部自有 a11y 處理，排除其子樹避免雜訊（聚焦 app 自有 UI）。
   const v = await scanSerious(page, '.monaco-editor');

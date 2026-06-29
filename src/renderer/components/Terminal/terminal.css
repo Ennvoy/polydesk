@@ -1,0 +1,77 @@
+/* 終端機 split（react-resizable-panels）：每 pane 迷你標頭 + 輸出區 + 可拖曳分隔條。 */
+
+.pd-term-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+.pd-term-pane-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  padding: 2px var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--fg-2);
+  background: var(--surface-2, rgba(127, 127, 127, 0.06));
+  border-bottom: 1px solid var(--border);
+}
+.pd-term-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+.pd-term-pane-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pd-term-tab-close {
+  flex-shrink: 0;
+  cursor: pointer;
+  color: var(--meta);
+  font-size: var(--text-base);
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+}
+.pd-term-tab-close:hover {
+  color: var(--danger, #e5484d);
+  background: var(--hover, rgba(127, 127, 127, 0.12));
+}
+.pd-term-pane-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 拖曳分隔條：並排（左右）= 直立細條 col-resize；上下 = 橫向細條 row-resize。hover/拖曳時高亮。 */
+.pd-term-handle-h,
+.pd-term-handle-v {
+  flex-shrink: 0;
+  background: var(--border);
+  transition: background 0.12s var(--ease-standard, ease);
+}
+.pd-term-handle-h {
+  width: 5px;
+  cursor: col-resize;
+}
+.pd-term-handle-v {
+  height: 5px;
+  cursor: row-resize;
+}
+.pd-term-handle-h:hover,
+.pd-term-handle-v:hover,
+.pd-term-handle-h[data-resize-handle-active],
+.pd-term-handle-v[data-resize-handle-active] {
+  background: var(--accent, #6e8efb);
+}
+.pd-term-handle-h:focus-visible,
+.pd-term-handle-v:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

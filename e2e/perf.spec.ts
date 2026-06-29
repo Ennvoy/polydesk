@@ -108,7 +108,7 @@ test('REQ-PERF-002/003/004 切換 / 開檔 / 按鍵 p95', async () => {
 
   // 按鍵延遲：開終端機、聚焦 xterm、逐鍵輸入（PTY echo 回流記一次往返延遲）。
   await page.locator('button[aria-label="新增終端機"]').click();
-  await expect(page.locator('[role="tab"][aria-label^="PowerShell 終端機"]')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.pd-term-pane-label', { hasText: 'PowerShell' }).first()).toBeVisible({ timeout: 15000 });
   await page.locator('.xterm-screen, .xterm').first().click();
   await page.waitForTimeout(500);
   for (let i = 0; i < N_KEY; i++) {

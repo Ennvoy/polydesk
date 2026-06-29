@@ -16,7 +16,7 @@ test('開終端機 → 重設版面 → 終端機面板不被重建（分頁/PTY
   await page.locator('button[aria-label="開啟工作區 rl-ws"]').click();
 
   await page.locator('button[aria-label="新增終端機"]').click();
-  const tab = page.locator('[role="tab"][aria-label^="PowerShell 終端機"]');
+  const tab = page.locator('.pd-term-pane-label', { hasText: 'PowerShell' }).first();
   await expect(tab).toBeVisible({ timeout: 15000 });
   const termView = page.locator('.pd-term-view').first();
   await expect(termView).toBeVisible({ timeout: 10000 });
