@@ -6,6 +6,7 @@ import {
   readHardeningArgs,
   readEnv,
   writeEnv,
+  networkEnv,
   literalPathspec,
   withPathspecs,
 } from './gitSafeArgs';
@@ -86,6 +87,14 @@ describe('read 類硬化 helpers（A2）', () => {
     expect(e.GIT_CONFIG_NOSYSTEM).toBe('1');
     expect(e.GIT_TERMINAL_PROMPT).toBe('0');
     expect(e.GIT_CONFIG_GLOBAL).toBeUndefined();
+  });
+
+  it('networkEnv 放行 system（GCM credential helper 可用）但仍以 env-config 覆蓋 fsmonitor + 關終端提示', () => {
+    const e = networkEnv();
+    expect(e.GIT_CONFIG_NOSYSTEM).toBeUndefined(); // 不禁 system → Git for Windows 的 GCM 啟用設定可被讀到
+    expect(e.GIT_TERMINAL_PROMPT).toBe('0'); // 仍不卡互動式 terminal 認證（GCM 走 GUI、不受此影響）
+    expect(e.GIT_CONFIG_KEY_0).toBe('core.fsmonitor'); // 惡意 fsmonitor 仍被最高優先序 env-config 覆蓋
+    expect(e.GIT_CONFIG_VALUE_0).toBe('false');
   });
 });
 

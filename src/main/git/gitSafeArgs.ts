@@ -96,6 +96,25 @@ export function writeEnv(): NodeJS.ProcessEnv {
   };
 }
 
+/**
+ * 網路操作（pull/push/fetch）環境：與 writeEnv 同樣以 env-config（最高優先序）覆蓋關 fsmonitor
+ * （擋 repo-local .git/config 的 fsmonitor=<cmd> 零點擊 RCE）+ 關終端機提示（不卡互動式認證、失敗回明確
+ * error），但「刻意不設」GIT_CONFIG_NOSYSTEM —— 因為 Git for Windows 的 credential helper（GCM）啟用設定
+ * `credential.helper=manager` 預設寫在 system config；禁 system config 會連 GCM 一起擋掉 → HTTPS remote
+ * 認證 fatal（could not read Username）。放行 system config 的取捨：它位於安裝目錄
+ * （C:\\Program Files\\Git\\etc\\gitconfig）/ /etc/gitconfig，寫入需 admin/root＝在「惡意 repo」威脅模型之外；
+ * 且惡意 fsmonitor 仍被下方 env-config 覆蓋擋住。讓 SCM 的 pull/push 直接沿用使用者既有的系統認證工具，
+ * 免每台機器/每個 repo 手動補 global config。
+ */
+export function networkEnv(): NodeJS.ProcessEnv {
+  return {
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'core.fsmonitor',
+    GIT_CONFIG_VALUE_0: 'false',
+  };
+}
+
 /** 使用者路徑一律當 literal pathspec（A4：令 :(exclude)/:/:! magic 不生效）。 */
 export function literalPathspec(path: string): string {
   return `:(literal)${path}`;

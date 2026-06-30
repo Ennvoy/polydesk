@@ -25,6 +25,7 @@ import {
   readHardeningArgs,
   readEnv,
   writeEnv,
+  networkEnv,
   withPathspecs,
 } from './gitSafeArgs';
 import { enqueue } from './gitSerialQueue';
@@ -293,6 +294,29 @@ export class GitService {
     }
   }
 
+  /** 取整個 staged diff（git diff --cached），供 AI 產生 commit message。超 maxChars 截斷並附 --stat 摘要。 */
+  async stagedDiff(wsId: string, maxChars: number): Promise<{ patch: string; truncated: boolean }> {
+    const cwd = this.path(wsId);
+    if (!cwd) return { patch: '', truncated: false };
+    const base = [...readHardeningArgs(), 'diff', '--cached', '--no-color', '--no-textconv'];
+    try {
+      const { stdout } = await this.run(base, { cwd, env: readEnv() });
+      if (stdout.length <= maxChars) return { patch: stdout, truncated: false };
+      // 超量：截斷 patch + 附完整 --stat 摘要，讓 AI 仍知全貌。
+      let stat = '';
+      try {
+        const r = await this.run([...readHardeningArgs(), 'diff', '--cached', '--stat'], { cwd, env: readEnv() });
+        stat = r.stdout;
+      } catch {
+        /* stat 取不到：略過摘要 */
+      }
+      return { patch: `${stdout.slice(0, maxChars)}\n\n…（diff 已截斷，以下為完整檔案統計）…\n${stat}`, truncated: true };
+    } catch (e) {
+      if (isNotARepo(e)) return { patch: '', truncated: false };
+      throw e;
+    }
+  }
+
   /** 該 path 是否未被 git 追蹤（ls-files --error-unmatch 退出非零＝untracked）。 */
   private async isUntracked(cwd: string, path: string): Promise<boolean> {
     try {
@@ -410,7 +434,7 @@ export class GitService {
     const cwd = this.path(wsId);
     if (!cwd) return { error: 'workspace not found' };
     try {
-      await this.run(args, { cwd, env: writeEnv(), timeoutMs: GIT_NETWORK_TIMEOUT_MS });
+      await this.run(args, { cwd, env: networkEnv(), timeoutMs: GIT_NETWORK_TIMEOUT_MS });
       return { ok: true };
     } catch (e) {
       if (e instanceof GitError && e.timedOut) return { error: `${label}逾時` };

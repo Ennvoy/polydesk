@@ -8,7 +8,7 @@ import { ipc } from '../../ipc/client';
 import { useAppState } from '../../state/appStore';
 import { dialog } from '../Dialogs/host';
 import { editorBus } from '../../state/editorBus';
-import type { GitStatus, GitChange, GitLogEntry } from '../../../shared/types';
+import type { GitStatus, GitChange, GitLogEntry, AiEngine } from '../../../shared/types';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
 
 type Tab = 'changes' | 'history' | 'branches';
@@ -103,6 +103,8 @@ export function SourceControlPanel(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [genBusy, setGenBusy] = useState(false); // ✨ 智慧產生進行中（與 commit busy 分離，不互卡）
+  const [engine, setEngine] = useState<AiEngine>('claude');
   const [tab, setTab] = useState<Tab>('changes');
   const [log, setLog] = useState<GitLogEntry[]>([]);
   const [branches, setBranches] = useState<{ list: string[]; current: string }>({ list: [], current: '' });
@@ -137,6 +139,16 @@ export function SourceControlPanel(): React.JSX.Element {
     setTab('changes');
     void refresh();
   }, [refresh]);
+
+  // 掛載時讀回持久化的「智慧產生引擎」設定。
+  useEffect(() => {
+    void ipc.store
+      .getState()
+      .then((s) => {
+        if (s.aiCommit?.engine) setEngine(s.aiCommit.engine);
+      })
+      .catch(() => undefined);
+  }, []);
 
   // REQ-MON-005：訂閱該工作區檔案系統變動 → 去抖自動刷新 git 狀態（工作樹變動即反映，不自設 timer/輪詢）。
   // 用 fs:change（FileWatcher 真會發；舊版誤訂從不觸發的 git:statusUpdate → 背景刷新靜默失效）。
@@ -237,6 +249,27 @@ export function SourceControlPanel(): React.JSX.Element {
       setMessage('');
       await refresh();
     });
+
+  // ✨ 智慧產生 commit 訊息：後端取 staged diff → 選定引擎產生 → 回填訊息框（只回填、不自動 commit）。
+  const onGenerateMsg = useCallback(async (): Promise<void> => {
+    if (!wsId) return;
+    setGenBusy(true);
+    setError(null);
+    try {
+      const r = await ipc.ai.generateCommitMessage({ wsId });
+      if ('error' in r) setError(r.error);
+      else setMessage(r.message);
+    } catch (e) {
+      setError(errText(e));
+    } finally {
+      setGenBusy(false);
+    }
+  }, [wsId]);
+
+  const onEngineChange = useCallback((next: AiEngine): void => {
+    setEngine(next);
+    void ipc.store.setAiCommit({ cfg: { engine: next } }).catch(() => undefined);
+  }, []);
 
   const onPush = (): Promise<void> =>
     run(async () => {
@@ -526,14 +559,41 @@ export function SourceControlPanel(): React.JSX.Element {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
             />
-            <button
-              className="pd-btn pd-btn-primary pd-scm-commitbtn"
-              aria-label="提交（commit）"
-              onClick={() => void onCommit()}
-              disabled={busy || staged.length === 0 || message.trim().length === 0}
+            <div
+              className="pd-scm-commit-actions"
+              style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginTop: 'var(--space-1)' }}
             >
-              {busy ? '提交中…' : `提交 (${staged.length})`}
-            </button>
+              {/* ✨ 智慧產生（依已暫存變更 + 選定引擎）→ 只回填訊息框，不自動 commit */}
+              <button
+                className="pd-btn"
+                aria-label="智慧產生 commit 訊息（依已暫存的變更）"
+                title={`用 ${engine === 'codex' ? 'Codex' : 'Claude'} 依已暫存變更產生 commit 訊息`}
+                onClick={() => void onGenerateMsg()}
+                disabled={genBusy || busy}
+                style={{ padding: '2px 10px', flexShrink: 0 }}
+              >
+                {genBusy ? '產生中…' : '✨ 產生'}
+              </button>
+              <select
+                className="pd-input"
+                aria-label="commit 訊息產生引擎"
+                value={engine}
+                onChange={(e) => onEngineChange(e.target.value as AiEngine)}
+                style={{ width: 'auto', padding: '2px 6px', flexShrink: 0 }}
+              >
+                <option value="claude">Claude</option>
+                <option value="codex">Codex</option>
+              </select>
+              <button
+                className="pd-btn pd-btn-primary pd-scm-commitbtn"
+                aria-label="提交（commit）"
+                onClick={() => void onCommit()}
+                disabled={busy || staged.length === 0 || message.trim().length === 0}
+                style={{ marginLeft: 'auto', flexShrink: 0 }}
+              >
+                {busy ? '提交中…' : `提交 (${staged.length})`}
+              </button>
+            </div>
           </div>
 
           {changes.length > 0 && (
