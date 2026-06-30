@@ -5,6 +5,7 @@ import {
   matchWorkspace,
   computeWorkspaceState,
   aggregateWorkspaceStates,
+  aggregateByTool,
   type SessionStatus,
 } from './claudeHookState';
 
@@ -68,5 +69,35 @@ describe('claudeHookState', () => {
     expect(out.get('a')).toBe('running');
     expect(out.get('b')).toBe('stopped-await'); // 子目錄歸戶到 b
     expect(out.get('c')).toBe('idle');
+  });
+
+  it('aggregateByTool：每工作區×工具各算狀態（cwd 歸戶 + tool 分組）', () => {
+    const wss = [
+      { id: 'a', path: 'C:/proj/a' },
+      { id: 'b', path: 'C:/proj/b' },
+    ];
+    const now = Date.now();
+    const sessions: SessionStatus[] = [
+      { sessionId: 'c1', cwd: 'C:/proj/a', state: 'working', ts: now, tool: 'claude' },
+      { sessionId: 'x1', cwd: 'C:/proj/a', state: 'done', ts: now, tool: 'codex' },
+      { sessionId: 'c2', cwd: 'C:/proj/b', state: 'awaiting', ts: now, tool: 'claude' },
+    ];
+    const out = aggregateByTool(wss, sessions, () => true, now);
+    expect(out.get('a')?.get('claude')).toBe('running');
+    expect(out.get('a')?.get('codex')).toBe('done');
+    expect(out.get('b')?.get('claude')).toBe('stopped-await');
+    expect(out.get('b')?.get('codex')).toBe('idle'); // b 無 codex session
+  });
+
+  it('aggregateByTool：無 alive PTY → 該工作區所有工具 idle；tool undefined 視為 claude', () => {
+    const wss = [{ id: 'a', path: 'C:/proj/a' }];
+    const now = Date.now();
+    const sessions: SessionStatus[] = [
+      { sessionId: 'c1', cwd: 'C:/proj/a', state: 'working', ts: now }, // 無 tool → claude
+      { sessionId: 'x1', cwd: 'C:/proj/a', state: 'working', ts: now, tool: 'codex' },
+    ];
+    expect(aggregateByTool(wss, sessions, () => false, now).get('a')?.get('claude')).toBe('idle');
+    expect(aggregateByTool(wss, sessions, () => false, now).get('a')?.get('codex')).toBe('idle');
+    expect(aggregateByTool(wss, sessions, () => true, now).get('a')?.get('claude')).toBe('running'); // undefined→claude
   });
 });

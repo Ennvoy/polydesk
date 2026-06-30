@@ -10,13 +10,14 @@ import type { WorkspaceManager } from '../workspace/WorkspaceManager';
 import type { PtyManager } from '../pty/PtyManager';
 import type { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
 import type { EventChannels } from '../../shared/ipc';
-import type { ClaudeState } from '../../shared/types';
+import type { AiTool, ClaudeState } from '../../shared/types';
 import { emit } from '../ipc/broadcast';
 import { Notification } from 'electron';
 import { readdir, readFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
-import { aggregateWorkspaceStates, type SessionStatus } from './claudeHookState';
+import { aggregateByTool, AI_TOOLS, type SessionStatus } from './claudeHookState';
+import { readCodexSessions } from './codexRollout';
 import { claudePaths } from '../claude/statusHooks';
 
 /** 週期重算間隔（cheap：只讀已快取 sessions + pidsOf，不掃整機程序）。catches 關終端機→idle。 */
@@ -49,6 +50,8 @@ export interface ClaudeStatusMonitorOptions {
   recomputeMs?: number;
   notifyAwait?: AwaitNotifier;
   readSessions?: SessionReader;
+  /** codex rollout 來源（預設掃 ~/.codex/sessions）；測試可注入。 */
+  readCodex?: SessionReader;
   watchFactory?: WatchFactory;
 }
 
@@ -64,6 +67,7 @@ export class ClaudeStatusMonitor {
   private readonly recomputeMs: number;
   private readonly notifyAwait: AwaitNotifier;
   private readonly readSessions: SessionReader;
+  private readonly readCodex: SessionReader;
   private readonly watchFactory: WatchFactory;
 
   constructor(
@@ -76,9 +80,10 @@ export class ClaudeStatusMonitor {
     this.recomputeMs = opts.recomputeMs ?? DEFAULT_RECOMPUTE_MS;
     this.notifyAwait = opts.notifyAwait ?? defaultNotifyAwait;
     this.readSessions = opts.readSessions ?? (() => this.defaultReadSessions());
+    this.readCodex = opts.readCodex ?? (() => readCodexSessions());
     this.watchFactory = opts.watchFactory ?? defaultWatchFactory;
     opts.lifecycle?.register('monitor', (wsId) => {
-      this.lastState.delete(wsId);
+      for (const tool of AI_TOOLS) this.lastState.delete(`${wsId}::${tool}`);
     });
   }
 
@@ -115,14 +120,17 @@ export class ClaudeStatusMonitor {
     if (this.recomputing) return;
     this.recomputing = true;
     try {
-      let sessions: SessionStatus[] = [];
-      try {
-        sessions = await this.readSessions();
-      } catch {
-        sessions = [];
+      const now = Date.now();
+      // claude（hook 狀態檔）+ codex（rollout 解析）兩來源並行讀、各自容錯。
+      const [claudeSessions, codexSessions] = await Promise.all([
+        this.readSessions().catch(() => [] as SessionStatus[]),
+        this.readCodex().catch(() => [] as SessionStatus[]),
+      ]);
+      const sessions = [...claudeSessions, ...codexSessions];
+      const byWsTool = aggregateByTool(this.workspaces.list(), sessions, (id) => this.pty.pidsOf(id).length > 0, now);
+      for (const [wsId, toolMap] of byWsTool) {
+        for (const [tool, state] of toolMap) this.applyState(wsId, tool, state);
       }
-      const states = aggregateWorkspaceStates(this.workspaces.list(), sessions, (id) => this.pty.pidsOf(id).length > 0);
-      for (const [wsId, state] of states) this.applyState(wsId, state);
     } finally {
       this.recomputing = false;
     }
@@ -148,6 +156,7 @@ export class ClaudeStatusMonitor {
             cwd: j.cwd,
             state: j.state as SessionStatus['state'],
             ts: typeof j.ts === 'number' ? j.ts : 0,
+            tool: 'claude',
           });
         }
       } catch {
@@ -158,11 +167,12 @@ export class ClaudeStatusMonitor {
   }
 
   /** 狀態變才 emit（去抖，REQ-MON-006）；running→stopped-await（待確認）推桌面通知。 */
-  private applyState(wsId: string, state: ClaudeState): void {
-    const prev = this.lastState.get(wsId) ?? 'idle';
+  private applyState(wsId: string, tool: AiTool, state: ClaudeState): void {
+    const key = `${wsId}::${tool}`;
+    const prev = this.lastState.get(key) ?? 'idle';
     if (prev === state) return;
-    this.lastState.set(wsId, state);
-    this.emitFn({ wsId, status: { state } });
+    this.lastState.set(key, state);
+    this.emitFn({ wsId, tool, status: { state } });
     if (prev !== 'stopped-await' && state === 'stopped-await') {
       const name = this.workspaces.list().find((w) => w.id === wsId)?.name ?? wsId;
       this.notifyAwait({ wsId, name });

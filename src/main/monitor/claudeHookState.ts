@@ -1,14 +1,16 @@
 // Claude hook 狀態聚合（純函式，可單測）。把各 session 的 hook 狀態（working/awaiting/done）對應到
 // 工作區的 ClaudeState：cwd→工作區（最長路徑前綴）、綜合多 session 取優先序、無 alive PTY 一律 idle。
 
-import type { ClaudeState } from '../../shared/types';
+import type { AiTool, ClaudeState } from '../../shared/types';
 
-/** 單一 claude session 的 hook 狀態（由 hook 腳本寫的狀態檔）。 */
+/** 單一 AI session 的狀態（claude 由 hook 腳本寫的狀態檔；codex 由解析 rollout 得出）。 */
 export interface SessionStatus {
   sessionId: string;
   cwd: string;
   state: 'working' | 'awaiting' | 'done';
   ts: number;
+  /** 來源工具；undefined 視為 claude（向後相容既有 hook 狀態檔來源）。 */
+  tool?: AiTool;
 }
 
 /** hook 狀態字串 → ClaudeState（未知 → idle）。 */
@@ -91,6 +93,41 @@ export function aggregateWorkspaceStates(
   const out = new Map<string, ClaudeState>();
   for (const ws of workspaces) {
     out.set(ws.id, computeWorkspaceState(hasAlivePty(ws.id), byWs.get(ws.id) ?? [], now));
+  }
+  return out;
+}
+
+/** 監控涵蓋的工具（每工作區都對這些工具各算一個狀態）。 */
+export const AI_TOOLS: readonly AiTool[] = ['claude', 'codex'];
+
+/**
+ * 工具中立聚合：每個 session 依 cwd 歸戶工作區、依 tool 分組，逐 (工作區,工具) 算綜合狀態。
+ * 回 Map<wsId, Map<tool, ClaudeState>>（每工作區涵蓋 AI_TOOLS 全部工具，無 session→idle）。
+ * idle 閘門（hasAlivePty）工具中立：無 alive PTY 則該工作區所有工具皆 idle。
+ */
+export function aggregateByTool(
+  workspaces: readonly { id: string; path: string }[],
+  sessions: readonly SessionStatus[],
+  hasAlivePty: (wsId: string) => boolean,
+  now: number = Date.now(),
+): Map<string, Map<AiTool, ClaudeState>> {
+  const byKey = new Map<string, SessionStatus[]>(); // key = `${wsId}::${tool}`
+  for (const s of sessions) {
+    const wsId = matchWorkspace(s.cwd, workspaces);
+    if (!wsId) continue;
+    const key = `${wsId}::${s.tool ?? 'claude'}`;
+    const arr = byKey.get(key);
+    if (arr) arr.push(s);
+    else byKey.set(key, [s]);
+  }
+  const out = new Map<string, Map<AiTool, ClaudeState>>();
+  for (const ws of workspaces) {
+    const alive = hasAlivePty(ws.id);
+    const toolMap = new Map<AiTool, ClaudeState>();
+    for (const tool of AI_TOOLS) {
+      toolMap.set(tool, computeWorkspaceState(alive, byKey.get(`${ws.id}::${tool}`) ?? [], now));
+    }
+    out.set(ws.id, toolMap);
   }
   return out;
 }

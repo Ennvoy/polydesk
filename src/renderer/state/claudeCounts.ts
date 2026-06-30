@@ -14,7 +14,7 @@ export function useClaudeCounts(): ClaudeCounts {
   const [states, setStates] = useState<Record<string, ClaudeState>>({});
   useEffect(() => {
     return ipc.events.claude.status((p) => {
-      setStates((prev) => ({ ...prev, [p.wsId]: p.status?.state ?? 'idle' }));
+      setStates((prev) => ({ ...prev, [`${p.wsId}::${p.tool}`]: p.status?.state ?? 'idle' }));
     });
   }, []);
   const vals = Object.values(states);

@@ -5,6 +5,7 @@ import type {
   Workspace,
   WorkspaceInput,
   ClaudeStatus,
+  AiTool,
   GitStatus,
   GitChange,
   GitLogEntry,
@@ -118,7 +119,7 @@ export interface StreamChannels {
 
 /** event 通道：main 主動 `webContents.send` 推播；payload 一律帶 wsId 以路由面板。 */
 export interface EventChannels {
-  'claude:status': { wsId: string; status: ClaudeStatus };
+  'claude:status': { wsId: string; tool: AiTool; status: ClaudeStatus };
   'fs:change': { wsId: string; path: string; kind: 'add' | 'change' | 'unlink' };
   'pty:exit': { termId: string; exitCode: number };
   'search:result': { searchId: string; hits: SearchHit[]; done: boolean; truncated: boolean };

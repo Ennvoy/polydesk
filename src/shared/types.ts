@@ -12,6 +12,8 @@ export type Eol = 'crlf' | 'lf';
  *  done=已停止（Stop，整個回合完成沒事做）、idle=未啟動（無 claude session）。
  */
 export type ClaudeState = 'running' | 'stopped-await' | 'done' | 'idle';
+/** 受監控的 AI 工具（claude 由 hook 狀態檔；codex 由解析其 rollout JSONL）。 */
+export type AiTool = 'claude' | 'codex';
 export interface ClaudeStatus {
   state: ClaudeState;
   pid?: number;

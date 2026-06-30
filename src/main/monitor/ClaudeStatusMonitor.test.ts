@@ -32,6 +32,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
     const emitted: StatusEvent[] = [];
     const mon = new ClaudeStatusMonitor(workspaces, pty, (p) => emitted.push(p), {
       readSessions: async () => sessions,
+      readCodex: async () => [],
       watchFactory: noWatch,
     });
     await mon.recompute();
@@ -47,6 +48,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
     const emitted: StatusEvent[] = [];
     const mon = new ClaudeStatusMonitor(workspaces, pty, (p) => emitted.push(p), {
       readSessions: async () => sessions,
+      readCodex: async () => [],
       watchFactory: noWatch,
     });
     await mon.recompute();
@@ -64,6 +66,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
     const emitted: StatusEvent[] = [];
     const mon = new ClaudeStatusMonitor(workspaces, pty, (p) => emitted.push(p), {
       readSessions: async () => sessions,
+      readCodex: async () => [],
       watchFactory: noWatch,
       notifyAwait: (i) => notes.push(i),
     });
@@ -87,6 +90,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
       readSessions: async () => {
         throw new Error('讀檔失敗');
       },
+      readCodex: async () => [],
       watchFactory: noWatch,
     });
     await expect(mon.recompute()).resolves.toBeUndefined();

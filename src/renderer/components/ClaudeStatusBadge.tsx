@@ -10,14 +10,18 @@
 
 import React, { useEffect, useState } from 'react';
 import { ipc } from '../ipc/client';
-import type { ClaudeState } from '../../shared/types';
+import type { AiTool, ClaudeState } from '../../shared/types';
 
 const VIEW: Record<ClaudeState, { color: string; label: string; pulse: boolean }> = {
   running: { color: 'var(--success)', label: '執行中', pulse: true }, // 跑工具/subagent/workflow
   'stopped-await': { color: 'var(--warn)', label: '待確認', pulse: true }, // 問你問題/要權限（需注意 → 脈動）
   done: { color: 'var(--info, #5b9bd5)', label: '已停止', pulse: false }, // 整個回合完成、你的回合
-  idle: { color: 'var(--meta)', label: '未啟動', pulse: false }, // 無 claude session
+  idle: { color: 'var(--meta)', label: '未啟動', pulse: false }, // 無 AI session
 };
+
+/** 多工具取最高優先態（執行中 > 待確認 > 已停止 > 未啟動）。 */
+const RANK: Record<ClaudeState, number> = { running: 3, 'stopped-await': 2, done: 1, idle: 0 };
+const TOOL_LABEL: Record<AiTool, string> = { claude: 'Claude', codex: 'Codex' };
 
 const STYLE_ID = 'pdws-claude-badge-style';
 function ensureStyle(): void {
@@ -34,23 +38,30 @@ function ensureStyle(): void {
 }
 
 export function ClaudeStatusBadge({ wsId }: { wsId: string }): React.JSX.Element {
-  const [state, setState] = useState<ClaudeState>('idle');
+  // 每工具一個狀態（claude/codex），合併成一顆徽章：主視覺取最高優先態、tooltip 拆每工具。
+  const [states, setStates] = useState<Partial<Record<AiTool, ClaudeState>>>({});
 
   useEffect(() => {
     ensureStyle();
     const unsub = ipc.events.claude.status((p) => {
       if (p.wsId !== wsId) return; // 只認本工作區的事件
-      setState(p.status?.state ?? 'idle');
+      setStates((prev) => ({ ...prev, [p.tool]: p.status?.state ?? 'idle' }));
     });
     return unsub; // 卸載退訂，防 listener 洩漏
   }, [wsId]);
 
-  const v = VIEW[state];
+  const entries = Object.entries(states) as [AiTool, ClaudeState][];
+  const active = entries.filter(([, s]) => s !== 'idle');
+  let top: ClaudeState = 'idle';
+  for (const [, s] of entries) if (RANK[s] > RANK[top]) top = s;
+  const v = VIEW[top];
+  const tip = active.length > 0 ? active.map(([t, s]) => `${TOOL_LABEL[t]}：${VIEW[s].label}`).join('、') : '無 AI 執行中';
+
   return (
     <span
       role="status"
-      aria-label={`Claude 狀態：${v.label}`}
-      title={`Claude：${v.label}`}
+      aria-label={`AI 狀態：${tip}`}
+      title={tip}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
     >
       <span
@@ -58,10 +69,11 @@ export function ClaudeStatusBadge({ wsId }: { wsId: string }): React.JSX.Element
         style={{ background: v.color, color: v.color }}
         aria-hidden="true"
       />
-      {/* PE-2：非未啟動才顯示文字標籤（執行中/待接手＝需注意的狀態，draw attention；idle 只留灰點不擾）。 */}
-      {state !== 'idle' && (
+      {/* 非未啟動才顯示文字（最高優先態；多個 AI 同時非 idle 時附數量）；idle 只留灰點不擾。 */}
+      {top !== 'idle' && (
         <span aria-hidden="true" style={{ fontSize: 'var(--text-xs)', color: v.color, whiteSpace: 'nowrap', flexShrink: 0 }}>
           {v.label}
+          {active.length > 1 ? ` ·${active.length}` : ''}
         </span>
       )}
     </span>
