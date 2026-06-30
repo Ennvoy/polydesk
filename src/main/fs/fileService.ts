@@ -12,6 +12,7 @@ import { realpathSync, constants as fsConstants, promises as fsp } from 'node:fs
 import { resolve, relative, isAbsolute, dirname, join, basename } from 'node:path';
 import jschardet from 'jschardet';
 import iconv from 'iconv-lite';
+import { shell } from 'electron';
 import type { IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
 import type { FileEncoding, Eol } from '../../shared/types';
@@ -357,6 +358,114 @@ export async function writeFileSafe(
   return { ok: true };
 }
 
+// ── fs 編輯操作（檔案總管右鍵；path 一律經 resolveSafe 限工作區內） ──────────
+
+/** 路徑是否存在。 */
+async function pathExists(abs: string): Promise<boolean> {
+  try {
+    await fsp.stat(abs);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** fs 操作錯誤 → 友善中文訊息。 */
+function fsOpError(e: unknown): string {
+  const code = (e as NodeJS.ErrnoException | null)?.code;
+  if (code === 'EEXIST') return '同名項目已存在';
+  if (code === 'ENOENT') return '找不到項目';
+  if (code === 'EACCES' || code === 'EPERM') return '沒有權限';
+  if (code === 'ENOTEMPTY') return '資料夾非空';
+  return (e as Error | null)?.message ?? '操作失敗';
+}
+
+/** 建立檔案或資料夾（建檔時父目錄自動建立；已存在則拒）。 */
+export async function createEntry(
+  mgr: WorkspaceManager,
+  wsId: string,
+  p: string,
+  dir: boolean,
+): Promise<{ ok: true } | { error: string }> {
+  const safe = resolveSafe(mgr, wsId, p);
+  if ('error' in safe) return { error: '路徑超出工作區範圍' };
+  try {
+    if (await pathExists(safe.abs)) return { error: '同名項目已存在' };
+    if (dir) {
+      await fsp.mkdir(safe.abs, { recursive: false });
+    } else {
+      await fsp.mkdir(dirname(safe.abs), { recursive: true });
+      await fsp.writeFile(safe.abs, '', { flag: 'wx' });
+    }
+    return { ok: true };
+  } catch (e) {
+    return { error: fsOpError(e) };
+  }
+}
+
+/** 改名/移動（from→to，皆限工作區內；目標已存在則拒）。 */
+export async function renameEntry(
+  mgr: WorkspaceManager,
+  wsId: string,
+  from: string,
+  to: string,
+): Promise<{ ok: true } | { error: string }> {
+  const sf = resolveSafe(mgr, wsId, from);
+  const st = resolveSafe(mgr, wsId, to);
+  if ('error' in sf || 'error' in st) return { error: '路徑超出工作區範圍' };
+  if (sf.abs === st.abs) return { ok: true };
+  try {
+    if (await pathExists(st.abs)) return { error: '目標已存在' };
+    await fsp.rename(sf.abs, st.abs);
+    return { ok: true };
+  } catch (e) {
+    return { error: fsOpError(e) };
+  }
+}
+
+/** 刪除檔案/資料夾（遞迴）；不可刪工作區根。 */
+export async function deleteEntry(
+  mgr: WorkspaceManager,
+  wsId: string,
+  p: string,
+): Promise<{ ok: true } | { error: string }> {
+  const safe = resolveSafe(mgr, wsId, p);
+  if ('error' in safe) return { error: '路徑超出工作區範圍' };
+  let realRoot: string | null = null;
+  try {
+    const ws = mgr.get(wsId);
+    realRoot = ws ? realpathSync.native(ws.path) : null;
+  } catch {
+    realRoot = null;
+  }
+  if (realRoot && safe.abs === realRoot) return { error: '不可刪除工作區根目錄' };
+  try {
+    await fsp.rm(safe.abs, { recursive: true, force: false });
+    return { ok: true };
+  } catch (e) {
+    return { error: fsOpError(e) };
+  }
+}
+
+/** 複製檔案/資料夾（遞迴）；目標已存在則拒。 */
+export async function copyEntry(
+  mgr: WorkspaceManager,
+  wsId: string,
+  from: string,
+  to: string,
+): Promise<{ ok: true } | { error: string }> {
+  const sf = resolveSafe(mgr, wsId, from);
+  const st = resolveSafe(mgr, wsId, to);
+  if ('error' in sf || 'error' in st) return { error: '路徑超出工作區範圍' };
+  try {
+    if (await pathExists(st.abs)) return { error: '目標已存在' };
+    await fsp.cp(sf.abs, st.abs, { recursive: true, errorOnExist: true, force: false });
+    return { ok: true };
+  } catch (e) {
+    return { error: fsOpError(e) };
+  }
+}
+
 /** 測試輔助：清空模組級版本指紋狀態。 */
 export function __resetFileServiceState(): void {
   readVersions.clear();
@@ -366,4 +475,14 @@ export function __resetFileServiceState(): void {
 export function registerFileService(ipc: IpcMain, workspaces: WorkspaceManager): void {
   ipc.handle('fs:read', (_e, req: InvokeReq<'fs:read'>) => readFileSafe(workspaces, req));
   ipc.handle('fs:write', (_e, req: InvokeReq<'fs:write'>) => writeFileSafe(workspaces, req));
+  ipc.handle('fs:create', (_e, req: InvokeReq<'fs:create'>) => createEntry(workspaces, req.wsId, req.path, req.dir));
+  ipc.handle('fs:rename', (_e, req: InvokeReq<'fs:rename'>) => renameEntry(workspaces, req.wsId, req.from, req.to));
+  ipc.handle('fs:delete', (_e, req: InvokeReq<'fs:delete'>) => deleteEntry(workspaces, req.wsId, req.path));
+  ipc.handle('fs:copy', (_e, req: InvokeReq<'fs:copy'>) => copyEntry(workspaces, req.wsId, req.from, req.to));
+  ipc.handle('fs:reveal', (_e, req: InvokeReq<'fs:reveal'>) => {
+    const safe = resolveSafe(workspaces, req.wsId, req.path);
+    if ('error' in safe) return { error: '路徑超出工作區範圍' } as const;
+    shell.showItemInFolder(safe.abs);
+    return { ok: true } as const;
+  });
 }

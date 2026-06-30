@@ -44,6 +44,12 @@ export interface InvokeChannels {
     res: { ok: true } | { error: 'permission' | 'conflict' };
   };
   'fs:tree': { req: { wsId: string; dir: string }; res: { entries: { name: string; dir: boolean }[] } };
+  // fs 編輯操作（檔案總管右鍵；path 一律經 resolveSafe 限工作區內、防 traversal）
+  'fs:create': { req: { wsId: string; path: string; dir: boolean }; res: { ok: true } | { error: string } };
+  'fs:rename': { req: { wsId: string; from: string; to: string }; res: { ok: true } | { error: string } };
+  'fs:delete': { req: { wsId: string; path: string }; res: { ok: true } | { error: string } };
+  'fs:copy': { req: { wsId: string; from: string; to: string }; res: { ok: true } | { error: string } };
+  'fs:reveal': { req: { wsId: string; path: string }; res: { ok: true } | { error: string } };
   // git
   'git:status': { req: { wsId: string }; res: GitStatus };
   'git:changes': { req: { wsId: string }; res: GitChange[] };
