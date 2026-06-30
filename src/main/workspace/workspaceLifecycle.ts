@@ -20,7 +20,7 @@ export class WorkspaceLifecycle {
         await handler(wsId);
       } catch (e) {
         // eslint-disable-next-line no-console
-        console.error(`[Polydesk] teardown concern="${concern}" ws=${wsId} 失敗：`, e);
+        console.error(`[Polydesk] teardown failed concern="${concern}" ws=${wsId}:`, e);
       }
     }
   }

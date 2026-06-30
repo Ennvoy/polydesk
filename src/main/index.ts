@@ -78,7 +78,7 @@ function createWindow(): void {
     mark('window:interactive');
     const coldMs = measure('coldStart', 'main:start', 'window:interactive');
     // eslint-disable-next-line no-console
-    console.log(`[Polydesk] 冷啟動至可互動：${coldMs.toFixed(1)} ms`);
+    console.log(`[Polydesk] cold-start to interactive: ${coldMs.toFixed(1)} ms`);
   });
 
   // 外開連結一律拒絕 app 內導航，改丟系統瀏覽器（REQ-SEC-001）

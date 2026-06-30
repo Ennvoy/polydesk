@@ -18,6 +18,7 @@ import {
   PtyManager,
   stripOsc52,
   resolveShellFile,
+  resolveShellArgs,
   VALID_SHELLS,
   type ManagedPty,
   type SpawnFn,
@@ -157,6 +158,17 @@ describe('PtyManager 安全：shell allowlist（F-3-A1）', () => {
     ]);
     // gitbash 解析結果必為兩個寫死值之一，絕不採 caller 字串
     expect(['C:\\Program Files\\Git\\bin\\bash.exe', 'bash.exe']).toContain(resolveShellFile('gitbash'));
+  });
+
+  it('resolveShellArgs：powershell/cmd 注入 UTF-8 初始化、pwsh/gitbash/wsl 免動（回 []）', () => {
+    const ps = resolveShellArgs('powershell');
+    expect(ps).toContain('-NoLogo');
+    expect(ps).toContain('-NoExit');
+    expect(ps.join(' ')).toMatch(/chcp 65001/);
+    expect(resolveShellArgs('cmd')).toEqual(['/K', 'chcp 65001 >nul']);
+    expect(resolveShellArgs('pwsh')).toEqual([]);
+    expect(resolveShellArgs('gitbash')).toEqual([]);
+    expect(resolveShellArgs('wsl')).toEqual([]);
   });
 });
 

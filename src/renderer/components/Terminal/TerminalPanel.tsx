@@ -10,7 +10,7 @@ import { ipc } from '../../ipc/client';
 import { useAppState } from '../../state/appStore';
 import { registerPanel, SLOT } from '../../layout/panelRegistry';
 import { toggleLayoutPanel } from '../../layout/DockLayout';
-import { TerminalView, forgetTerminalScrollback } from './TerminalView';
+import { TerminalView } from './TerminalView';
 import './terminal.css';
 import type { ShellKind } from '../../../shared/types';
 
@@ -52,15 +52,17 @@ export function TerminalPanel(): React.JSX.Element {
   }, []);
 
   // 切到某工作區：首次載入其既有終端機（背景續跑時切回可見既有 pty）。
+  // 冪等防 StrictMode（dev 對 effect setup→cleanup→setup 雙呼）：listedWs.add 移到列舉「成功後」才記
+  // （否則首呼被 cleanup「取消」、第二呼又因 has(wsId) 早退而永遠不 list → 分頁接不回）；merge 以 termId
+  // 去重，雙呼重複套用安全。setVisible 顯隱方案下本面板不再因 toggle 卸載，此 race 僅見於 app 首掛載/切工作區。
   useEffect(() => {
     const wsId = activeWorkspaceId;
     if (!wsId || listedWs.current.has(wsId)) return;
-    listedWs.current.add(wsId);
-    let cancelled = false;
     void ipc.pty
       .list({ wsId })
       .then((list) => {
-        if (cancelled || list.length === 0) return;
+        listedWs.current.add(wsId);
+        if (list.length === 0) return;
         setTerms((prev) => {
           const known = new Set(prev.map((t) => t.termId));
           const merged = [...prev];
@@ -75,9 +77,6 @@ export function TerminalPanel(): React.JSX.Element {
       .catch(() => {
         /* 列舉失敗：使用者可手動「＋」新增 */
       });
-    return () => {
-      cancelled = true;
-    };
   }, [activeWorkspaceId]);
 
   // 工作區切換時，把新建終端機的預設 shell 同步成該工作區預設。
@@ -99,7 +98,6 @@ export function TerminalPanel(): React.JSX.Element {
 
   const closeTerm = useCallback(async (entry: TermEntry): Promise<void> => {
     await ipc.pty.close({ termId: entry.termId }).catch(() => undefined);
-    forgetTerminalScrollback(entry.termId); // 真正關閉 → 清畫面快取（不在重開時誤還原）
     setTerms((prev) => prev.filter((t) => t.termId !== entry.termId));
   }, []);
 
@@ -107,7 +105,6 @@ export function TerminalPanel(): React.JSX.Element {
   const restartTerm = useCallback(async (entry: TermEntry): Promise<void> => {
     try {
       const { termId } = await ipc.pty.create({ wsId: entry.wsId, shell: entry.shell });
-      forgetTerminalScrollback(entry.termId); // 舊 termId 已換 → 清舊畫面快取
       setTerms((prev) => prev.map((t) => (t.termId === entry.termId ? { ...t, termId, alive: true, exitCode: null } : t)));
     } catch {
       /* 重啟失敗：維持結束狀態 */
@@ -138,8 +135,9 @@ export function TerminalPanel(): React.JSX.Element {
         className="pd-panel-header"
         style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', textTransform: 'none' }}
       >
+        {/* dockview group 標頭已顯示「終端機」分頁 → 自帶標頭只在多開時補「N 個並排」，避免重複標題。 */}
         <span style={{ color: 'var(--meta)', fontSize: 'var(--text-xs)' }}>
-          終端機{activeCount > 0 ? `（${activeCount}）` : ''}
+          {activeCount > 1 ? `${activeCount} 個並排` : ''}
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-1)', flexShrink: 0 }}>
           <button

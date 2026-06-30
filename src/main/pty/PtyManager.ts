@@ -45,6 +45,28 @@ export function resolveShellFile(shell: ShellKind): string {
   }
 }
 
+// ── shell 啟動參數（UTF-8 對齊；參數來自固定查表，不採 caller 字串，維持 A1 不變式）──
+// Windows zh-TW 的 PowerShell 5.1 / cmd.exe 預設輸出 cp950(Big5) bytes，而 xterm 一律以 UTF-8 解碼
+// （node-pty encoding:null 原樣傳 Buffer）→ 中文必亂碼。故為這兩者注入 `chcp 65001`（切 console code page
+// 為 UTF-8）啟動序列，讓 shell 改吐 UTF-8 bytes、對上 xterm 的解碼（已實測：PowerShell 5.1 的 cmdlet 中文
+// 輸出經此即為 UTF-8、不亂碼）。設定指令以 >$null/>nul 抑制回顯（畫面乾淨）；powershell 另帶 -NoLogo 略過版權
+// 橫幅、-NoExit 保留互動。pwsh(7+)/gitbash/wsl 預設已 UTF-8 → 回空陣列免動。
+// 刻意「不」用 [Console]::OutputEncoding=UTF8：在 ConPTY 下設定 .NET console 編碼會與 node-pty 的 conpty
+// console agent 衝突（實測使測試 worker ERR_IPC_CHANNEL_CLOSED 崩潰）；chcp 已足夠且穩定。
+/** 解析 ShellKind → 啟動參數（固定查表）。只有 powershell/cmd 需 UTF-8 初始化（chcp 65001），其餘回 []。 */
+export function resolveShellArgs(shell: ShellKind): string[] {
+  switch (shell) {
+    case 'powershell':
+      return ['-NoLogo', '-NoExit', '-Command', 'chcp 65001 > $null'];
+    case 'cmd':
+      return ['/K', 'chcp 65001 >nul'];
+    case 'pwsh':
+    case 'gitbash':
+    case 'wsl':
+      return [];
+  }
+}
+
 // ── OSC 52 過濾（剪貼簿寫入），REQ-TERM-008 / F-3-A2 ──
 const ESC = 0x1b;
 const BEL = 0x07;
@@ -215,7 +237,7 @@ export class PtyManager {
     if (!ws || ws.status !== 'ok') throw new PtyError('no-workspace');
 
     const file = resolveShellFile(shell);
-    const p = this.spawn(file, [], {
+    const p = this.spawn(file, resolveShellArgs(shell), {
       name: 'xterm-256color',
       cols: 80,
       rows: 24,

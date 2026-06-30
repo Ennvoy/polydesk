@@ -154,7 +154,7 @@ export class WorkspaceManager {
       if (existsSync(abs)) rmSync(abs, { recursive: true, force: true });
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.error('[Polydesk] purge profile 失敗：', e);
+      console.error('[Polydesk] purge profile failed:', e);
     }
   }
 }
