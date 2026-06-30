@@ -12,7 +12,7 @@ const S = (over: Partial<SessionStatus>): SessionStatus => ({
   sessionId: 's',
   cwd: 'C:/proj/a',
   state: 'working',
-  ts: 1,
+  ts: Date.now(), // 預設新鮮（避免誤觸 working 殘留時效保險）
   ...over,
 });
 
@@ -41,6 +41,14 @@ describe('claudeHookState', () => {
     expect(computeWorkspaceState(true, [S({ state: 'done' })])).toBe('done');
     expect(computeWorkspaceState(true, [S({ state: 'done' }), S({ state: 'awaiting' })])).toBe('stopped-await');
     expect(computeWorkspaceState(true, [S({ state: 'done' }), S({ state: 'working' }), S({ state: 'awaiting' })])).toBe('running');
+  });
+
+  it('computeWorkspaceState：working 殘留超時 → 降級已停止（最終保險，awaiting 不受影響）', () => {
+    const now = 100 * 60 * 1000; // 100 分鐘
+    expect(computeWorkspaceState(true, [S({ state: 'working', ts: now - 1000 })], now)).toBe('running'); // 新鮮 → 執行中
+    expect(computeWorkspaceState(true, [S({ state: 'working', ts: now - 60 * 60 * 1000 })], now)).toBe('done'); // 60min 前殘留 → 降級已停止
+    expect(computeWorkspaceState(true, [S({ state: 'awaiting', ts: now - 60 * 60 * 1000 })], now)).toBe('stopped-await'); // 待確認不受時效影響
+    expect(computeWorkspaceState(true, [S({ state: 'working', ts: 0 })], now)).toBe('running'); // ts=0（未知）不降級
   });
 
   it('aggregateWorkspaceStates：每 session 歸戶 + 逐工作區綜合 + PTY 閘門', () => {

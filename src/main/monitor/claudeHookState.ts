@@ -46,15 +46,25 @@ export function matchWorkspace(cwd: string, workspaces: readonly { id: string; p
 
 const RANK: Record<ClaudeState, number> = { running: 3, 'stopped-await': 2, done: 1, idle: 0 };
 
+/** working 殘留的最終保險時效：超過此值沒更新的「執行中」視為殘留 → 降級已停止。
+ * 保守 30 分鐘：長到幾乎不誤判正常長任務（單一 hook 間隔 >30min 極罕見），仍能兜住 SessionStart/End 沒清到的殘留。 */
+const WORKING_STALE_MS = 30 * 60 * 1000;
+
 /**
  * 某工作區綜合狀態：無 alive PTY → idle（沒終端機就不可能有 claude；清掉 hook 殘留）；
  * 否則取該工作區所有 session 的最高優先序（執行中 > 待確認 > 已停止）；無 session → idle（未啟動）。
+ * working 殘留保險：太久沒更新的「執行中」降級為已停止（SessionStart 清殘留、SessionEnd 刪檔之外的最終防線）。
  */
-export function computeWorkspaceState(hasAlivePty: boolean, sessions: readonly SessionStatus[]): ClaudeState {
+export function computeWorkspaceState(
+  hasAlivePty: boolean,
+  sessions: readonly SessionStatus[],
+  now: number = Date.now(),
+): ClaudeState {
   if (!hasAlivePty) return 'idle';
   let best: ClaudeState = 'idle';
   for (const s of sessions) {
-    const st = hookStateToClaude(s.state);
+    let st = hookStateToClaude(s.state);
+    if (st === 'running' && s.ts > 0 && now - s.ts > WORKING_STALE_MS) st = 'done';
     if (RANK[st] > RANK[best]) best = st;
   }
   return best;
@@ -68,6 +78,7 @@ export function aggregateWorkspaceStates(
   workspaces: readonly { id: string; path: string }[],
   sessions: readonly SessionStatus[],
   hasAlivePty: (wsId: string) => boolean,
+  now: number = Date.now(),
 ): Map<string, ClaudeState> {
   const byWs = new Map<string, SessionStatus[]>();
   for (const s of sessions) {
@@ -79,7 +90,7 @@ export function aggregateWorkspaceStates(
   }
   const out = new Map<string, ClaudeState>();
   for (const ws of workspaces) {
-    out.set(ws.id, computeWorkspaceState(hasAlivePty(ws.id), byWs.get(ws.id) ?? []));
+    out.set(ws.id, computeWorkspaceState(hasAlivePty(ws.id), byWs.get(ws.id) ?? [], now));
   }
   return out;
 }

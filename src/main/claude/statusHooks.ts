@@ -18,13 +18,15 @@ export const SCRIPT_MARKER = 'polydesk-claude-status';
 interface HookSpec {
   event: string;
   matcher?: string;
-  state: 'working' | 'awaiting' | 'done';
+  state: 'working' | 'awaiting' | 'done' | 'reset' | 'end';
 }
 const HOOK_SPECS: readonly HookSpec[] = [
+  { event: 'SessionStart', state: 'reset' }, // 啟動/重啟 → 清同工作區殘留 + 標已停止（修「剛打開卻顯示執行中」）
   { event: 'UserPromptSubmit', state: 'working' }, // 送出 prompt → 執行中
   { event: 'PreToolUse', matcher: '', state: 'working' }, // 跑工具（含 subagent/workflow）→ 執行中
   { event: 'Notification', matcher: 'permission_prompt|idle_prompt|elicitation_dialog', state: 'awaiting' }, // 待確認
   { event: 'Stop', state: 'done' }, // 完成整個回合 → 已停止
+  { event: 'SessionEnd', state: 'end' }, // 結束 session → 刪狀態檔（清理殘留）
 ];
 
 interface HookEntry {
@@ -103,11 +105,17 @@ export function claudePaths(home: string = homedir()): { root: string; statusDir
 /** hook 腳本內容（Polydesk 寫到磁碟；讀 argv 狀態 + stdin JSON 的 session_id/cwd → 原子寫狀態檔）。 */
 export const HOOK_SCRIPT = `#!/usr/bin/env node
 // Polydesk Claude 狀態 hook（自動產生，勿手改）。由 ~/.claude/settings.json 的 hook 呼叫。
+// argv[2]：working/awaiting/done 直接寫狀態檔；reset(SessionStart) 清同 cwd 殘留+標 done；end(SessionEnd) 刪本 session 檔。
 const fs = require('fs');
 const path = require('path');
 const state = process.argv[2] || 'done';
 // statusDir 相對本腳本位置（<home>/.claude/polydesk/status）——不假設 os.homedir，與主程序 claudePaths 一致。
 const statusDir = path.join(__dirname, 'status');
+function normCwd(p) {
+  let s = String(p || '').split('\\\\').join('/').toLowerCase();
+  while (s.length > 1 && s.charAt(s.length - 1) === '/') s = s.slice(0, -1);
+  return s;
+}
 let buf = '';
 let done = false;
 function flush() {
@@ -116,12 +124,33 @@ function flush() {
   let sid = 'unknown';
   let cwd = process.cwd();
   try { const j = JSON.parse(buf); if (j && j.session_id) sid = String(j.session_id); if (j && j.cwd) cwd = String(j.cwd); } catch (e) {}
+  const safe = sid.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80) || 'unknown';
   try {
     fs.mkdirSync(statusDir, { recursive: true });
-    const safe = sid.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80) || 'unknown';
+    if (state === 'end') {
+      // SessionEnd：刪本 session 狀態檔（正常結束清理）。
+      try { fs.unlinkSync(path.join(statusDir, safe + '.json')); } catch (e) {}
+      process.exit(0);
+    }
+    let effState = state;
+    if (state === 'reset') {
+      // SessionStart：清掉同工作區(cwd)所有舊狀態檔（清掉上次殘留的 working），自己標 done（已停止/等輸入）。
+      const nc = normCwd(cwd);
+      try {
+        const files = fs.readdirSync(statusDir);
+        for (let i = 0; i < files.length; i++) {
+          if (!files[i].endsWith('.json')) continue;
+          try {
+            const jj = JSON.parse(fs.readFileSync(path.join(statusDir, files[i]), 'utf8'));
+            if (jj && normCwd(jj.cwd) === nc) fs.unlinkSync(path.join(statusDir, files[i]));
+          } catch (e) {}
+        }
+      } catch (e) {}
+      effState = 'done';
+    }
     const fin = path.join(statusDir, safe + '.json');
     const tmp = fin + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify({ sessionId: sid, cwd: cwd, state: state, ts: Date.now() }));
+    fs.writeFileSync(tmp, JSON.stringify({ sessionId: sid, cwd: cwd, state: effState, ts: Date.now() }));
     fs.renameSync(tmp, fin);
   } catch (e) {}
   process.exit(0);

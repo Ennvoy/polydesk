@@ -28,7 +28,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
   it('聚合 hook 狀態 → 變才 emit（有 PTY 無 session = idle 不空打）', async () => {
     const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }, { id: 'b', path: 'C:/p/b' }]) };
     const pty = { pidsOf: (id: string): number[] => (id === 'a' || id === 'b' ? [100] : []) };
-    const sessions: SessionStatus[] = [{ sessionId: 's1', cwd: 'C:/p/a', state: 'working', ts: 1 }];
+    const sessions: SessionStatus[] = [{ sessionId: 's1', cwd: 'C:/p/a', state: 'working', ts: Date.now() }];
     const emitted: StatusEvent[] = [];
     const mon = new ClaudeStatusMonitor(workspaces, pty, (p) => emitted.push(p), {
       readSessions: async () => sessions,
@@ -43,7 +43,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
     let pids: Record<string, number[]> = { a: [100] };
     const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
     const pty = { pidsOf: (id: string): number[] => pids[id] ?? [] };
-    const sessions: SessionStatus[] = [{ sessionId: 's1', cwd: 'C:/p/a', state: 'working', ts: 1 }]; // 殘留 working
+    const sessions: SessionStatus[] = [{ sessionId: 's1', cwd: 'C:/p/a', state: 'working', ts: Date.now() }]; // 殘留 working
     const emitted: StatusEvent[] = [];
     const mon = new ClaudeStatusMonitor(workspaces, pty, (p) => emitted.push(p), {
       readSessions: async () => sessions,
@@ -59,7 +59,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
   it('running→stopped-await（待確認）推一次通知；done 不推', async () => {
     const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
     const pty = { pidsOf: (): number[] => [100] };
-    let sessions: SessionStatus[] = [{ sessionId: 's1', cwd: 'C:/p/a', state: 'working', ts: 1 }];
+    let sessions: SessionStatus[] = [{ sessionId: 's1', cwd: 'C:/p/a', state: 'working', ts: Date.now() }];
     const notes: { wsId: string; name: string }[] = [];
     const emitted: StatusEvent[] = [];
     const mon = new ClaudeStatusMonitor(workspaces, pty, (p) => emitted.push(p), {
