@@ -119,6 +119,21 @@ export interface PersistState {
   terminals: { wsId: string; shell: ShellKind }[];
   /** 視窗位置/大小持久化（REQ-PERSIST-003）。 */
   windowBounds?: WindowBounds;
+  /** 工作區 rail 寬度（px）持久化；undefined＝用 CSS 預設 --rail-w。 */
+  railWidth?: number;
+  /** 智慧 commit message 引擎設定（undefined＝預設 claude）。 */
+  aiCommit?: AiCommitSettings;
+}
+
+/** 智慧 commit message 的產生引擎。custom＝使用者自訂 argv 範本（任何 CLI；prompt 走 stdin）。 */
+export type AiEngine = 'claude' | 'codex' | 'custom';
+
+export interface AiCommitSettings {
+  engine: AiEngine;
+  /** custom 引擎的 argv 範本（第一元素＝執行檔，其餘為引數；diff/prompt 一律走 stdin，不拼在此）。 */
+  customCmd?: string[];
+  /** 覆寫內建格式規範 prompt（undefined＝用內建預設 5 條規範）。 */
+  promptTemplate?: string;
 }
 
 /** 任務指定別名（= PersistState 單一真相）。 */

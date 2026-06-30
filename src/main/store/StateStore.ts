@@ -16,7 +16,7 @@ import {
   renameSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
-import type { LayoutJson, PersistState, ThemeId, WindowBounds } from '../../shared/types';
+import type { AiCommitSettings, LayoutJson, PersistState, ThemeId, WindowBounds } from '../../shared/types';
 import { CURRENT_SCHEMA_VERSION, defaultState, migrate } from './schema';
 
 export class StateStore {
@@ -94,6 +94,14 @@ export class StateStore {
 
   setWindowBounds(bounds: WindowBounds): void {
     this.set('windowBounds', bounds);
+  }
+
+  setRailWidth(width: number): void {
+    this.set('railWidth', width);
+  }
+
+  setAiCommit(cfg: AiCommitSettings): void {
+    this.set('aiCommit', cfg);
   }
 
   /** 匯出目前狀態字串（REQ-PERSIST-005）。 */

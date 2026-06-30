@@ -17,6 +17,16 @@ export function registerStoreHandlers(ipc: IpcMain, store: StateStore): void {
     return { ok: true } as const;
   });
 
+  ipc.handle('store:setRailWidth', (_e, req: InvokeReq<'store:setRailWidth'>) => {
+    store.setRailWidth(req.width);
+    return { ok: true } as const;
+  });
+
+  ipc.handle('store:setAiCommit', (_e, req: InvokeReq<'store:setAiCommit'>) => {
+    store.setAiCommit(req.cfg);
+    return { ok: true } as const;
+  });
+
   ipc.handle('store:export', () => ({ json: store.exportJson() }));
 
   ipc.handle('store:import', (_e, req: InvokeReq<'store:import'>) => store.importJson(req.json));

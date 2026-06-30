@@ -15,6 +15,8 @@ export function defaultState(): PersistState {
     openFiles: [],
     terminals: [],
     windowBounds: undefined,
+    railWidth: undefined,
+    aiCommit: undefined,
   };
 }
 
@@ -49,6 +51,13 @@ export function migrate(raw: unknown): PersistState {
   return normalize(s);
 }
 
+/** aiCommit 設定容錯：須為物件且 engine 是合法值，否則退預設。 */
+function isValidAiCommit(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null) return false;
+  const e = (v as { engine?: unknown }).engine;
+  return e === 'claude' || e === 'codex' || e === 'custom';
+}
+
 /** 以預設值補齊缺漏 / 型別不符的欄位（防半損毀狀態）。 */
 function normalize(s: AnyState): PersistState {
   const d = defaultState();
@@ -61,5 +70,7 @@ function normalize(s: AnyState): PersistState {
     openFiles: Array.isArray(s.openFiles) ? (s.openFiles as PersistState['openFiles']) : d.openFiles,
     terminals: Array.isArray(s.terminals) ? (s.terminals as PersistState['terminals']) : d.terminals,
     windowBounds: (s.windowBounds as PersistState['windowBounds']) ?? d.windowBounds,
+    railWidth: typeof s.railWidth === 'number' ? s.railWidth : d.railWidth,
+    aiCommit: isValidAiCommit(s.aiCommit) ? (s.aiCommit as PersistState['aiCommit']) : d.aiCommit,
   };
 }

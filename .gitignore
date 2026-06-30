@@ -16,6 +16,9 @@ coverage/
 .last-run.json
 .vite/
 
+# agent worktree（isolation 隔離副本，不進 git）
+.claude/worktrees/
+
 # Flow：state.json 與 log 可衍生/一次性 → 不進 git；manifest/ledger/journal/redteam/decisions 要進 git
 .flow/state.json
 .flow/*.log

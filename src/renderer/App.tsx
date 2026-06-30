@@ -7,6 +7,7 @@ import { TitleBar } from './components/TitleBar';
 import { DockLayout } from './layout/DockLayout';
 import { DialogHost } from './components/Dialogs/host';
 import { WorkspaceRail } from './components/WorkspaceRail';
+import { RailResizer } from './components/RailResizer';
 import { useAppState } from './state/appStore';
 import { useClaudeCounts } from './state/claudeCounts';
 
@@ -43,6 +44,7 @@ export function App(): React.JSX.Element {
       <div className="pd-shell">
         <ActivityBar />
         <WorkspaceRail />
+        <RailResizer />
         <div className="pd-shell-main">
           <div className="pd-shell-body">
             <DockLayout />

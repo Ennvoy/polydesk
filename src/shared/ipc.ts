@@ -17,6 +17,7 @@ import type {
   LayoutJson,
   ThemeId,
   PersistState,
+  AiCommitSettings,
   McpWireResult,
   ConflictInfo,
 } from './types';
@@ -65,6 +66,8 @@ export interface InvokeChannels {
   'git:commitFiles': { req: { wsId: string; ref: string }; res: { files: { path: string; status: string }[] } };
   'git:stash': { req: { wsId: string; op: 'push' | 'pop' | 'list'; includeUntracked?: boolean }; res: unknown };
   'git:init': { req: { wsId: string }; res: { ok: true } };
+  // AI 智慧 commit message（取 staged diff → 選定引擎產生；只回填訊息框、不自動 commit）
+  'ai:generateCommitMessage': { req: { wsId: string }; res: { message: string } | { error: string } };
   // 終端機（控制訊息走 invoke；資料流走 stream）
   'pty:create': { req: { wsId: string; shell: ShellKind }; res: { termId: string } };
   'pty:resize': { req: { termId: string; cols: number; rows: number }; res: { ok: true } };
@@ -93,6 +96,8 @@ export interface InvokeChannels {
   'store:getState': { req: void; res: PersistState };
   'store:setTheme': { req: { theme: ThemeId }; res: { ok: true } };
   'store:setLayout': { req: { layout: LayoutJson }; res: { ok: true } };
+  'store:setRailWidth': { req: { width: number }; res: { ok: true } };
+  'store:setAiCommit': { req: { cfg: AiCommitSettings }; res: { ok: true } };
   'store:export': { req: void; res: { json: string } };
   'store:import': { req: { json: string }; res: { ok: true } | { error: string } };
   // 更新

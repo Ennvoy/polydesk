@@ -62,21 +62,6 @@ function addTerminal(api: DockviewApi): void {
   } else {
     api.addPanel({ id: TERMINAL_ID, component: 'terminal', title: '終端機' });
   }
-  hideTerminalHeader(api);
-}
-
-/**
- * 隱藏終端機面板所在 group 的 dockview 分頁列（「終端機 ✕」那條）。終端機面板自帶標頭（含標題/分割/＋/隱藏），
- * 避免兩條重複的「終端機」列；也移除「✕ 會 dispose 終端機」的入口——隱藏改由面板自帶的 × 走 setVisible。
- */
-function hideTerminalHeader(api: DockviewApi): void {
-  const t = api.getPanel(TERMINAL_ID);
-  if (!t) return;
-  try {
-    t.api.group.header.hidden = true;
-  } catch {
-    /* 無法隱藏不致命 */
-  }
 }
 
 function addEditor(api: DockviewApi): void {
@@ -113,7 +98,23 @@ export function buildDefaultLayout(api: DockviewApi): void {
   // 側欄較窄
   const sidebar = api.getPanel(SIDEBAR_ID);
   sidebar?.api.setSize({ width: 280 });
-  hideTerminalHeader(api);
+}
+
+/**
+ * 撤 hideTerminalHeader 後：確保所有 group 的 dockview 標頭都顯示。關鍵在「清掉舊版本持久化序列化進 layout
+ * 的 header.hidden=true 殘留」——dockview toJSON 會把 group 的 header 隱藏狀態存進設定檔，舊版（有
+ * hideTerminalHeader + 標頭洩漏 bug）把終端機、甚至被污染的編輯器 group 標頭存成「藏」；新版雖已不再藏，
+ * 但 fromJSON 還原時會把那個「藏」帶回來 → 該 group 沒有標頭分頁＝沒有拖曳把手＝整個面板拖不動
+ * （只有從沒被藏過的側欄能拖）。每次還原/重設都主動把所有 group 標頭顯示回來，根治此殘留。
+ */
+function showAllGroupHeaders(api: DockviewApi): void {
+  for (const g of api.groups) {
+    try {
+      g.header.hidden = false;
+    } catch {
+      /* 個別 group 設定失敗不致命 */
+    }
+  }
 }
 
 /**
@@ -135,6 +136,14 @@ export function resetLayout(): void {
   if (!api.getPanel(SIDEBAR_ID)) addSidebar(api);
   if (!api.getPanel(TERMINAL_ID)) addTerminal(api);
   if (!api.getPanel(EDITOR_ID)) return;
+  // 2b. 確保三面板都「可見」（被 toggle 以 setVisible(false) 隱藏的 group 顯示回來）。
+  for (const id of TOGGLEABLE) {
+    try {
+      api.getPanel(id)?.api.group.api.setVisible(true);
+    } catch {
+      /* 設可見失敗不致命 */
+    }
+  }
   // 3. 重排回預設相對位置（moveTo 只搬 group、不 dispose component）：sidebar 左、terminal 下。
   try {
     const sidebar = api.getPanel(SIDEBAR_ID);
@@ -148,7 +157,8 @@ export function resetLayout(): void {
   }
   // 4. 側欄寬度回預設。
   api.getPanel(SIDEBAR_ID)?.api.setSize({ width: 280 });
-  hideTerminalHeader(api);
+  // 5. 清掉舊持久化殘留的「標頭=藏」，讓所有 group 標頭顯示（撤 hideTerminalHeader 後該全顯示，才有拖曳把手）。
+  showAllGroupHeaders(api);
 }
 
 /** 供標題列「檢視」選單切換面板顯隱（toolbar 視覺態經 dockview onDidLayoutChange 自動 re-sync）。 */
@@ -166,15 +176,15 @@ export function toggleTerminalMax(): void {
 }
 
 
-/** A2/A3：還原時套用 UI 狀態—依 hidden 移除（與序列化樹對齊），再依 maximized 以原生 API 最大化終端機。 */
+/** A2/A3：還原時套用 UI 狀態—依 hidden 以 group.api.setVisible(false) 隱藏（不 dispose，保住 component），再依 maximized 最大化終端機。 */
 function applyUi(api: DockviewApi, ui: LayoutUiState): void {
   for (const id of ui.hidden) {
     const p = api.getPanel(id);
     if (p) {
       try {
-        api.removePanel(p);
+        p.api.group.api.setVisible(false);
       } catch {
-        /* 移除失敗不致命 */
+        /* 隱藏失敗不致命 */
       }
     }
   }
@@ -239,7 +249,7 @@ export function DockLayout(): React.JSX.Element {
           }
           if (!restored) buildDefaultLayout(api);
           applyUi(api, ui);
-          hideTerminalHeader(api); // 還原既有佈局時，終端機分頁列也隱藏（避免重複標頭）
+          showAllGroupHeaders(api); // 清舊持久化殘留的 header.hidden=true → 還原後所有 group 標頭都顯示、可拖曳
           syncToolbar();
         })
         .catch(() => {
@@ -261,6 +271,14 @@ export function DockLayout(): React.JSX.Element {
       api.onDidMaximizedGroupChange(() => {
         persist();
         syncToolbar();
+      });
+      // 使用者要「拖曳只換位置、不要合併成分頁」：擋掉所有會把面板併進某 group 的 drop 落點
+      // （分頁列 tab / 標頭空白 header_space / 內容區中央 center），只保留拖到內容區邊緣的 split（換位置）
+      // 與最外層 edge。preventDefault 讓 dockview 不顯示該 overlay、也不執行該 drop（droptarget 不設 state）。
+      api.onWillShowOverlay((e) => {
+        if (e.kind === 'tab' || e.kind === 'header_space' || e.position === 'center') {
+          e.preventDefault();
+        }
       });
     },
     [syncToolbar],
