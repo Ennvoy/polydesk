@@ -175,6 +175,9 @@ export function Explorer(): React.JSX.Element {
   const [err, setErr] = useState<string | null>(null);
   const dirsRef = useRef(dirs);
   dirsRef.current = dirs;
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const catcherRef = useRef<HTMLDivElement>(null);
 
   const loadDir = useCallback(
     async (rel: string): Promise<void> => {
@@ -330,25 +333,55 @@ export function Explorer(): React.JSX.Element {
     setClip(null);
   };
 
-  // 從系統剪貼簿貼入外部檔案（Ctrl+V，VSCode 風）：clipboardData.files → 真實路徑 → 複製進選中資料夾（或根）。
-  const importFromClipboard = (e: React.ClipboardEvent): void => {
-    const files = Array.from(e.clipboardData?.files ?? []);
-    if (files.length === 0 || !wsId) return; // 非檔案貼上（文字等）不攔截
-    e.preventDefault();
-    const sources = files.map((f) => ipc.fileUtils.pathForFile(f)).filter((p) => p.length > 0);
-    if (sources.length === 0) return;
-    const destDir = selected ? (selected.dir ? selected.rel : relDirname(selected.rel)) : '';
-    void (async () => {
-      const r = await ipc.fs.importFiles({ wsId, destDir, sources });
-      if ('error' in r) {
-        setErr(r.error);
+  // Ctrl+V 從系統剪貼簿貼入外部檔案（VSCode 風）。兩段協作、不依賴檔案總管有焦點：
+  //   ① keydown：焦點不在可編輯元素時（如點在檔案樹的 div），Chromium 本不會觸發 paste，
+  //      故把焦點導到隱藏 catcher（contenteditable）逼瀏覽器把貼上事件送出來。
+  //   ② paste（capture）：只攔「檔案型」貼上（types 含 'Files'）→ 匯入檔案總管；文字貼上放行編輯器/終端機。
+  useEffect(() => {
+    if (!wsId) return undefined;
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(e.ctrlKey || e.metaKey) || (e.key !== 'v' && e.key !== 'V')) return;
+      const ae = document.activeElement as HTMLElement | null;
+      const editable = !!ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+      if (!editable) catcherRef.current?.focus();
+    };
+    const onPaste = (e: ClipboardEvent): void => {
+      if (e.target === catcherRef.current) {
+        // catcher 只用來接檔案；不論內容都即時清空避免殘留
+        window.setTimeout(() => {
+          if (catcherRef.current) catcherRef.current.textContent = '';
+        }, 0);
+      }
+      const cd = e.clipboardData;
+      if (!cd || !Array.from(cd.types).includes('Files')) return;
+      const files = Array.from(cd.files);
+      if (files.length === 0) return;
+      e.preventDefault();
+      const sources = files.map((f) => ipc.fileUtils.pathForFile(f)).filter((p) => p.length > 0);
+      if (sources.length === 0) {
+        setErr('無法取得貼上檔案的路徑');
         return;
       }
-      if (r.errors?.length) setErr(r.errors.join('；'));
-      if (destDir !== '') setExpanded((p) => ({ ...p, [destDir]: true }));
-      void loadDir(destDir);
-    })();
-  };
+      const sel = selectedRef.current;
+      const destDir = sel ? (sel.dir ? sel.rel : relDirname(sel.rel)) : '';
+      void (async () => {
+        const r = await ipc.fs.importFiles({ wsId, destDir, sources });
+        if ('error' in r) {
+          setErr(r.error);
+          return;
+        }
+        if (r.errors?.length) setErr(r.errors.join('；'));
+        if (destDir !== '') setExpanded((p) => ({ ...p, [destDir]: true }));
+        void loadDir(destDir);
+      })();
+    };
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('paste', onPaste, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('paste', onPaste, true);
+    };
+  }, [wsId, loadDir]);
 
   const openMenu = (e: React.MouseEvent, entry: Entry | null, rel: string): void => {
     e.preventDefault();
@@ -452,6 +485,15 @@ export function Explorer(): React.JSX.Element {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {/* 隱藏 paste catcher：焦點不在可編輯元素時，Ctrl+V 靠它逼出 paste 事件（見上方 useEffect）。 */}
+      <div
+        ref={catcherRef}
+        contentEditable
+        suppressContentEditableWarning
+        aria-hidden="true"
+        tabIndex={-1}
+        style={{ position: 'fixed', left: -9999, top: 0, width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+      />
       <div className="pd-panel-header">
         <span>總管{ws ? `：${ws.name}` : ''}</span>
         {wsId ? (
@@ -479,10 +521,8 @@ export function Explorer(): React.JSX.Element {
           className="pd-scroll"
           role="tree"
           aria-label={`檔案總管${ws ? `：${ws.name}` : ''}`}
-          tabIndex={0}
-          style={{ flex: 1, minHeight: 0, paddingBottom: 'var(--space-3)', outline: 'none' }}
+          style={{ flex: 1, minHeight: 0, paddingBottom: 'var(--space-3)' }}
           onContextMenu={(e) => openMenu(e, null, '')}
-          onPaste={importFromClipboard}
         >
           {!rootState ? (
             <Hint>載入中…</Hint>
