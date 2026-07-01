@@ -30,6 +30,15 @@ test('檔案總管刪除 → 檔案從樹消失（回收桶）+ danger 按鈕為
   }
   await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark')); // 復原主題
 
+  // hover danger 按鈕：背景須維持紅系（不被 .pd-btn:hover 的淺色 surface-warm 蓋掉 → 白字看不見）
+  await delBtn.hover();
+  const hover = await delBtn.evaluate((el) => {
+    const m = (getComputedStyle(el).backgroundColor.match(/\d+/g) ?? ['0', '0', '0']).map(Number);
+    return { r: m[0], g: m[1], b: m[2] };
+  });
+  expect(hover.r).toBeGreaterThan(150); // 紅（danger），非深灰 surface-warm
+  expect(hover.r).toBeGreaterThan(hover.g + 40); // R 明顯大於 G
+
   await delBtn.click();
   await expect(page.locator('[role="tree"] [role="treeitem"][aria-label="del-me.txt"]')).toHaveCount(0);
 

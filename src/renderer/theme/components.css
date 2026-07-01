@@ -161,7 +161,8 @@
 .pd-btn-primary:hover { background: var(--accent-hover); }
 .pd-btn-primary:active { background: var(--accent-active); }
 .pd-btn-danger { background: var(--danger); color: #fff; border-color: transparent; }
-.pd-btn-danger:hover { filter: brightness(1.08); }
+/* 明設 background 壓過 .pd-btn:hover（特異性同、定義在後）——否則 hover 會被改成淺色 surface-warm、白字看不見。 */
+.pd-btn-danger:hover { background: var(--danger); filter: brightness(1.12); }
 
 /* ── 輸入框 ── */
 .pd-input {
