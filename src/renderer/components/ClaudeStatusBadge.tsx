@@ -19,8 +19,6 @@ const VIEW: Record<ClaudeState, { color: string; label: string; pulse: boolean }
   idle: { color: 'var(--meta)', label: '未啟動', pulse: false }, // 無 AI session
 };
 
-/** 多工具取最高優先態（執行中 > 待確認 > 已停止 > 未啟動）。 */
-const RANK: Record<ClaudeState, number> = { running: 3, 'stopped-await': 2, done: 1, idle: 0 };
 const TOOL_LABEL: Record<AiTool, string> = { claude: 'Claude', codex: 'Codex' };
 
 const STYLE_ID = 'pdws-claude-badge-style';
@@ -50,32 +48,29 @@ export function ClaudeStatusBadge({ wsId }: { wsId: string }): React.JSX.Element
     return unsub; // 卸載退訂，防 listener 洩漏
   }, [wsId]);
 
-  const entries = Object.entries(states) as [AiTool, ClaudeState][];
-  const active = entries.filter(([, s]) => s !== 'idle');
-  let top: ClaudeState = 'idle';
-  for (const [, s] of entries) if (RANK[s] > RANK[top]) top = s;
-  const v = VIEW[top];
-  const tip = active.length > 0 ? active.map(([t, s]) => `${TOOL_LABEL[t]}：${VIEW[s].label}`).join('、') : '無 AI 執行中';
+  // 每工具一個 chip（dot 顏色/脈動＝狀態、文字＝工具名）分開顯示；只顯示非 idle 的工具，都 idle → 不顯示。
+  const active = (Object.keys(TOOL_LABEL) as AiTool[]).filter((t) => (states[t] ?? 'idle') !== 'idle');
+  if (active.length === 0) return <span aria-hidden="true" />;
 
   return (
-    <span
-      role="status"
-      aria-label={`AI 狀態：${tip}`}
-      title={tip}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
-    >
-      <span
-        className={`pdws-claude-dot${v.pulse ? ' is-pulse' : ''}`}
-        style={{ background: v.color, color: v.color }}
-        aria-hidden="true"
-      />
-      {/* 非未啟動才顯示文字（最高優先態；多個 AI 同時非 idle 時附數量）；idle 只留灰點不擾。 */}
-      {top !== 'idle' && (
-        <span aria-hidden="true" style={{ fontSize: 'var(--text-xs)', color: v.color, whiteSpace: 'nowrap', flexShrink: 0 }}>
-          {v.label}
-          {active.length > 1 ? ` ·${active.length}` : ''}
-        </span>
-      )}
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+      {active.map((t) => {
+        const v = VIEW[states[t] as ClaudeState];
+        return (
+          <span
+            key={t}
+            role="status"
+            aria-label={`${TOOL_LABEL[t]} 狀態：${v.label}`}
+            title={`${TOOL_LABEL[t]}：${v.label}`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}
+          >
+            <span className={`pdws-claude-dot${v.pulse ? ' is-pulse' : ''}`} style={{ background: v.color, color: v.color }} aria-hidden="true" />
+            <span aria-hidden="true" style={{ fontSize: 'var(--text-xs)', color: v.color, whiteSpace: 'nowrap' }}>
+              {TOOL_LABEL[t]}
+            </span>
+          </span>
+        );
+      })}
     </span>
   );
 }

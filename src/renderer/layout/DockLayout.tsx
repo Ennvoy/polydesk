@@ -10,6 +10,7 @@ import 'dockview-core/dist/styles/dockview.css';
 import { dockviewComponents } from './panelRegistry';
 import { useTheme } from '../theme/ThemeProvider';
 import { ipc } from '../ipc/client';
+import { editorBus } from '../state/editorBus';
 import {
   LayoutPersistController,
   deriveToolbarState,
@@ -216,6 +217,18 @@ export function DockLayout(): React.JSX.Element {
     if (!api) return;
     setToolbar(deriveToolbarState(api, { sidebar: SIDEBAR_ID, editor: EDITOR_ID, terminal: TERMINAL_ID }));
   }, []);
+
+  // 隱藏編輯器時點檔（Explorer/Search 呼 openFile）→ 自動把編輯器 group 顯示回來（否則檔案開了卻看不到）。
+  useEffect(() => {
+    return editorBus.subscribe(() => {
+      const api = layoutApi;
+      const g = api?.getPanel(EDITOR_ID)?.api.group;
+      if (g && !g.api.isVisible) {
+        g.api.setVisible(true);
+        syncToolbar();
+      }
+    });
+  }, [syncToolbar]);
 
   const onReady = useCallback(
     (event: DockviewReadyEvent) => {

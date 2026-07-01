@@ -481,10 +481,10 @@ export function Explorer(): React.JSX.Element {
             zIndex: 1000,
             minWidth: 200,
             padding: '4px 0',
-            background: 'var(--bg-2, var(--bg-1))',
+            background: 'var(--surface-warm)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-md, 6px)',
-            boxShadow: 'var(--shadow-lg, 0 8px 24px rgba(0,0,0,0.4))',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
           }}
         >
           {/* 資料夾 / 根：可新增 */}

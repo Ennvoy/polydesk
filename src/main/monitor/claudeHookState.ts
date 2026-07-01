@@ -48,14 +48,15 @@ export function matchWorkspace(cwd: string, workspaces: readonly { id: string; p
 
 const RANK: Record<ClaudeState, number> = { running: 3, 'stopped-await': 2, done: 1, idle: 0 };
 
-/** working 殘留的最終保險時效：超過此值沒更新的「執行中」視為殘留 → 降級已停止。
- * 保守 30 分鐘：長到幾乎不誤判正常長任務（單一 hook 間隔 >30min 極罕見），仍能兜住 SessionStart/End 沒清到的殘留。 */
-const WORKING_STALE_MS = 30 * 60 * 1000;
+/** 殘留時效：超過此值沒更新的「執行中/待確認」視為殘留 → 忽略（不污染工作區狀態）。
+ * 保守 30 分鐘：長到幾乎不誤判正常長任務/短暫離開，仍能清掉 SessionStart/End 沒清到的舊 session 殘留。 */
+const STALE_MS = 30 * 60 * 1000;
 
 /**
  * 某工作區綜合狀態：無 alive PTY → idle（沒終端機就不可能有 claude；清掉 hook 殘留）；
  * 否則取該工作區所有 session 的最高優先序（執行中 > 待確認 > 已停止）；無 session → idle（未啟動）。
- * working 殘留保險：太久沒更新的「執行中」降級為已停止（SessionStart 清殘留、SessionEnd 刪檔之外的最終防線）。
+ * 殘留保險：太久沒更新的「執行中/待確認」視為殘留 → 忽略（避免舊 session 的 awaiting/working 永久污染；
+ * done/idle 不受影響）。這是 SessionStart 清殘留、SessionEnd 刪檔之外的最終防線。
  */
 export function computeWorkspaceState(
   hasAlivePty: boolean,
@@ -65,8 +66,8 @@ export function computeWorkspaceState(
   if (!hasAlivePty) return 'idle';
   let best: ClaudeState = 'idle';
   for (const s of sessions) {
-    let st = hookStateToClaude(s.state);
-    if (st === 'running' && s.ts > 0 && now - s.ts > WORKING_STALE_MS) st = 'done';
+    const st = hookStateToClaude(s.state);
+    if ((st === 'running' || st === 'stopped-await') && s.ts > 0 && now - s.ts > STALE_MS) continue;
     if (RANK[st] > RANK[best]) best = st;
   }
   return best;

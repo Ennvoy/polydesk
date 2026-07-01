@@ -72,7 +72,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
     });
     await mon.recompute(); // running
     expect(notes).toHaveLength(0);
-    sessions = [{ sessionId: 's1', cwd: 'C:/p/a', state: 'awaiting', ts: 2 }];
+    sessions = [{ sessionId: 's1', cwd: 'C:/p/a', state: 'awaiting', ts: Date.now() }];
     await mon.recompute(); // → stopped-await（待確認）
     expect(emitted.at(-1)?.status.state).toBe('stopped-await');
     expect(notes).toEqual([{ wsId: 'a', name: 'a' }]);

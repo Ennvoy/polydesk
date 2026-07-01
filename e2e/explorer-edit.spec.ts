@@ -44,3 +44,27 @@ test('檔案總管右鍵：新增檔案 → 改名 → 刪除', async () => {
   rmSync(userData, { recursive: true, force: true });
   rmSync(wsRoot, { recursive: true, force: true });
 });
+
+test('隱藏編輯器時點檔 → 編輯器自動顯示回來', async () => {
+  const wsRoot = makeTempDir();
+  const wsDir = makeSubDir(wsRoot, 'proj');
+  writeFileSync(join(wsDir, 'hello.txt'), 'hi');
+
+  const { app, page, userData } = await launchApp();
+  await stubFolderPicker(app, [wsDir]);
+  await addWorkspaceViaUI(page);
+
+  const editorBtn = page.locator('button[aria-label="切換編輯器顯示"]');
+  await expect(editorBtn).toHaveAttribute('aria-pressed', 'true'); // 預設顯示
+
+  await editorBtn.click(); // 隱藏編輯器
+  await expect(editorBtn).toHaveAttribute('aria-pressed', 'false');
+
+  // 點檔 → 編輯器應自動顯示回來
+  await page.locator('[role="tree"] [role="treeitem"][aria-label="hello.txt"]').click();
+  await expect(editorBtn).toHaveAttribute('aria-pressed', 'true');
+
+  await app.close();
+  rmSync(userData, { recursive: true, force: true });
+  rmSync(wsRoot, { recursive: true, force: true });
+});

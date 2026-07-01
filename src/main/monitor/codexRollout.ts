@@ -53,7 +53,8 @@ export function parseRolloutTail(tailText: string): { state: 'working' | 'done';
     const ts = j.timestamp ? Date.parse(j.timestamp) || 0 : 0;
     const pt = j.payload?.type;
     if (pt === 'task_started') lastTask = { done: false, ts };
-    else if (pt === 'task_complete') lastTask = { done: true, ts };
+    else if (pt === 'task_complete' || pt === 'turn_complete' || pt === 'turn_aborted' || pt === 'turn_end')
+      lastTask = { done: true, ts }; // turn 正常結束/中止皆＝已停止
     if (j.type === 'response_item' || j.type === 'event_msg') {
       sawActivity = true;
       if (ts > lastActivityTs) lastActivityTs = ts;

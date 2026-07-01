@@ -44,12 +44,15 @@ describe('claudeHookState', () => {
     expect(computeWorkspaceState(true, [S({ state: 'done' }), S({ state: 'working' }), S({ state: 'awaiting' })])).toBe('running');
   });
 
-  it('computeWorkspaceState：working 殘留超時 → 降級已停止（最終保險，awaiting 不受影響）', () => {
+  it('computeWorkspaceState：working/awaiting 殘留超時 → 忽略（避免舊 session 污染；done/ts=0 不受影響）', () => {
     const now = 100 * 60 * 1000; // 100 分鐘
     expect(computeWorkspaceState(true, [S({ state: 'working', ts: now - 1000 })], now)).toBe('running'); // 新鮮 → 執行中
-    expect(computeWorkspaceState(true, [S({ state: 'working', ts: now - 60 * 60 * 1000 })], now)).toBe('done'); // 60min 前殘留 → 降級已停止
-    expect(computeWorkspaceState(true, [S({ state: 'awaiting', ts: now - 60 * 60 * 1000 })], now)).toBe('stopped-await'); // 待確認不受時效影響
-    expect(computeWorkspaceState(true, [S({ state: 'working', ts: 0 })], now)).toBe('running'); // ts=0（未知）不降級
+    expect(computeWorkspaceState(true, [S({ state: 'working', ts: now - 60 * 60 * 1000 })], now)).toBe('idle'); // 殘留忽略 → 無有效 session → idle
+    expect(computeWorkspaceState(true, [S({ state: 'awaiting', ts: now - 60 * 60 * 1000 })], now)).toBe('idle'); // 待確認殘留也忽略
+    // 舊 awaiting 殘留 + 新鮮 working → 執行中（殘留不污染成待確認）
+    expect(computeWorkspaceState(true, [S({ state: 'awaiting', ts: now - 60 * 60 * 1000 }), S({ state: 'working', ts: now - 1000 })], now)).toBe('running');
+    expect(computeWorkspaceState(true, [S({ state: 'done', ts: now - 60 * 60 * 1000 })], now)).toBe('done'); // done 不過濾
+    expect(computeWorkspaceState(true, [S({ state: 'working', ts: 0 })], now)).toBe('running'); // ts=0（未知）不過濾
   });
 
   it('aggregateWorkspaceStates：每 session 歸戶 + 逐工作區綜合 + PTY 閘門', () => {
