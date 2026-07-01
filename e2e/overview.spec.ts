@@ -16,6 +16,17 @@ test('總覽面板：開 → 用量卡片 + 工作區狀態 → 關閉', async (
   const overview = page.locator('[role="dialog"][aria-label="總覽"]');
   await expect(overview).toBeVisible();
 
+  // 遮罩蓋滿整個視窗（position:fixed inset:0）——先前是 absolute 只蓋 shell-main、且偏左上
+  const vp = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  const box = await overview.boundingBox();
+  expect(box).not.toBeNull();
+  if (box) {
+    expect(box.x).toBeLessThanOrEqual(1);
+    expect(box.y).toBeLessThanOrEqual(1);
+    expect(box.width).toBeGreaterThanOrEqual(vp.w - 2);
+    expect(box.height).toBeGreaterThanOrEqual(vp.h - 2);
+  }
+
   // 用量區（Claude/Codex 卡片）+ 工作區狀態區
   await expect(overview.getByText('服務用量', { exact: false })).toBeVisible();
   await expect(overview.getByRole('heading', { name: 'Claude' })).toBeVisible();

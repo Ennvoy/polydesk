@@ -106,7 +106,7 @@ export function OverviewPanel(): React.JSX.Element | null {
       role="dialog"
       aria-label="總覽"
       onClick={() => overviewBus.close()}
-      style={{ position: 'absolute', inset: 0, zIndex: 900, background: 'rgba(0,0,0,0.45)', display: 'flex', padding: 'var(--space-5)' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-5)' }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
