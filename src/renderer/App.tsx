@@ -9,6 +9,7 @@ import { DialogHost } from './components/Dialogs/host';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { RailResizer } from './components/RailResizer';
 import { OverviewPanel } from './components/OverviewPanel';
+import { railBus } from './state/railBus';
 import { useAppState } from './state/appStore';
 import { useClaudeCounts } from './state/claudeCounts';
 
@@ -39,13 +40,15 @@ function StatusBar(): React.JSX.Element {
 }
 
 export function App(): React.JSX.Element {
+  const [railVisible, setRailVisible] = React.useState(railBus.isVisible());
+  React.useEffect(() => railBus.subscribe(setRailVisible), []);
   return (
     <div className="pd-root">
       <TitleBar />
       <div className="pd-shell">
         <ActivityBar />
-        <WorkspaceRail />
-        <RailResizer />
+        {railVisible && <WorkspaceRail />}
+        {railVisible && <RailResizer />}
         <div className="pd-shell-main" style={{ position: 'relative' }}>
           <div className="pd-shell-body">
             <DockLayout />

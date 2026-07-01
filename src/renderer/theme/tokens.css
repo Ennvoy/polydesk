@@ -99,7 +99,8 @@
   --elev-raised: rgba(20, 20, 19, 0.06) 0px 4px 24px;
   --focus-ring: 0 0 0 3px rgba(56, 152, 236, 0.3);
   --font-display: "Anthropic Serif", Georgia, "Times New Roman", serif;
-  --font-body: "Anthropic Sans", system-ui, -apple-system, Arial, sans-serif;
+  /* 內文統一 Geist（與深/淺色一致，避免切色調時字體度量不同造成版面跳）；標題 font-display 保留 serif 特色。 */
+  --font-body: "Geist", "Geist Sans", -apple-system, "Segoe UI", Arial, sans-serif;
   color-scheme: light;
 }
 

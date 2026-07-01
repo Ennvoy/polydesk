@@ -12,6 +12,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { ipc } from '../ipc/client';
 import { editorBus } from '../state/editorBus';
 import { overviewBus } from '../state/overviewBus';
+import { railBus } from '../state/railBus';
 import {
   LayoutPersistController,
   deriveToolbarState,
@@ -161,6 +162,9 @@ export function resetLayout(): void {
   api.getPanel(SIDEBAR_ID)?.api.setSize({ width: 280 });
   // 5. 清掉舊持久化殘留的「標頭=藏」，讓所有 group 標頭顯示（撤 hideTerminalHeader 後該全顯示，才有拖曳把手）。
   showAllGroupHeaders(api);
+  // 6. 工作區 rail 寬度回預設（240，對齊 tokens.css）+ 落檔，讓「重設版面」也還原工作區 rail。
+  document.documentElement.style.setProperty('--rail-w', '240px');
+  void ipc.store.setRailWidth({ width: 240 }).catch(() => undefined);
 }
 
 /** 供標題列「檢視」選單切換面板顯隱（toolbar 視覺態經 dockview onDidLayoutChange 自動 re-sync）。 */
@@ -211,6 +215,8 @@ export function DockLayout(): React.JSX.Element {
     terminalVisible: true,
     maximized: false,
   });
+  const [railVisible, setRailVisible] = useState(railBus.isVisible());
+  useEffect(() => railBus.subscribe(setRailVisible), []);
 
   // A1：工具列視覺態一律由 dockview getPanel 推導（非獨立 boolean），避免狀態機去同步。
   const syncToolbar = useCallback(() => {
@@ -368,6 +374,17 @@ export function DockLayout(): React.JSX.Element {
           style={toolbarBtnStyle}
         >
           總覽
+        </button>
+        <button
+          type="button"
+          className={`pd-btn${railVisible ? ' pd-btn-primary' : ''}`}
+          aria-label="切換工作區列顯示"
+          aria-pressed={railVisible}
+          title="顯示/隱藏工作區列"
+          onClick={() => railBus.toggle()}
+          style={toolbarBtnStyle}
+        >
+          工作區
         </button>
         <button
           type="button"

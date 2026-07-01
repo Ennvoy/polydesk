@@ -83,15 +83,20 @@ export function OverviewPanel(): React.JSX.Element | null {
     [],
   );
 
-  // 開啟時查用量 + Esc 關閉。
+  // 開啟時查用量並每 20 秒自動更新 + Esc 關閉。
   useEffect(() => {
     if (!open) return undefined;
-    void ipc.ai.usage().then(setUsage).catch(() => undefined);
+    const fetchUsage = (): void => void ipc.ai.usage().then(setUsage).catch(() => undefined);
+    fetchUsage();
+    const timer = setInterval(fetchUsage, 20_000);
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') overviewBus.close();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('keydown', onKey);
+    };
   }, [open]);
 
   if (!open) return null;
