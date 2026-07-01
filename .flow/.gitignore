@@ -1,0 +1,8 @@
+# >>> flow-state (managed by flow-toolkit) >>>
+# Flow runtime/衍生狀態——可從 manifest/ledger/journal 重建，勿入版控（耐久證據不在此清單、照常 track）。
+state.json
+state.json.mode
+monitor.port
+*.log
+*-reminded
+# <<< flow-state <<<
