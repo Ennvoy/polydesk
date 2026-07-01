@@ -8,6 +8,7 @@ import { DockLayout } from './layout/DockLayout';
 import { DialogHost } from './components/Dialogs/host';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { RailResizer } from './components/RailResizer';
+import { OverviewPanel } from './components/OverviewPanel';
 import { useAppState } from './state/appStore';
 import { useClaudeCounts } from './state/claudeCounts';
 
@@ -45,11 +46,12 @@ export function App(): React.JSX.Element {
         <ActivityBar />
         <WorkspaceRail />
         <RailResizer />
-        <div className="pd-shell-main">
+        <div className="pd-shell-main" style={{ position: 'relative' }}>
           <div className="pd-shell-body">
             <DockLayout />
           </div>
           <StatusBar />
+          <OverviewPanel />
         </div>
         <DialogHost />
       </div>

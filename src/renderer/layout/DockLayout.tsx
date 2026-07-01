@@ -11,6 +11,7 @@ import { dockviewComponents } from './panelRegistry';
 import { useTheme } from '../theme/ThemeProvider';
 import { ipc } from '../ipc/client';
 import { editorBus } from '../state/editorBus';
+import { overviewBus } from '../state/overviewBus';
 import {
   LayoutPersistController,
   deriveToolbarState,
@@ -358,6 +359,16 @@ export function DockLayout(): React.JSX.Element {
         aria-label="版面控制"
         style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', textTransform: 'none' }}
       >
+        <button
+          type="button"
+          className="pd-btn"
+          aria-label="開啟總覽"
+          title="總覽（各工作區 AI 狀態 + 用量）"
+          onClick={() => overviewBus.toggle()}
+          style={toolbarBtnStyle}
+        >
+          總覽
+        </button>
         <button
           type="button"
           className={`pd-btn${toolbar.sidebarVisible ? ' pd-btn-primary' : ''}`}
