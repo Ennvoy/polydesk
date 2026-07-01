@@ -55,6 +55,11 @@ export interface InvokeChannels {
     req: { wsId: string; destDir: string; sources: string[] };
     res: { imported: number; names: string[]; errors?: string[] } | { error: string };
   };
+  /** 讀 xlsx/xls 等試算表 → 每工作表的儲存格字串矩陣（唯讀預覽，非文字編輯）。 */
+  'fs:readSheet': {
+    req: { wsId: string; path: string };
+    res: { sheets: { name: string; rows: string[][] }[] } | { error: string };
+  };
   'fs:reveal': { req: { wsId: string; path: string }; res: { ok: true } | { error: string } };
   // git
   'git:status': { req: { wsId: string }; res: GitStatus };

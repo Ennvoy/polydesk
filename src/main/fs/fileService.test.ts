@@ -17,6 +17,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import iconv from 'iconv-lite';
+import * as XLSX from 'xlsx';
 import { StateStore } from '../store/StateStore';
 import { WorkspaceManager } from '../workspace/WorkspaceManager';
 import { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
@@ -27,6 +28,7 @@ import {
   resolveSafe,
   importFiles,
   deleteEntry,
+  readSheet,
   __resetFileServiceState,
 } from './fileService';
 
@@ -429,5 +431,42 @@ describe('fileService deleteEntry（symlink 不跟隨葉節點）', () => {
     expect('ok' in r).toBe(true);
     expect(existsSync(join(dir, 'link'))).toBe(false); // 連結被刪
     expect(readFileSync(join(dir, 'real', 'keep.txt'), 'utf8')).toBe('KEEP'); // 目標內容完好、未被跟隨刪掉
+  });
+});
+
+// ── readSheet：xlsx 唯讀表格預覽 ──────────────────────────────────────────
+describe('fileService readSheet（xlsx 表格預覽）', () => {
+  let ctx: ReturnType<typeof setup>;
+  beforeEach(() => {
+    __resetFileServiceState();
+    ctx = setup();
+  });
+  afterEach(() => {
+    rmSync(ctx.root, { recursive: true, force: true });
+  });
+
+  it('解析 xlsx 成工作表儲存格矩陣（含中文、多工作表、數字轉字串）', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'codeA');
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['姓名', '分數'], ['小明', 90], ['小華', 85]]), '成績');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['項目'], ['備註']]), '其他');
+    XLSX.writeFile(wb, join(dir, 'data.xlsx'));
+
+    const r = await readSheet(ctx.mgr, wsId, 'data.xlsx');
+    expect('sheets' in r).toBe(true);
+    if ('sheets' in r) {
+      expect(r.sheets.map((s) => s.name)).toEqual(['成績', '其他']);
+      expect(r.sheets[0].rows[0]).toEqual(['姓名', '分數']);
+      expect(r.sheets[0].rows[1]).toEqual(['小明', '90']); // 數字→字串
+      expect(r.sheets[0].rows[2]).toEqual(['小華', '85']);
+    }
+  });
+
+  it('越界路徑拒；壞檔不崩（try/catch 保證 return）', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'codeA');
+    expect('error' in (await readSheet(ctx.mgr, wsId, '../secret.xlsx'))).toBe(true);
+    writeFileSync(join(dir, 'bad.xlsx'), 'not a real xlsx', 'utf8');
+    const bad = await readSheet(ctx.mgr, wsId, 'bad.xlsx'); // 不應 throw
+    expect(bad).toBeDefined();
   });
 });

@@ -20,6 +20,7 @@ export const INVOKE_CHANNELS = [
   'fs:delete',
   'fs:copy',
   'fs:importFiles',
+  'fs:readSheet',
   'fs:reveal',
   'git:status',
   'git:changes',

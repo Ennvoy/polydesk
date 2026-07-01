@@ -12,6 +12,7 @@ import { realpathSync, constants as fsConstants, promises as fsp } from 'node:fs
 import { resolve, relative, isAbsolute, dirname, join, basename } from 'node:path';
 import jschardet from 'jschardet';
 import iconv from 'iconv-lite';
+import * as XLSX from 'xlsx';
 import { shell } from 'electron';
 import type { IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
@@ -541,6 +542,29 @@ export async function importFiles(
   return errors.length ? { imported, names, errors } : { imported, names };
 }
 
+/** 讀試算表（xlsx/xls/xlsm/...）→ 每工作表的儲存格字串矩陣（唯讀預覽）。大檔限前 MAX_SHEET_ROWS 列避免卡死。 */
+const MAX_SHEET_ROWS = 5000;
+export async function readSheet(
+  mgr: WorkspaceManager,
+  wsId: string,
+  p: string,
+): Promise<{ sheets: { name: string; rows: string[][] }[] } | { error: string }> {
+  const safe = resolveSafe(mgr, wsId, p);
+  if ('error' in safe) return { error: '路徑超出工作區範圍' };
+  try {
+    const buf = await fsp.readFile(safe.abs);
+    const wb = XLSX.read(buf, { type: 'buffer', cellDates: false, cellFormula: false, cellHTML: false });
+    const sheets = wb.SheetNames.map((name) => {
+      const ws = wb.Sheets[name];
+      const raw = (XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' }) as unknown[][]).slice(0, MAX_SHEET_ROWS);
+      return { name, rows: raw.map((r) => r.map((c) => (c == null ? '' : String(c)))) };
+    });
+    return { sheets };
+  } catch (e) {
+    return { error: fsOpError(e) };
+  }
+}
+
 /** 測試輔助：清空模組級版本指紋狀態。 */
 export function __resetFileServiceState(): void {
   readVersions.clear();
@@ -555,6 +579,7 @@ export function registerFileService(ipc: IpcMain, workspaces: WorkspaceManager):
   ipc.handle('fs:delete', (_e, req: InvokeReq<'fs:delete'>) => deleteEntry(workspaces, req.wsId, req.path));
   ipc.handle('fs:copy', (_e, req: InvokeReq<'fs:copy'>) => copyEntry(workspaces, req.wsId, req.from, req.to));
   ipc.handle('fs:importFiles', (_e, req: InvokeReq<'fs:importFiles'>) => importFiles(workspaces, req.wsId, req.destDir, req.sources));
+  ipc.handle('fs:readSheet', (_e, req: InvokeReq<'fs:readSheet'>) => readSheet(workspaces, req.wsId, req.path));
   ipc.handle('fs:reveal', (_e, req: InvokeReq<'fs:reveal'>) => {
     const safe = resolveSafe(workspaces, req.wsId, req.path);
     if ('error' in safe) return { error: '路徑超出工作區範圍' } as const;

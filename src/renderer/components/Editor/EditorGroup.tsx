@@ -13,14 +13,15 @@ import { mark, measure } from '../../../shared/perf';
 import type { FileEncoding, Eol } from '../../../shared/types';
 import type { InvokeRes } from '../../../shared/ipc';
 import { tabKey, modelUri, baseName, langFromPath, monoFontFamily, applyMonacoTheme } from './models';
+import { SheetView } from './SheetView';
 
 interface Tab {
   key: string;
   wsId: string;
   path: string;
   name: string;
-  /** 'file'=可編輯檔；'diff'=唯讀差異檢視（SCM 點變更檔開啟，工作樹 vs HEAD）。 */
-  kind: 'file' | 'diff';
+  /** 'file'=可編輯檔；'diff'=唯讀差異檢視（SCM 點變更檔）；'sheet'=xlsx/xls 唯讀表格預覽。 */
+  kind: 'file' | 'diff' | 'sheet';
   language: string;
   encoding: FileEncoding;
   eol: Eol;
@@ -165,6 +166,16 @@ export function EditorGroup(): React.JSX.Element {
       return;
     }
 
+    // 試算表（xlsx/xls）→ 唯讀表格預覽，不進 Monaco（避免二進位亂碼）
+    if (/\.(xlsx|xls|xlsm|xlsb)$/i.test(req.path)) {
+      setTabs((prev) => [
+        ...prev,
+        { key, wsId: req.wsId, path: req.path, name: baseName(req.path), kind: 'sheet', language: 'xlsx', encoding: 'utf-8', eol: 'lf', readonly: true, dirty: false },
+      ]);
+      setActiveKey(key);
+      return;
+    }
+
     const startMark = `fileOpen:${key}:${Date.now()}`;
     mark(startMark);
 
@@ -251,7 +262,7 @@ export function EditorGroup(): React.JSX.Element {
   const saveTab = useCallback(
     async (key: string): Promise<boolean> => {
       const tab = tabsRef.current.find((t) => t.key === key);
-      if (!tab || tab.kind === 'diff') return false; // diff 分頁唯讀、不可存
+      if (!tab || tab.kind !== 'file') return false; // diff/sheet 分頁唯讀、不可存
       const model = monaco.editor.getModel(modelUri(tab.wsId, tab.path));
       if (!model) return false;
 
@@ -544,7 +555,7 @@ export function EditorGroup(): React.JSX.Element {
           className="pd-editor-pane"
           role="group"
           aria-label="編輯區"
-          style={active?.kind === 'diff' ? { display: 'none' } : undefined}
+          style={active?.kind === 'diff' || active?.kind === 'sheet' ? { display: 'none' } : undefined}
         />
         {split && (
           <div
@@ -552,12 +563,17 @@ export function EditorGroup(): React.JSX.Element {
             className="pd-editor-pane pd-editor-pane-split"
             role="group"
             aria-label="分割編輯區"
-            style={active?.kind === 'diff' ? { display: 'none' } : undefined}
+            style={active?.kind === 'diff' || active?.kind === 'sheet' ? { display: 'none' } : undefined}
           />
         )}
         {active?.kind === 'diff' && active.patch !== undefined && (
           <div className="pd-editor-pane pd-editor-diffpane" role="group" aria-label={`差異：${active.name}`}>
             <DiffView key={active.key} path={active.path} patch={active.patch} />
+          </div>
+        )}
+        {active?.kind === 'sheet' && (
+          <div className="pd-editor-pane" role="group" aria-label={`試算表：${active.name}`}>
+            <SheetView key={active.key} wsId={active.wsId} path={active.path} />
           </div>
         )}
         {tabs.length === 0 && (
