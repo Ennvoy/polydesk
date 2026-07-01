@@ -1,0 +1,33 @@
+// usageService：codex rollout token_count.rate_limits 解析（primary=5h、secondary=週、plan）。
+import { describe, it, expect } from 'vitest';
+import { parseCodexRateLimits } from './usageService';
+
+describe('parseCodexRateLimits', () => {
+  const tokenCount = (rl: unknown): string => JSON.stringify({ timestamp: '2026-07-01T00:00:00Z', type: 'event_msg', payload: { type: 'token_count', rate_limits: rl } });
+
+  it('取 primary→5h、secondary→週、plan_type', () => {
+    const tail = tokenCount({
+      primary: { used_percent: 9, window_minutes: 300, resets_at: 1782882616 },
+      secondary: { used_percent: 5, window_minutes: 10080, resets_at: 1783394605 },
+      plan_type: 'plus',
+    });
+    const u = parseCodexRateLimits(tail);
+    expect(u?.fiveHour).toEqual({ usedPercent: 9, resetsAt: 1782882616 });
+    expect(u?.sevenDay).toEqual({ usedPercent: 5, resetsAt: 1783394605 });
+    expect(u?.planType).toBe('plus');
+  });
+
+  it('取尾端「最後一個」token_count（後蓋前）', () => {
+    const tail = [
+      tokenCount({ primary: { used_percent: 1, resets_at: 1 }, secondary: { used_percent: 1, resets_at: 1 } }),
+      tokenCount({ primary: { used_percent: 42, resets_at: 999 }, secondary: { used_percent: 7, resets_at: 888 } }),
+    ].join('\n');
+    expect(parseCodexRateLimits(tail)?.fiveHour?.usedPercent).toBe(42);
+  });
+
+  it('無 rate_limits / 半行 → undefined，不崩', () => {
+    expect(parseCodexRateLimits('')).toBeUndefined();
+    expect(parseCodexRateLimits('{"broken jso\n')).toBeUndefined();
+    expect(parseCodexRateLimits(JSON.stringify({ payload: { type: 'agent_message' } }))).toBeUndefined();
+  });
+});

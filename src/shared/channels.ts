@@ -36,6 +36,7 @@ export const INVOKE_CHANNELS = [
   'git:stash',
   'git:init',
   'ai:generateCommitMessage',
+  'ai:usage',
   'pty:create',
   'pty:resize',
   'pty:close',

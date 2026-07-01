@@ -19,6 +19,7 @@ import type {
   ThemeId,
   PersistState,
   AiCommitSettings,
+  AiUsage,
   McpWireResult,
   ConflictInfo,
 } from './types';
@@ -75,6 +76,8 @@ export interface InvokeChannels {
   'git:init': { req: { wsId: string }; res: { ok: true } };
   // AI 智慧 commit message（取 staged diff → 選定引擎產生；只回填訊息框、不自動 commit）
   'ai:generateCommitMessage': { req: { wsId: string }; res: { message: string } | { error: string } };
+  // 總覽面板：claude/codex 的 5h/週用量額度
+  'ai:usage': { req: void; res: AiUsage };
   // 終端機（控制訊息走 invoke；資料流走 stream）
   'pty:create': { req: { wsId: string; shell: ShellKind }; res: { termId: string } };
   'pty:resize': { req: { termId: string; cols: number; rows: number }; res: { ok: true } };

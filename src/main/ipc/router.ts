@@ -12,6 +12,7 @@ import { registerFileService } from '../fs/fileService';
 import { registerPtyHandlers, type PtyManager } from '../pty/PtyManager';
 import { registerGitHandlers } from '../git/GitService';
 import { registerCommitMessageHandler } from '../ai/CommitMessageService';
+import { registerUsageHandler } from '../ai/usageService';
 import { registerSearchHandlers } from '../search/SearchService';
 import { registerLspHandlers } from '../lsp/LspManager';
 import { ClaudeStatusMonitor } from '../monitor/ClaudeStatusMonitor';
@@ -40,6 +41,7 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
   const pty = registerPtyHandlers(ipcMain, workspaces, lifecycle); // pty:*
   registerGitHandlers(ipcMain, workspaces); // git:*
   registerCommitMessageHandler(ipcMain, workspaces, store); // ai:generateCommitMessage（智慧 commit message）
+  registerUsageHandler(ipcMain); // ai:usage（總覽用量）
   registerSearchHandlers(ipcMain, workspaces); // search:*
   registerLspHandlers(ipcMain, workspaces, lifecycle); // lsp:*
 
