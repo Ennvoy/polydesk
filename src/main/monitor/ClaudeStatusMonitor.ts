@@ -18,10 +18,13 @@ import { join } from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import { aggregateByTool, AI_TOOLS, type SessionStatus } from './claudeHookState';
 import { readCodexSessions } from './codexRollout';
+import { scanClaudeShellPids } from './aiProcessScan';
 import { claudePaths } from '../claude/statusHooks';
 
 /** 週期重算間隔（cheap：只讀已快取 sessions + pidsOf，不掃整機程序）。catches 關終端機→idle。 */
 const DEFAULT_RECOMPUTE_MS = 3_000;
+/** claude process 掃描節流（wmic ~40ms，但不必每次 recompute 都掃）。 */
+const PROCESS_SCAN_MS = 8_000;
 
 type WorkspacesView = Pick<WorkspaceManager, 'list'>;
 type PtyView = Pick<PtyManager, 'pidsOf'>;
@@ -52,6 +55,8 @@ export interface ClaudeStatusMonitorOptions {
   readSessions?: SessionReader;
   /** codex rollout 來源（預設掃 ~/.codex/sessions）；測試可注入。 */
   readCodex?: SessionReader;
+  /** claude process 掃描（預設 wmic 查 claude.exe ppid）；測試可注入。 */
+  scanClaude?: () => Promise<Set<number>>;
   watchFactory?: WatchFactory;
 }
 
@@ -68,6 +73,9 @@ export class ClaudeStatusMonitor {
   private readonly notifyAwait: AwaitNotifier;
   private readonly readSessions: SessionReader;
   private readonly readCodex: SessionReader;
+  private readonly scanClaude: () => Promise<Set<number>>;
+  private claudeShellPids = new Set<number>();
+  private lastScanAt = 0;
   private readonly watchFactory: WatchFactory;
 
   constructor(
@@ -81,6 +89,7 @@ export class ClaudeStatusMonitor {
     this.notifyAwait = opts.notifyAwait ?? defaultNotifyAwait;
     this.readSessions = opts.readSessions ?? (() => this.defaultReadSessions());
     this.readCodex = opts.readCodex ?? (() => readCodexSessions());
+    this.scanClaude = opts.scanClaude ?? scanClaudeShellPids;
     this.watchFactory = opts.watchFactory ?? defaultWatchFactory;
     opts.lifecycle?.register('monitor', (wsId) => {
       for (const tool of AI_TOOLS) this.lastState.delete(`${wsId}::${tool}`);
@@ -121,13 +130,26 @@ export class ClaudeStatusMonitor {
     this.recomputing = true;
     try {
       const now = Date.now();
+      // 節流掃 claude process（wmic ~40ms，不必每次都掃）→ 快取供本輪 isAlive 用。
+      if (now - this.lastScanAt > PROCESS_SCAN_MS) {
+        this.lastScanAt = now;
+        this.claudeShellPids = await this.scanClaude().catch(() => new Set<number>());
+      }
       // claude（hook 狀態檔）+ codex（rollout 解析）兩來源並行讀、各自容錯。
       const [claudeSessions, codexSessions] = await Promise.all([
         this.readSessions().catch(() => [] as SessionStatus[]),
         this.readCodex().catch(() => [] as SessionStatus[]),
       ]);
       const sessions = [...claudeSessions, ...codexSessions];
-      const byWsTool = aggregateByTool(this.workspaces.list(), sessions, (id) => this.pty.pidsOf(id).length > 0, now);
+      // per-tool idle 閘門：claude 要「Polydesk 終端機真的有 claude 子程序」（process 偵測，取代殘留猜測）；
+      // codex 有 PTY 即可（其 sessions 由 rollout reader 已用 mtime gate 活躍度）。
+      const isAlive = (wsId: string, tool: AiTool): boolean => {
+        const ptyPids = this.pty.pidsOf(wsId);
+        if (ptyPids.length === 0) return false;
+        if (tool === 'claude') return ptyPids.some((p) => this.claudeShellPids.has(p));
+        return true;
+      };
+      const byWsTool = aggregateByTool(this.workspaces.list(), sessions, isAlive, now);
       for (const [wsId, toolMap] of byWsTool) {
         for (const [tool, state] of toolMap) this.applyState(wsId, tool, state);
       }

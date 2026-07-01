@@ -48,15 +48,17 @@ export function matchWorkspace(cwd: string, workspaces: readonly { id: string; p
 
 const RANK: Record<ClaudeState, number> = { running: 3, 'stopped-await': 2, done: 1, idle: 0 };
 
-/** 殘留時效：超過此值沒更新的「執行中/待確認」視為殘留 → 忽略（不污染工作區狀態）。
- * 保守 30 分鐘：長到幾乎不誤判正常長任務/短暫離開，仍能清掉 SessionStart/End 沒清到的舊 session 殘留。 */
-const STALE_MS = 30 * 60 * 1000;
+/** working 殘留時效：長到不誤判正常長任務（單工具 hook 間隔 >30min 極罕見），仍清掉卡住的殘留。 */
+const WORKING_STALE_MS = 30 * 60 * 1000;
+/** awaiting 殘留時效：等待通常很快處理，超過 10 分鐘沒更新多半是「彈窗沒確認就關 claude」的殘留 → 清掉，
+ * 避免「明明沒開卻一直顯示待確認」。 */
+const AWAITING_STALE_MS = 10 * 60 * 1000;
 
 /**
  * 某工作區綜合狀態：無 alive PTY → idle（沒終端機就不可能有 claude；清掉 hook 殘留）；
  * 否則取該工作區所有 session 的最高優先序（執行中 > 待確認 > 已停止）；無 session → idle（未啟動）。
- * 殘留保險：太久沒更新的「執行中/待確認」視為殘留 → 忽略（避免舊 session 的 awaiting/working 永久污染；
- * done/idle 不受影響）。這是 SessionStart 清殘留、SessionEnd 刪檔之外的最終防線。
+ * 殘留保險：太久沒更新的「執行中/待確認」視為殘留 → 忽略（避免舊 session 污染；done/idle 不受影響）。
+ * awaiting 時效比 working 短（等待不會殘留那麼久），是 SessionStart 清殘留、SessionEnd 刪檔之外的最終防線。
  */
 export function computeWorkspaceState(
   hasAlivePty: boolean,
@@ -67,7 +69,10 @@ export function computeWorkspaceState(
   let best: ClaudeState = 'idle';
   for (const s of sessions) {
     const st = hookStateToClaude(s.state);
-    if ((st === 'running' || st === 'stopped-await') && s.ts > 0 && now - s.ts > STALE_MS) continue;
+    if (s.ts > 0) {
+      if (st === 'running' && now - s.ts > WORKING_STALE_MS) continue;
+      if (st === 'stopped-await' && now - s.ts > AWAITING_STALE_MS) continue;
+    }
     if (RANK[st] > RANK[best]) best = st;
   }
   return best;
@@ -104,12 +109,13 @@ export const AI_TOOLS: readonly AiTool[] = ['claude', 'codex'];
 /**
  * 工具中立聚合：每個 session 依 cwd 歸戶工作區、依 tool 分組，逐 (工作區,工具) 算綜合狀態。
  * 回 Map<wsId, Map<tool, ClaudeState>>（每工作區涵蓋 AI_TOOLS 全部工具，無 session→idle）。
- * idle 閘門（hasAlivePty）工具中立：無 alive PTY 則該工作區所有工具皆 idle。
+ * idle 閘門改成 per-tool 的 isAlive(wsId, tool)：claude 用「Polydesk 終端機真的有 claude 子程序」（process 偵測，
+ * 取代殘留猜測），codex 用「該工作區有 alive PTY」（rollout reader 已用 mtime gate 活躍度）。isAlive=false → idle。
  */
 export function aggregateByTool(
   workspaces: readonly { id: string; path: string }[],
   sessions: readonly SessionStatus[],
-  hasAlivePty: (wsId: string) => boolean,
+  isAlive: (wsId: string, tool: AiTool) => boolean,
   now: number = Date.now(),
 ): Map<string, Map<AiTool, ClaudeState>> {
   const byKey = new Map<string, SessionStatus[]>(); // key = `${wsId}::${tool}`
@@ -123,10 +129,9 @@ export function aggregateByTool(
   }
   const out = new Map<string, Map<AiTool, ClaudeState>>();
   for (const ws of workspaces) {
-    const alive = hasAlivePty(ws.id);
     const toolMap = new Map<AiTool, ClaudeState>();
     for (const tool of AI_TOOLS) {
-      toolMap.set(tool, computeWorkspaceState(alive, byKey.get(`${ws.id}::${tool}`) ?? [], now));
+      toolMap.set(tool, computeWorkspaceState(isAlive(ws.id, tool), byKey.get(`${ws.id}::${tool}`) ?? [], now));
     }
     out.set(ws.id, toolMap);
   }
