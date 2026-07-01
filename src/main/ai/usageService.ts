@@ -19,11 +19,12 @@ function toEpochSec(v: unknown): number | undefined {
   return undefined;
 }
 
-/** claude：讀 statusline 注入段寫的 ~/.claude/polydesk/usage.json。 */
-async function readClaudeUsage(home: string): Promise<AiUsage['claude']> {
+/** claude：讀 statusline 注入段寫的 ~/.claude/polydesk/usage.json（容 PS Out-File 的 BOM）。 */
+export async function readClaudeUsage(home: string): Promise<AiUsage['claude']> {
   try {
     const raw = await readFile(join(home, '.claude', 'polydesk', 'usage.json'), 'utf8');
-    const j = JSON.parse(raw) as Record<string, unknown>;
+    // PS 5.1 的 Out-File -Encoding utf8 會寫入 BOM，JSON.parse 不剝會拋錯 → 用量卡永遠空白，故先剝 BOM。
+    const j = JSON.parse(raw.replace(/^﻿/, '')) as Record<string, unknown>;
     const win = (pct: unknown, reset: unknown): RateWindow | undefined =>
       typeof pct === 'number' ? { usedPercent: pct, resetsAt: toEpochSec(reset) } : undefined;
     return { fiveHour: win(j.fiveHourPct, j.fiveHourReset), sevenDay: win(j.sevenDayPct, j.sevenDayReset) };

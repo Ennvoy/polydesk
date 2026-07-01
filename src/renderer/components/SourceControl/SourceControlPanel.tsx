@@ -354,7 +354,7 @@ export function SourceControlPanel(): React.JSX.Element {
       if (!wsId || paths.length === 0) return;
       const ok = await dialog.confirm({
         title: '取消變更',
-        body: `將捨棄${label}的未提交變更（含刪除未追蹤的新檔），此操作無法復原。確定？`,
+        body: `將捨棄${label}的未提交變更：已追蹤檔還原到上次提交（改動不可復原）、未追蹤新檔移到系統資源回收桶（可從回收桶救回）。確定？`,
         confirmText: '捨棄變更',
         cancelText: '取消',
       });

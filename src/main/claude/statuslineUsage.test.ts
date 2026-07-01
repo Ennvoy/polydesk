@@ -65,4 +65,36 @@ describe('statuslineUsage', () => {
       rmSync(home, { recursive: true, force: true });
     }
   });
+
+  it('既有 statusline.ps1 為 UTF-16LE：保留編碼注入、中文不亂碼（codex P1-2）', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'pd-sl-'));
+    mkdirSync(join(home, '.claude'), { recursive: true });
+    const script = 'Write-Output "早安"\n'; // 含中文，UTF-16LE + BOM
+    writeFileSync(slPath(home), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(script, 'utf16le')]));
+    try {
+      expect((await installStatuslineUsage(home)).changed).toBe(true);
+      const buf = readFileSync(slPath(home));
+      expect([buf[0], buf[1]]).toEqual([0xff, 0xfe]); // 仍是 UTF-16LE BOM（沒被轉成 UTF-8）
+      const text = buf.toString('utf16le').replace(/^﻿/, '');
+      expect(text).toContain('Write-Output "早安"'); // 中文原內容完好、未亂碼
+      expect(text).toContain('POLYDESK-USAGE-BEGIN');
+      // 備份也是原編碼
+      expect(readFileSync(`${slPath(home)}.polydesk-usage-bak`).toString('utf16le').replace(/^﻿/, '')).toContain('早安');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('既有 statusline.ps1 為非 UTF-8/UTF-16（Big5 位元組）：跳過注入、原檔 byte-identical', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'pd-sl-'));
+    mkdirSync(join(home, '.claude'), { recursive: true });
+    const big5 = Buffer.from([0x41, 0xa6, 0x63, 0x0a]); // 'A' + 一個 Big5 雙位元組 + \n（非合法 UTF-8、無 BOM）
+    writeFileSync(slPath(home), big5);
+    try {
+      expect((await installStatuslineUsage(home)).changed).toBe(false); // 不冒險 → 跳過
+      expect(readFileSync(slPath(home)).equals(big5)).toBe(true); // 原檔一位元組都沒動
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
 });

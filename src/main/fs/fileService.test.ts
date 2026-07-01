@@ -9,6 +9,7 @@ import {
   rmSync,
   writeFileSync,
   readFileSync,
+  existsSync,
   chmodSync,
   utimesSync,
   symlinkSync,
@@ -25,6 +26,7 @@ import {
   detectEncoding,
   resolveSafe,
   importFiles,
+  deleteEntry,
   __resetFileServiceState,
 } from './fileService';
 
@@ -403,5 +405,29 @@ describe('fileService importFiles（貼上外部檔案）', () => {
     writeFileSync(join(dir, 'file.txt'), 'F', 'utf8');
     const notDir = await importFiles(ctx.mgr, wsId, 'file.txt', [src]);
     expect('error' in notDir).toBe(true);
+  });
+});
+
+// ── deleteEntry：symlink/junction 不跟隨（codex P1-1）─────────────────────
+describe('fileService deleteEntry（symlink 不跟隨葉節點）', () => {
+  let ctx: ReturnType<typeof setup>;
+  beforeEach(() => {
+    __resetFileServiceState();
+    ctx = setup();
+  });
+  afterEach(() => {
+    rmSync(ctx.root, { recursive: true, force: true });
+  });
+
+  it('刪 junction 只刪連結本身、不跟隨到目標內容', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'codeA');
+    mkdirSync(join(dir, 'real'), { recursive: true });
+    writeFileSync(join(dir, 'real', 'keep.txt'), 'KEEP', 'utf8');
+    symlinkSync(join(dir, 'real'), join(dir, 'link'), 'junction'); // workspace 內 junction → real/
+
+    const r = await deleteEntry(ctx.mgr, wsId, 'link');
+    expect('ok' in r).toBe(true);
+    expect(existsSync(join(dir, 'link'))).toBe(false); // 連結被刪
+    expect(readFileSync(join(dir, 'real', 'keep.txt'), 'utf8')).toBe('KEEP'); // 目標內容完好、未被跟隨刪掉
   });
 });

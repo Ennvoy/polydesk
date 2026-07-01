@@ -3,9 +3,9 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, isAbsolute } from 'node:path';
 import { StateStore } from '../store/StateStore';
 import { WorkspaceManager } from '../workspace/WorkspaceManager';
 import { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
@@ -151,5 +151,29 @@ describe('GitService（真 git）', () => {
     // 對照：repo 歷史未被竄改（仍只有 1 個 commit、分支仍 main）
     const log = await seed.log(ctx.wsId, 10);
     expect(log.length).toBe(1);
+  });
+
+  it('discard：untracked 移到資源回收桶（不永久刪）、tracked 還原到 HEAD（codex #4 資料安全）', async () => {
+    initRepo(ctx.repo);
+    writeFileSync(join(ctx.repo, 'tracked.txt'), 'ORIGINAL\n');
+    execFileSync('git', ['add', '.'], { cwd: ctx.repo, stdio: 'pipe' });
+    execFileSync('git', ['commit', '-m', 'init'], { cwd: ctx.repo, stdio: 'pipe' });
+    writeFileSync(join(ctx.repo, 'tracked.txt'), 'MODIFIED\n'); // tracked 改動
+    writeFileSync(join(ctx.repo, 'newfile.txt'), 'NEW\n'); // untracked 新檔
+
+    const trashed: string[] = [];
+    const svc = new GitService(ctx.mgr, undefined, async (p) => {
+      trashed.push(p);
+    });
+    await svc.discard(ctx.wsId, ['tracked.txt', 'newfile.txt']);
+
+    // tracked：checkout HEAD 還原（內容回 ORIGINAL、檔仍在）
+    expect(readFileSync(join(ctx.repo, 'tracked.txt'), 'utf8')).toBe('ORIGINAL\n');
+    // untracked：走 trash（絕對路徑）而非 git clean -fd 硬刪
+    expect(trashed).toHaveLength(1);
+    expect(trashed[0]).toContain('newfile.txt');
+    expect(isAbsolute(trashed[0])).toBe(true);
+    // 注入的 trash 沒真的刪 → 檔仍在（反證走的不是 clean -fd）
+    expect(existsSync(join(ctx.repo, 'newfile.txt'))).toBe(true);
   });
 });

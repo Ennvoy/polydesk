@@ -15,7 +15,7 @@ import {
   type ExecFileException,
   type ExecFileOptionsWithBufferEncoding,
 } from 'node:child_process';
-import type { IpcMain } from 'electron';
+import { shell, type IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
 import type { GitStatus, GitChange, GitLogEntry } from '../../shared/types';
 import type { InvokeReq } from '../../shared/ipc';
@@ -209,6 +209,8 @@ export class GitService {
   constructor(
     private readonly workspaces: WorkspaceManager,
     private readonly exec: GitExecFn = defaultExecFile,
+    // untracked discard 走系統資源回收桶（可注入供測試；預設 Electron shell.trashItem）。
+    private readonly trash: (p: string) => Promise<void> = (p) => shell.trashItem(p),
   ) {}
 
   private path(wsId: string): string | undefined {
@@ -344,7 +346,7 @@ export class GitService {
     }
   }
 
-  /** PE-2：取消變更（discard）——tracked 用 checkout HEAD 還原、untracked 用 clean -fd 刪除（破壞性，前端附確認）。 */
+  /** PE-2：取消變更（discard）——tracked 用 checkout HEAD 還原、untracked 移到系統資源回收桶（可救回，前端附確認）。 */
   async discard(wsId: string, paths: string[]): Promise<{ ok: true }> {
     const cwd = this.path(wsId);
     if (!cwd) throw new Error('workspace not found');
@@ -360,8 +362,11 @@ export class GitService {
       await this.run(withPathspecs([...readHardeningArgs(), 'checkout', 'HEAD'], tracked), { cwd, env: writeEnv() });
     }
     if (untracked.length > 0) {
-      // clean -fd -- <paths>：只刪指定的 untracked 檔/目錄（git 內建限 repo 內 + literal pathspec）。
-      await this.run(withPathspecs([...readHardeningArgs(), 'clean', '-fd'], untracked), { cwd, env: writeEnv() });
+      // untracked＝從未被 git 追蹤的新檔，捨棄＝從工作區移除。改用系統資源回收桶（shell.trashItem）而非
+      // git clean -fd 永久刪除——誤按「取消變更」仍可從回收桶救回（資料安全，取代不可復原的硬刪）。
+      for (const p of untracked) {
+        await this.trash(pathJoin(cwd, p));
+      }
     }
     return { ok: true };
   }

@@ -89,6 +89,32 @@ export function resolveSafe(
   return { ok: true, abs: realTarget };
 }
 
+/** 同 resolveSafe，但「不 realpath 最後一段」：symlink 葉節點保留自身路徑（不跟隨到 target）。
+ *  供刪除這類須操作 entry 本身、不可跟隨 symlink 到目標的操作（否則會誤刪/誤清 target 內容，codex P1-1）。 */
+export function resolveSafeNoFollowLeaf(
+  mgr: WorkspaceManager,
+  wsId: string,
+  p: string,
+): { ok: true; abs: string } | { error: 'outside-workspace' } {
+  if (typeof p !== 'string' || p === '') return { error: 'outside-workspace' };
+  if (UNC_OR_DEVICE.test(p)) return { error: 'outside-workspace' };
+  const ws = mgr.get(wsId);
+  if (!ws) return { error: 'outside-workspace' };
+  let realRoot: string;
+  try {
+    realRoot = realpathSync.native(ws.path);
+  } catch {
+    return { error: 'outside-workspace' };
+  }
+  const candidate = resolve(realRoot, p);
+  if (UNC_OR_DEVICE.test(candidate)) return { error: 'outside-workspace' };
+  // 只解析父層 realpath（沿 symlink/短名正規化），葉節點用原 basename 接上——不跟隨葉自身。
+  const abs = join(realpathExisting(dirname(candidate)), basename(candidate));
+  if (UNC_OR_DEVICE.test(abs)) return { error: 'outside-workspace' };
+  if (!isInside(realRoot, abs)) return { error: 'outside-workspace' };
+  return { ok: true, abs };
+}
+
 // ── 編碼偵測 ──────────────────────────────────────────────────────────────
 
 function detectByBom(buf: Buffer): FileEncoding | null {
@@ -429,7 +455,7 @@ export async function deleteEntry(
   wsId: string,
   p: string,
 ): Promise<{ ok: true } | { error: string }> {
-  const safe = resolveSafe(mgr, wsId, p);
+  const safe = resolveSafeNoFollowLeaf(mgr, wsId, p); // 不跟隨 symlink 葉：刪 link 本身而非其 target
   if ('error' in safe) return { error: '路徑超出工作區範圍' };
   let realRoot: string | null = null;
   try {

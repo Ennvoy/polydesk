@@ -1,6 +1,9 @@
-// usageService：codex rollout token_count.rate_limits 解析（primary=5h、secondary=週、plan）。
+// usageService：codex rollout token_count.rate_limits 解析（primary=5h、secondary=週、plan）+ claude usage.json BOM 容錯。
 import { describe, it, expect } from 'vitest';
-import { parseCodexRateLimits } from './usageService';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { parseCodexRateLimits, readClaudeUsage } from './usageService';
 
 describe('parseCodexRateLimits', () => {
   const tokenCount = (rl: unknown): string => JSON.stringify({ timestamp: '2026-07-01T00:00:00Z', type: 'event_msg', payload: { type: 'token_count', rate_limits: rl } });
@@ -29,5 +32,21 @@ describe('parseCodexRateLimits', () => {
     expect(parseCodexRateLimits('')).toBeUndefined();
     expect(parseCodexRateLimits('{"broken jso\n')).toBeUndefined();
     expect(parseCodexRateLimits(JSON.stringify({ payload: { type: 'agent_message' } }))).toBeUndefined();
+  });
+});
+
+describe('readClaudeUsage（claude usage.json）', () => {
+  it('PS Out-File -Encoding utf8 帶 BOM 的 usage.json 仍能解析（codex P2-1）', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'pd-usage-'));
+    mkdirSync(join(home, '.claude', 'polydesk'), { recursive: true });
+    const json = JSON.stringify({ fiveHourPct: 42, fiveHourReset: 1782882616, sevenDayPct: 7, sevenDayReset: 1783394605 });
+    writeFileSync(join(home, '.claude', 'polydesk', 'usage.json'), '﻿' + json, 'utf8'); // 前置 BOM（模擬 PS Out-File utf8）
+    try {
+      const u = await readClaudeUsage(home);
+      expect(u?.fiveHour?.usedPercent).toBe(42);
+      expect(u?.sevenDay?.usedPercent).toBe(7);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });
