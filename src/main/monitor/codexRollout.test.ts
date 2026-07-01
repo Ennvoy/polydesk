@@ -83,9 +83,9 @@ describe('readCodexSessions（真實檔案掃描）', () => {
     expect(out[0].sessionId).toBe('019f17c6-b202-79a0-a1fa-988cbfd9a0af');
   });
 
-  it('mtime 超過活躍窗（>10min）的 rollout 不回報', async () => {
+  it('mtime 超過活躍窗（>12h）的 rollout 不回報', async () => {
     const p = writeRollout('rollout-2026-06-30T08-00-00-019f17c6-b202-79a0-a1fa-000000000000.jsonl', 'C:/proj/old', ev('task_complete', '2026-06-30T08:00:00.000Z', true));
-    const oldMs = (now - 20 * 60 * 1000) / 1000; // 20 分鐘前
+    const oldMs = (now - 13 * 60 * 60 * 1000) / 1000; // 13 小時前（超過 12h 窗）
     utimesSync(p, oldMs, oldMs);
     const out = await readCodexSessions(root, now);
     expect(out).toHaveLength(0);

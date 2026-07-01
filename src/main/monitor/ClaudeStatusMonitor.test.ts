@@ -34,6 +34,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
       readSessions: async () => sessions,
       readCodex: async () => [],
       scanClaude: async () => new Set([100]), // 對應 pidsOf 回的 100 → claude process 判定為在跑
+      scanCodex: async () => new Set(),
       watchFactory: noWatch,
     });
     await mon.recompute();
@@ -51,6 +52,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
       readSessions: async () => sessions,
       readCodex: async () => [],
       scanClaude: async () => new Set([100]), // 對應 pidsOf 回的 100 → claude process 判定為在跑
+      scanCodex: async () => new Set(),
       watchFactory: noWatch,
     });
     await mon.recompute();
@@ -70,6 +72,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
       readSessions: async () => sessions,
       readCodex: async () => [],
       scanClaude: async () => new Set([100]), // 對應 pidsOf 回的 100 → claude process 判定為在跑
+      scanCodex: async () => new Set(),
       watchFactory: noWatch,
       notifyAwait: (i) => notes.push(i),
     });
@@ -95,6 +98,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
       },
       readCodex: async () => [],
       scanClaude: async () => new Set([100]), // 對應 pidsOf 回的 100 → claude process 判定為在跑
+      scanCodex: async () => new Set(),
       watchFactory: noWatch,
     });
     await expect(mon.recompute()).resolves.toBeUndefined();

@@ -16,8 +16,10 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { SessionStatus } from './claudeHookState';
 
-/** 只回報「mtime 在此窗內（近期還在更新）」的 rollout；超窗視為 session 已結束。 */
-const CODEX_ACTIVE_MS = 10 * 60 * 1000;
+/** rollout 只回報這段時間內更新過的（用來找該工作區「最新那個 rollout」的狀態）。
+ * 「是否真的在跑」改由 monitor 的 process 偵測負責，故窗放寬到 12 小時——讓 codex 開著閒置時仍能顯示最後狀態
+ * （done/working），由 process gate 決定要不要算在跑。 */
+const CODEX_ACTIVE_MS = 12 * 60 * 60 * 1000;
 /** tail 讀尾端位元組數（涵蓋最後一個 turn 的邊界事件；codex event 行通常數百 bytes）。 */
 const TAIL_BYTES = 64 * 1024;
 
