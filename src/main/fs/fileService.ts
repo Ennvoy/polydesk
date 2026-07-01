@@ -466,6 +466,55 @@ export async function copyEntry(
   }
 }
 
+/** destDir 內找出不衝突的檔名（VSCode 風：name.ext → name copy.ext → name copy 2.ext）。 */
+async function uniqueName(destAbs: string, base: string): Promise<string> {
+  if (!(await pathExists(join(destAbs, base)))) return base;
+  const dot = base.lastIndexOf('.');
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  const ext = dot > 0 ? base.slice(dot) : '';
+  for (let i = 1; ; i++) {
+    const cand = i === 1 ? `${stem} copy${ext}` : `${stem} copy ${i}${ext}`;
+    if (!(await pathExists(join(destAbs, cand)))) return cand;
+  }
+}
+
+/** 貼入外部檔案（系統剪貼簿）：sources（外部絕對路徑）逐一複製進 destDir（工作區內、重名自動改名）。
+ *  destDir 經 resolveSafe 限工作區內；source 為外部路徑（使用者剪貼簿內容，屬匯入來源，不沙箱）。 */
+export async function importFiles(
+  mgr: WorkspaceManager,
+  wsId: string,
+  destDir: string,
+  sources: string[],
+): Promise<{ imported: number; names: string[]; errors?: string[] } | { error: string }> {
+  const safe = resolveSafe(mgr, wsId, destDir === '' ? '.' : destDir);
+  if ('error' in safe) return { error: '目標路徑超出工作區範圍' };
+  try {
+    const st = await fsp.stat(safe.abs);
+    if (!st.isDirectory()) return { error: '貼上目標不是資料夾' };
+  } catch {
+    return { error: '貼上目標不存在' };
+  }
+  const names: string[] = [];
+  const errors: string[] = [];
+  let imported = 0;
+  for (const src of sources) {
+    const base = basename(src);
+    if (!base || !isAbsolute(src)) {
+      errors.push(`無效來源：${src}`);
+      continue;
+    }
+    try {
+      const name = await uniqueName(safe.abs, base);
+      await fsp.cp(src, join(safe.abs, name), { recursive: true, errorOnExist: true, force: false });
+      names.push(name);
+      imported += 1;
+    } catch (e) {
+      errors.push(`${base}：${fsOpError(e)}`);
+    }
+  }
+  return errors.length ? { imported, names, errors } : { imported, names };
+}
+
 /** 測試輔助：清空模組級版本指紋狀態。 */
 export function __resetFileServiceState(): void {
   readVersions.clear();
@@ -479,6 +528,7 @@ export function registerFileService(ipc: IpcMain, workspaces: WorkspaceManager):
   ipc.handle('fs:rename', (_e, req: InvokeReq<'fs:rename'>) => renameEntry(workspaces, req.wsId, req.from, req.to));
   ipc.handle('fs:delete', (_e, req: InvokeReq<'fs:delete'>) => deleteEntry(workspaces, req.wsId, req.path));
   ipc.handle('fs:copy', (_e, req: InvokeReq<'fs:copy'>) => copyEntry(workspaces, req.wsId, req.from, req.to));
+  ipc.handle('fs:importFiles', (_e, req: InvokeReq<'fs:importFiles'>) => importFiles(workspaces, req.wsId, req.destDir, req.sources));
   ipc.handle('fs:reveal', (_e, req: InvokeReq<'fs:reveal'>) => {
     const safe = resolveSafe(workspaces, req.wsId, req.path);
     if ('error' in safe) return { error: '路徑超出工作區範圍' } as const;

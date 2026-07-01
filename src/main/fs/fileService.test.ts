@@ -24,6 +24,7 @@ import {
   writeFileSafe,
   detectEncoding,
   resolveSafe,
+  importFiles,
   __resetFileServiceState,
 } from './fileService';
 
@@ -331,5 +332,76 @@ describe('fileService', () => {
     expect(r.encoding).toBe('utf-8');
     await writeFileSafe(ctx.mgr, { wsId, path: 'crlf.ts', content: r.content, encoding: r.encoding, eol: r.eol });
     expect(readFileSync(file).equals(original)).toBe(true);
+  });
+});
+
+// ── importFiles：從系統剪貼簿貼入外部檔案（VSCode 風 Ctrl+V）──────────────
+describe('fileService importFiles（貼上外部檔案）', () => {
+  let ctx: ReturnType<typeof setup>;
+  beforeEach(() => {
+    __resetFileServiceState();
+    ctx = setup();
+  });
+  afterEach(() => {
+    rmSync(ctx.root, { recursive: true, force: true });
+  });
+
+  it('多個工作區外檔案複製進根目錄，含中文檔名', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'codeA');
+    const ext = join(ctx.root, 'external');
+    mkdirSync(ext, { recursive: true });
+    const a = join(ext, '報告.txt');
+    const b = join(ext, 'photo.png');
+    writeFileSync(a, 'AAA', 'utf8');
+    writeFileSync(b, 'PNG', 'utf8');
+
+    const r = await importFiles(ctx.mgr, wsId, '', [a, b]);
+    expect('imported' in r ? r.imported : -1).toBe(2);
+    expect(readFileSync(join(dir, '報告.txt'), 'utf8')).toBe('AAA');
+    expect(readFileSync(join(dir, 'photo.png'), 'utf8')).toBe('PNG');
+  });
+
+  it('同名檔自動改名（name copy.ext → name copy 2.ext），不覆蓋既有', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'codeA');
+    writeFileSync(join(dir, 'a.txt'), 'ORIG', 'utf8');
+    const ext = join(ctx.root, 'external');
+    mkdirSync(ext, { recursive: true });
+    const src = join(ext, 'a.txt');
+    writeFileSync(src, 'NEW', 'utf8');
+
+    const r = await importFiles(ctx.mgr, wsId, '', [src]);
+    expect('names' in r ? r.names : []).toEqual(['a copy.txt']);
+    expect(readFileSync(join(dir, 'a.txt'), 'utf8')).toBe('ORIG'); // 原檔不被覆蓋
+    expect(readFileSync(join(dir, 'a copy.txt'), 'utf8')).toBe('NEW');
+
+    const r2 = await importFiles(ctx.mgr, wsId, '', [src]);
+    expect('names' in r2 ? r2.names : []).toEqual(['a copy 2.txt']);
+  });
+
+  it('貼入子資料夾當目標，遞迴複製整個資料夾', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'codeA');
+    mkdirSync(join(dir, 'sub'), { recursive: true });
+    const ext = join(ctx.root, 'external');
+    mkdirSync(join(ext, 'folder'), { recursive: true });
+    writeFileSync(join(ext, 'folder', 'inner.txt'), 'IN', 'utf8');
+
+    const r = await importFiles(ctx.mgr, wsId, 'sub', [join(ext, 'folder')]);
+    expect('imported' in r ? r.imported : -1).toBe(1);
+    expect(readFileSync(join(dir, 'sub', 'folder', 'inner.txt'), 'utf8')).toBe('IN');
+  });
+
+  it('destDir 越界 / 非資料夾一律拒（沙箱）', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'codeA');
+    const ext = join(ctx.root, 'external');
+    mkdirSync(ext, { recursive: true });
+    const src = join(ext, 'x.txt');
+    writeFileSync(src, 'X', 'utf8');
+
+    const outside = await importFiles(ctx.mgr, wsId, '../outside', [src]);
+    expect('error' in outside).toBe(true);
+
+    writeFileSync(join(dir, 'file.txt'), 'F', 'utf8');
+    const notDir = await importFiles(ctx.mgr, wsId, 'file.txt', [src]);
+    expect('error' in notDir).toBe(true);
   });
 });

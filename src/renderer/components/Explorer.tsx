@@ -171,6 +171,7 @@ export function Explorer(): React.JSX.Element {
   const [menu, setMenu] = useState<{ entry: Entry | null; rel: string; x: number; y: number } | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
   const [clip, setClip] = useState<{ rel: string; name: string; op: 'cut' | 'copy' } | null>(null);
+  const [selected, setSelected] = useState<{ rel: string; dir: boolean } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const dirsRef = useRef(dirs);
   dirsRef.current = dirs;
@@ -193,6 +194,7 @@ export function Explorer(): React.JSX.Element {
     setDirs({});
     setExpanded({});
     setEditing(null);
+    setSelected(null);
     if (wsId) void loadDir('');
   }, [wsId, loadDir]);
 
@@ -328,6 +330,26 @@ export function Explorer(): React.JSX.Element {
     setClip(null);
   };
 
+  // 從系統剪貼簿貼入外部檔案（Ctrl+V，VSCode 風）：clipboardData.files → 真實路徑 → 複製進選中資料夾（或根）。
+  const importFromClipboard = (e: React.ClipboardEvent): void => {
+    const files = Array.from(e.clipboardData?.files ?? []);
+    if (files.length === 0 || !wsId) return; // 非檔案貼上（文字等）不攔截
+    e.preventDefault();
+    const sources = files.map((f) => ipc.fileUtils.pathForFile(f)).filter((p) => p.length > 0);
+    if (sources.length === 0) return;
+    const destDir = selected ? (selected.dir ? selected.rel : relDirname(selected.rel)) : '';
+    void (async () => {
+      const r = await ipc.fs.importFiles({ wsId, destDir, sources });
+      if ('error' in r) {
+        setErr(r.error);
+        return;
+      }
+      if (r.errors?.length) setErr(r.errors.join('；'));
+      if (destDir !== '') setExpanded((p) => ({ ...p, [destDir]: true }));
+      void loadDir(destDir);
+    })();
+  };
+
   const openMenu = (e: React.MouseEvent, entry: Entry | null, rel: string): void => {
     e.preventDefault();
     e.stopPropagation();
@@ -399,10 +421,18 @@ export function Explorer(): React.JSX.Element {
                 aria-level={depth + 1}
                 aria-label={entry.name}
                 aria-expanded={entry.dir ? isOpen : undefined}
+                aria-selected={selected?.rel === childRel}
                 tabIndex={0}
                 title={entry.name}
-                style={{ paddingLeft: indent, opacity: clip?.op === 'cut' && clip.rel === childRel ? 0.5 : 1 }}
-                onClick={() => activate(entry, childRel)}
+                style={{
+                  paddingLeft: indent,
+                  opacity: clip?.op === 'cut' && clip.rel === childRel ? 0.5 : 1,
+                  background: selected?.rel === childRel ? 'var(--surface-warm)' : undefined,
+                }}
+                onClick={() => {
+                  setSelected({ rel: childRel, dir: entry.dir });
+                  activate(entry, childRel);
+                }}
                 onContextMenu={(e) => openMenu(e, entry, childRel)}
                 onKeyDown={(e) => onRowKeyDown(e, entry, childRel)}
               >
@@ -449,8 +479,10 @@ export function Explorer(): React.JSX.Element {
           className="pd-scroll"
           role="tree"
           aria-label={`檔案總管${ws ? `：${ws.name}` : ''}`}
-          style={{ flex: 1, minHeight: 0, paddingBottom: 'var(--space-3)' }}
+          tabIndex={0}
+          style={{ flex: 1, minHeight: 0, paddingBottom: 'var(--space-3)', outline: 'none' }}
           onContextMenu={(e) => openMenu(e, null, '')}
+          onPaste={importFromClipboard}
         >
           {!rootState ? (
             <Hint>載入中…</Hint>

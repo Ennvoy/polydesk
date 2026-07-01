@@ -50,6 +50,11 @@ export interface InvokeChannels {
   'fs:rename': { req: { wsId: string; from: string; to: string }; res: { ok: true } | { error: string } };
   'fs:delete': { req: { wsId: string; path: string }; res: { ok: true } | { error: string } };
   'fs:copy': { req: { wsId: string; from: string; to: string }; res: { ok: true } | { error: string } };
+  /** 貼入外部檔案（系統剪貼簿）：sources 為外部絕對路徑，複製進 destDir（工作區內、重名自動改名）。 */
+  'fs:importFiles': {
+    req: { wsId: string; destDir: string; sources: string[] };
+    res: { imported: number; names: string[]; errors?: string[] } | { error: string };
+  };
   'fs:reveal': { req: { wsId: string; path: string }; res: { ok: true } | { error: string } };
   // git
   'git:status': { req: { wsId: string }; res: GitStatus };
@@ -175,4 +180,8 @@ export type PolydeskApi = Omit<InvokeApi, 'pty'> & {
     onData: (cb: (payload: { termId: string; chunk: Uint8Array }) => void) => Unsubscribe;
   };
   events: EventApi;
+  /** 檔案工具（非 IPC，preload 直接橋接 Electron webUtils）：取得 File 的真實磁碟路徑，供貼上/拖放匯入。 */
+  fileUtils: {
+    pathForFile: (file: File) => string;
+  };
 };

@@ -2,7 +2,7 @@
 // 最小 namespaced API（一個 IPC 一個方法），絕不外洩 raw ipcRenderer / Node API。
 // 例：window.polydesk.store.getState()、window.polydesk.events.claude.status(cb)。
 
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { INVOKE_CHANNELS, EVENT_CHANNELS, PTY_DATA, PTY_WRITE } from '../shared/channels';
 
 type Method = (...args: unknown[]) => unknown;
@@ -41,6 +41,18 @@ ptyNs.onData = ((cb: (payload: { termId: string; chunk: Uint8Array }) => void) =
   };
 }) as Method;
 
-const api = { ...invokeApi, events: eventApi };
+// 檔案工具：Electron 33 已移除 File.path，改用 webUtils.getPathForFile 取真實磁碟路徑
+// （供 Explorer 貼上/拖放匯入外部檔案；非系統來源的 File 會回空字串）。
+const fileUtils = {
+  pathForFile: (file: File) => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      return '';
+    }
+  },
+};
+
+const api = { ...invokeApi, events: eventApi, fileUtils };
 
 contextBridge.exposeInMainWorld('polydesk', api);
