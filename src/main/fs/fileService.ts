@@ -450,13 +450,15 @@ export async function renameEntry(
   }
 }
 
-/** 刪除檔案/資料夾（遞迴）；不可刪工作區根。 */
+/** 刪除檔案/資料夾 → 移到系統資源回收桶（可救回、非永久刪）；不跟隨 symlink 葉、不可刪工作區根。
+ *  trash 可注入供測試（預設 Electron shell.trashItem）。 */
 export async function deleteEntry(
   mgr: WorkspaceManager,
   wsId: string,
   p: string,
+  trash: (abs: string) => Promise<void> = (abs) => shell.trashItem(abs),
 ): Promise<{ ok: true } | { error: string }> {
-  const safe = resolveSafeNoFollowLeaf(mgr, wsId, p); // 不跟隨 symlink 葉：刪 link 本身而非其 target
+  const safe = resolveSafeNoFollowLeaf(mgr, wsId, p); // 不跟隨 symlink 葉：處理 link 本身而非其 target
   if ('error' in safe) return { error: '路徑超出工作區範圍' };
   let realRoot: string | null = null;
   try {
@@ -467,7 +469,7 @@ export async function deleteEntry(
   }
   if (realRoot && safe.abs === realRoot) return { error: '不可刪除工作區根目錄' };
   try {
-    await fsp.rm(safe.abs, { recursive: true, force: false });
+    await trash(safe.abs);
     return { ok: true };
   } catch (e) {
     return { error: fsOpError(e) };

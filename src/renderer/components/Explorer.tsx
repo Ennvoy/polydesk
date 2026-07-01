@@ -295,7 +295,9 @@ export function Explorer(): React.JSX.Element {
     setMenu(null);
     const ok = await dialog.confirm({
       title: `刪除「${entry.name}」？`,
-      body: entry.dir ? '資料夾與其內容將一併刪除，無法復原。' : '此操作無法復原。',
+      body: entry.dir
+        ? '整個資料夾會移到系統資源回收桶（可從回收桶救回）。'
+        : '檔案會移到系統資源回收桶（可從回收桶救回）。',
       danger: true,
       confirmText: '刪除',
     });

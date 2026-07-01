@@ -9,7 +9,6 @@ import {
   rmSync,
   writeFileSync,
   readFileSync,
-  existsSync,
   chmodSync,
   utimesSync,
   symlinkSync,
@@ -421,16 +420,21 @@ describe('fileService deleteEntry（symlink 不跟隨葉節點）', () => {
     rmSync(ctx.root, { recursive: true, force: true });
   });
 
-  it('刪 junction 只刪連結本身、不跟隨到目標內容', async () => {
+  it('刪 junction 移到回收桶、傳連結本身而非目標（不跟隨）', async () => {
     const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'codeA');
     mkdirSync(join(dir, 'real'), { recursive: true });
     writeFileSync(join(dir, 'real', 'keep.txt'), 'KEEP', 'utf8');
     symlinkSync(join(dir, 'real'), join(dir, 'link'), 'junction'); // workspace 內 junction → real/
 
-    const r = await deleteEntry(ctx.mgr, wsId, 'link');
+    const trashed: string[] = [];
+    const r = await deleteEntry(ctx.mgr, wsId, 'link', async (abs) => {
+      trashed.push(abs);
+    });
     expect('ok' in r).toBe(true);
-    expect(existsSync(join(dir, 'link'))).toBe(false); // 連結被刪
-    expect(readFileSync(join(dir, 'real', 'keep.txt'), 'utf8')).toBe('KEEP'); // 目標內容完好、未被跟隨刪掉
+    expect(trashed).toHaveLength(1);
+    expect(trashed[0].replace(/\\/g, '/').endsWith('/link')).toBe(true); // 連結本身
+    expect(trashed[0].replace(/\\/g, '/')).not.toContain('/real'); // 沒跟隨到目標
+    expect(readFileSync(join(dir, 'real', 'keep.txt'), 'utf8')).toBe('KEEP'); // 目標完好
   });
 });
 
