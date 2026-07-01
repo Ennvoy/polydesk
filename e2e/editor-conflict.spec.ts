@@ -1,4 +1,4 @@
-// F-4 驗證（REQ-E2E-009）：開檔+未存編輯 → 外部修改 → 衝突彈窗 → 「保留我的」/「載入磁碟版」各一次。
+// F-4 驗證（REQ-E2E-009）：外部修改 + 未存編輯 → 不再彈窗打斷，改成「只標記、關檔時才提醒儲存」。
 import { test, expect } from '@playwright/test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -21,7 +21,9 @@ async function openAndDirty(page: import('@playwright/test').Page): Promise<void
   await page.keyboard.type('LOCAL_EDIT');
 }
 
-test('REQ-E2E-009：外部修改 + 未存編輯 →「保留我的編輯」', async () => {
+const noteTab = (page: import('@playwright/test').Page) => page.locator('[role="tab"][aria-label*="note.txt"]');
+
+test('REQ-E2E-009：外部修改不再彈窗打斷；關檔時才提醒（不儲存）', async () => {
   const { dir, file } = seedDir('note.txt', 'original\n');
   const { app, page, userData } = await launchApp();
   await stubFolderPicker(app, [dir]);
@@ -29,15 +31,20 @@ test('REQ-E2E-009：外部修改 + 未存編輯 →「保留我的編輯」', as
   await page.locator('button[aria-label="開啟工作區 conf-ws"]').click();
   await openAndDirty(page);
 
-  // 外部修改磁碟（watcher 已隨 Explorer 啟動）
+  // 外部修改磁碟（watcher 隨 Explorer 啟動）
   writeFileSync(file, 'EXTERNAL_CHANGE\n');
+  await page.waitForTimeout(1200); // 讓 fs:change 到達並標記 diskChanged
 
-  // 衝突彈窗 → 保留我的編輯
-  const keep = page.locator('button[aria-label="保留我的編輯"]');
-  await expect(keep).toBeVisible({ timeout: 15000 });
-  await keep.click();
-  await expect(keep).toHaveCount(0);
-  // 保留＝不載入磁碟版：磁碟仍為外部版本（app 未覆寫）
+  // 不再彈衝突窗打斷
+  await expect(page.locator('button[aria-label="載入磁碟版本"]')).toHaveCount(0);
+  await expect(page.locator('button[aria-label="保留我的編輯"]')).toHaveCount(0);
+
+  // 關閉分頁（focus + Delete）→ 才提醒，且附「磁碟版本不同」
+  await noteTab(page).click();
+  await noteTab(page).press('Delete');
+  await expect(page.getByText('磁碟版本與你的編輯不同')).toBeVisible({ timeout: 5000 });
+  await page.locator('button[aria-label="不儲存並關閉"]').click();
+  // 不儲存＝磁碟保留外部版本（未被覆寫）
   expect(readFileSync(file, 'utf8')).toContain('EXTERNAL_CHANGE');
 
   await app.close();
@@ -45,7 +52,7 @@ test('REQ-E2E-009：外部修改 + 未存編輯 →「保留我的編輯」', as
   rmSync(userData, { recursive: true, force: true });
 });
 
-test('REQ-E2E-009：外部修改 + 未存編輯 →「載入磁碟版本」', async () => {
+test('REQ-E2E-009：關檔時選儲存 → 磁碟已被外部改 → 覆蓋存回我的編輯', async () => {
   const { dir, file } = seedDir('note.txt', 'original\n');
   const { app, page, userData } = await launchApp();
   await stubFolderPicker(app, [dir]);
@@ -53,14 +60,18 @@ test('REQ-E2E-009：外部修改 + 未存編輯 →「載入磁碟版本」', as
   await page.locator('button[aria-label="開啟工作區 conf-ws"]').click();
   await openAndDirty(page);
 
-  writeFileSync(file, 'EXTERNAL_RELOAD_MARKER\n');
+  writeFileSync(file, 'EXTERNAL_CHANGE\n');
+  await page.waitForTimeout(1200);
 
-  const reload = page.locator('button[aria-label="載入磁碟版本"]');
-  await expect(reload).toBeVisible({ timeout: 15000 });
-  await reload.click();
-  await expect(reload).toHaveCount(0);
-  // 載入磁碟版：編輯器顯示外部內容
-  await expect(page.locator('.monaco-editor').first()).toContainText('EXTERNAL_RELOAD_MARKER', { timeout: 10000 });
+  await noteTab(page).click();
+  await noteTab(page).press('Delete');
+  await page.locator('button[aria-label="儲存並關閉"]').click();
+  // 儲存時磁碟已被外部改 → 衝突彈窗 → 選「保留我的編輯」＝覆蓋
+  const overwrite = page.locator('button[aria-label="保留我的編輯"]');
+  await expect(overwrite).toBeVisible({ timeout: 5000 });
+  await overwrite.click();
+  // 覆蓋：磁碟寫入我的編輯（含 LOCAL_EDIT）
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: 5000 }).toContain('LOCAL_EDIT');
 
   await app.close();
   rmSync(dir, { recursive: true, force: true });

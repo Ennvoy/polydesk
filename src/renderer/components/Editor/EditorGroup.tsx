@@ -26,6 +26,8 @@ interface Tab {
   eol: Eol;
   readonly: boolean;
   dirty: boolean;
+  /** 外部（codex/claude 等）改過磁碟、但本地有未存編輯 → 只標記不打斷，關檔時再提醒。 */
+  diskChanged?: boolean;
   /** diff 分頁的 unified diff 內容（kind==='diff'）。 */
   patch?: string;
 }
@@ -73,6 +75,29 @@ function ExternalChangePrompt(props: { name: string; onReload: () => void; onKee
         </button>
         <button className="pd-btn pd-btn-primary" onClick={props.onReload} aria-label="載入磁碟版本">
           載入磁碟版本
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** 關閉未存檔分頁時的抉擇（儲存 / 不儲存 / 取消）；diskChanged 時附「磁碟版本不同」提示。 */
+function SaveOnClosePrompt(props: { name: string; note: string; onSave: () => void; onDiscard: () => void; onCancel: () => void }): React.JSX.Element {
+  return (
+    <div style={{ minWidth: 360, maxWidth: 520 }}>
+      <h2 style={{ margin: '0 0 12px', fontSize: 'var(--text-lg)', fontFamily: 'var(--font-display)' }}>尚未存檔</h2>
+      <div style={{ color: 'var(--fg-2)', fontSize: 'var(--text-sm)', lineHeight: 1.6 }}>
+        「{props.name}」有未存檔的變更。{props.note}要儲存嗎？
+      </div>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+        <button className="pd-btn" onClick={props.onCancel} aria-label="取消">
+          取消
+        </button>
+        <button className="pd-btn pd-btn-danger" onClick={props.onDiscard} aria-label="不儲存並關閉">
+          不儲存
+        </button>
+        <button className="pd-btn pd-btn-primary" onClick={props.onSave} aria-label="儲存並關閉" autoFocus>
+          儲存
         </button>
       </div>
     </div>
@@ -222,60 +247,67 @@ export function EditorGroup(): React.JSX.Element {
     setActiveKey(key);
   }, []);
 
-  // ── 存檔（Ctrl+S） ──
-  const saveActive = useCallback(async () => {
-    const key = activeKeyRef.current;
-    if (!key) return;
-    const tab = tabsRef.current.find((t) => t.key === key);
-    if (!tab || tab.kind === 'diff') return; // diff 分頁唯讀、不可存
-    const model = monaco.editor.getModel(modelUri(tab.wsId, tab.path));
-    if (!model) return;
+  // ── 存檔（回 true=已存檔並寫回磁碟；供 Ctrl+S 與關檔前儲存共用） ──
+  const saveTab = useCallback(
+    async (key: string): Promise<boolean> => {
+      const tab = tabsRef.current.find((t) => t.key === key);
+      if (!tab || tab.kind === 'diff') return false; // diff 分頁唯讀、不可存
+      const model = monaco.editor.getModel(modelUri(tab.wsId, tab.path));
+      if (!model) return false;
 
-    let res: InvokeRes<'fs:write'>;
-    try {
-      res = await ipc.fs.write({ wsId: tab.wsId, path: tab.path, content: model.getValue(), encoding: tab.encoding, eol: tab.eol });
-    } catch (e) {
-      showError('存檔失敗', e instanceof Error ? e.message : String(e));
-      return;
-    }
+      let res: InvokeRes<'fs:write'>;
+      try {
+        res = await ipc.fs.write({ wsId: tab.wsId, path: tab.path, content: model.getValue(), encoding: tab.encoding, eol: tab.eol });
+      } catch (e) {
+        showError('存檔失敗', e instanceof Error ? e.message : String(e));
+        return false;
+      }
 
-    if ('ok' in res) {
-      selfWriteRef.current.set(key, Date.now());
-      setTabs((prev) => prev.map((t) => (t.key === key ? { ...t, dirty: false } : t)));
-      return;
-    }
-    if (res.error === 'permission') {
-      showError('無法存檔', '檔案為唯讀或權限不足，無法寫入。');
-      return;
-    }
-    // conflict：磁碟版本較新 → 讓使用者選載入或覆蓋（不靜默蓋掉外部版本）。
-    const choice = await dialog.open((close) => (
-      <ExternalChangePrompt name={tab.name} onReload={() => close('reload')} onKeep={() => close('overwrite')} />
-    ));
-    if (choice === 'reload') {
-      await reload(key, tab.wsId, tab.path);
-      return;
-    }
-    // overwrite：先重讀刷新 main 的版本指紋（內容不套用、保留我的編輯），再寫回。
-    try {
-      await ipc.fs.read({ wsId: tab.wsId, path: tab.path });
-    } catch {
-      /* ignore */
-    }
-    let res2: InvokeRes<'fs:write'>;
-    try {
-      res2 = await ipc.fs.write({ wsId: tab.wsId, path: tab.path, content: model.getValue(), encoding: tab.encoding, eol: tab.eol });
-    } catch (e) {
-      showError('存檔失敗', e instanceof Error ? e.message : String(e));
-      return;
-    }
-    if ('ok' in res2) {
-      selfWriteRef.current.set(key, Date.now());
-      setTabs((prev) => prev.map((t) => (t.key === key ? { ...t, dirty: false } : t)));
-    } else {
+      if ('ok' in res) {
+        selfWriteRef.current.set(key, Date.now());
+        setTabs((prev) => prev.map((t) => (t.key === key ? { ...t, dirty: false, diskChanged: false } : t)));
+        return true;
+      }
+      if (res.error === 'permission') {
+        showError('無法存檔', '檔案為唯讀或權限不足，無法寫入。');
+        return false;
+      }
+      // conflict：磁碟版本較新 → 讓使用者選載入或覆蓋（不靜默蓋掉外部版本）。
+      const choice = await dialog.open((close) => (
+        <ExternalChangePrompt name={tab.name} onReload={() => close('reload')} onKeep={() => close('overwrite')} />
+      ));
+      if (choice === 'reload') {
+        await reload(key, tab.wsId, tab.path);
+        return false; // 載入磁碟版本＝放棄本地編輯，視為「未存我的編輯」
+      }
+      // overwrite：先重讀刷新 main 的版本指紋（內容不套用、保留我的編輯），再寫回。
+      try {
+        await ipc.fs.read({ wsId: tab.wsId, path: tab.path });
+      } catch {
+        /* ignore */
+      }
+      let res2: InvokeRes<'fs:write'>;
+      try {
+        res2 = await ipc.fs.write({ wsId: tab.wsId, path: tab.path, content: model.getValue(), encoding: tab.encoding, eol: tab.eol });
+      } catch (e) {
+        showError('存檔失敗', e instanceof Error ? e.message : String(e));
+        return false;
+      }
+      if ('ok' in res2) {
+        selfWriteRef.current.set(key, Date.now());
+        setTabs((prev) => prev.map((t) => (t.key === key ? { ...t, dirty: false, diskChanged: false } : t)));
+        return true;
+      }
       showError('無法存檔', res2.error === 'permission' ? '檔案為唯讀或權限不足。' : '存檔再次發生衝突。');
-    }
-  }, [reload]);
+      return false;
+    },
+    [reload],
+  );
+
+  const saveActive = useCallback(() => {
+    const key = activeKeyRef.current;
+    if (key) void saveTab(key);
+  }, [saveTab]);
 
   // ── 關閉 tab（dirty 先確認） ──
   const closeTab = useCallback((key: string) => {
@@ -295,18 +327,25 @@ export function EditorGroup(): React.JSX.Element {
     async (key: string) => {
       const tab = tabsRef.current.find((t) => t.key === key);
       if (tab?.dirty) {
-        const ok = await dialog.confirm({
-          title: '尚未存檔',
-          body: `「${tab.name}」有未存檔的變更，確定關閉？`,
-          confirmText: '關閉不存',
-          cancelText: '取消',
-          danger: true,
-        });
-        if (!ok) return;
+        const note = tab.diskChanged ? '此檔在外部也被改過（磁碟版本與你的編輯不同）。' : '';
+        const choice = await dialog.open((close) => (
+          <SaveOnClosePrompt
+            name={tab.name}
+            note={note}
+            onSave={() => close('save')}
+            onDiscard={() => close('discard')}
+            onCancel={() => close('cancel')}
+          />
+        ));
+        if (choice === 'save') {
+          if (!(await saveTab(key))) return; // 存檔失敗/衝突未解 → 不關
+        } else if (choice !== 'discard') {
+          return; // 取消 / 點外關閉
+        }
       }
       closeTab(key);
     },
-    [closeTab],
+    [closeTab, saveTab],
   );
 
   // ── 建立主編輯器（一次） ──
@@ -408,16 +447,11 @@ export function EditorGroup(): React.JSX.Element {
       const tab = tabsRef.current.find((t) => t.key === key);
       if (!tab) return;
       if (!tab.dirty) {
-        void reload(key, wsId, path); // 無未存編輯：自動重載
+        void reload(key, wsId, path); // 無未存編輯：自動重載（不打斷）
         return;
       }
-      void dialog
-        .open((close) => (
-          <ExternalChangePrompt name={tab.name} onReload={() => close('reload')} onKeep={() => close('keep')} />
-        ))
-        .then((choice) => {
-          if (choice === 'reload') void reload(key, wsId, path);
-        });
+      // 有未存編輯：不彈窗打斷（外部工具如 codex 會頻繁改檔），只標記「磁碟已變更」，關檔時再提醒。
+      setTabs((prev) => prev.map((t) => (t.key === key && !t.diskChanged ? { ...t, diskChanged: true } : t)));
     });
   }, [reload]);
 
