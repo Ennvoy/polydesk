@@ -187,7 +187,7 @@
       conflictZone：src/renderer/components/Worktree/CreateWorktreeDialog.tsx、src/renderer/components/WorkspaceRail.tsx
       verify：Playwright REQ-E2E-012 全旅程綠（真 git fixture ≥2 分支；不重彈信任窗、cwd＝worktree、切回主 repo 終端機仍在）。
 
-- [ ] **F-12 SCM worktree 分頁（入口①＋列表/切換/移除/prune）**
+- [x] **F-12 SCM worktree 分頁（入口①＋列表/切換/移除/prune）**
       story：SCM 面板第 4 分頁 `worktree`：列出全部 worktree（即時分支/路徑/missing 狀態）＋空狀態說明 CTA；「切換到此」（未納管→lineage 驗證→提示加入並開啟）；「＋建立」重用對話框；移除→二選一彈窗（僅移出/連同刪除）→dirty 兩段確認（列變更數＋跑中程序）→teardown 先行等 handle 釋放→`git worktree remove`；「清理失效登記（prune）」。
       reqRefs：REQ-WT-001①/006/007/008/009/014、REQ-E2E-013
       blockedBy：P-4、F-11

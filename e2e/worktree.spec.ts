@@ -64,3 +64,72 @@ test('REQ-E2E-012：分支→建立 worktree→納管開啟→終端機 cwd＝wo
 // 註：紅軍 A1（惡意分支名 XSS）於 Windows 無法用真 git 重現——NTFS 禁 <>|: 檔名，git 無法建此類 loose ref。
 // 防線改由單元＋靜態守衛驗證：src/renderer/components/Worktree/worktreeDisplay.test.ts
 //   （worktreeBranchDisplay 經 neutralizeBidi 剝 RLO、detached→非 'null'；源碼禁 dangerouslySetInnerHTML）。
+
+test('REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅移出保留資料夾', async () => {
+  const { root, repo } = seedRepo();
+  const { app, page, userData } = await launchApp();
+  await stubFolderPicker(app, [repo]);
+  await addWorkspaceViaUI(page);
+  await page.locator('button[aria-label="開啟工作區 work"]').click();
+
+  // 先建兩個 worktree（dev、第三分支 feat）
+  git(repo, 'branch', 'feat');
+  const mkWt = async (branch: string): Promise<void> => {
+    await page.locator('button[aria-label="新增"]').click();
+    await page.locator('button[aria-label="從 Git 分支建立 worktree"]').click();
+    await page.getByRole('radio', { name: '現有本地分支' }).check();
+    await page.getByRole('combobox', { name: '現有本地分支' }).selectOption(branch);
+    await page.locator('button[aria-label="建立並開啟工作區"]').click();
+    await expect.poll(() => git(repo, 'worktree', 'list').includes(branch === 'dev' ? 'dev' : 'feat'), { timeout: 8000 }).toBe(true);
+  };
+  await mkWt('dev');
+  await mkWt('feat');
+
+  // 取兩個 worktree 的實體路徑
+  const wtList = git(repo, 'worktree', 'list', '--porcelain');
+  const paths = [...wtList.matchAll(/^worktree (.+)$/gm)].map((m) => m[1].trim());
+  const devPath = paths.find((p) => /work-worktrees[\\/]/.test(p) && /dev/.test(p))!;
+  const featPath = paths.find((p) => /work-worktrees[\\/]/.test(p) && /feat/.test(p))!;
+  expect(existsSync(devPath)).toBe(true);
+  expect(existsSync(featPath)).toBe(true);
+
+  // 開 SCM worktree 分頁
+  await page.locator('button[aria-label="原始碼控制"]').click();
+  await page.getByRole('tab', { name: 'worktree' }).click();
+
+  // ── dirty 兩段確認 → 連同刪除 dev ──
+  writeFileSync(join(devPath, 'app.txt'), 'dirty-change\n'); // 造成未提交變更
+  await page.locator('button[aria-label^="移除 worktree"]').first().click();
+  await page.locator('button[aria-label="連同刪除資料夾"]').click();
+  // dirty 兩段確認：未勾不能刪 → 勾了才可
+  const discardBtn = page.locator('button[aria-label="確定丟棄並刪除"]');
+  await expect(discardBtn).toBeVisible({ timeout: 8000 });
+  await expect(discardBtn).toBeDisabled();
+  await page.locator('input[aria-label="確定丟棄未提交變更"]').check();
+  await discardBtn.click();
+  // 資料夾被刪、git worktree 登記無殘留（比對正規化後的完整路徑，避免斜線方向/子字串誤配）
+  const norm = (p: string): string => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
+  const devNorm = norm(devPath);
+  await expect.poll(() => existsSync(devPath), { timeout: 8000 }).toBe(false);
+  await expect
+    .poll(
+      () =>
+        git(repo, 'worktree', 'list', '--porcelain')
+          .split(/\r?\n/)
+          .filter((l) => l.startsWith('worktree '))
+          .map((l) => norm(l.slice('worktree '.length)))
+          .includes(devNorm),
+      { timeout: 6000 },
+    )
+    .toBe(false);
+
+  // ── 僅移出列表：feat 資料夾保留 ──
+  await page.locator('button[aria-label^="移除 worktree"]').first().click();
+  await page.locator('button[aria-label="僅從列表移出，保留資料夾"]').click();
+  await page.waitForTimeout(1000);
+  expect(existsSync(featPath)).toBe(true); // 資料夾保留
+
+  await app.close();
+  rmSync(root, { recursive: true, force: true });
+  rmSync(userData, { recursive: true, force: true });
+});

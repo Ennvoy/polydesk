@@ -102,6 +102,16 @@ export function worktreeBranchDisplay(branch: string | null | undefined): string
   return neutralizeBidi(branch);
 }
 
+/** 紅軍 A5：worktree 路徑顯示同樣經 neutralizeBidi（RLO 可把 exe.taeic 偽裝成 taeic.exe 誘導誤刪）。 */
+export function worktreePathDisplay(path: string): string {
+  return neutralizeBidi(path ?? '');
+}
+
+/** 紅軍 A3：可否「切換到此」。主工作樹本身不切；失效登記(prunable)不切（資料夾已不在，開了是 missing）。 */
+export function canSwitchWorktree(wt: { isMain: boolean; prunable: boolean }): boolean {
+  return !wt.isMain && !wt.prunable;
+}
+
 /** 預設目標路徑：sibling base + branchSlug（前端預覽用；main 端仍 validateWorktreeTarget 把關）。 */
 export function previewTargetPath(mainPath: string, slugSource: string): string {
   const base = defaultWorktreeBase(mainPath);

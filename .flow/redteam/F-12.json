@@ -1,0 +1,16 @@
+{
+  "attacks": [
+    { "id": "A1", "severity": "high", "scenario": "dirty 判定 TOCTOU + force 快取：開窗時乾淨、確認期間變 dirty；或 force 被快取預設 true → --force 丟棄未提交變更", "failSafeTest": { "file": "src/renderer/components/Worktree/worktreeRemoveModel.test.ts", "assert": "planRemoval(true,dirty>0)→confirm-dirty 不直接刪；force 僅 confirmedDirtyRemoval() 當次 true。面板於確認後才 ipc.git.changes 送出前重查（送出前，非開窗快照）" } },
+    { "id": "A2", "severity": "high", "scenario": "teardown-先殺後刪失敗→phantom 半殘：後端無條件先 workspaces.remove(delist) 再 git remove，busy 失敗留半殘", "failSafeTest": { "file": "e2e/worktree.spec.ts", "assert": "後端已改順序：deleteFolder=true 走 teardownOnly→git remove→成功才 delist；失敗不 delist＝工作區項保留。E2E-013 驗連同刪除成功無殘留、僅移出保留資料夾" } },
+    { "id": "A3", "severity": "high", "scenario": "未納管 worktree「切換到此」自動納管缺 lineage 驗證→信任繞過；prunable/missing 切換開 missing", "failSafeTest": { "file": "src/renderer/components/Worktree/worktreeDisplay.test.ts", "assert": "canSwitchWorktree：主工作樹/prunable 皆 false（禁切）。F-12 未納管切換不自動 addWorktree（僅提示，lineage 納管延 F-13）→無繞過" } },
+    { "id": "A4", "severity": "medium", "scenario": "prune 誤清暫時不可達的有效 worktree（網路磁碟斷線）", "failSafeTest": { "file": "e2e/worktree.spec.ts", "assert": "onPrune 前必 dialog.confirm（未確認不呼叫 worktreePrune）；WorktreePanel 源碼含 confirm 呼叫" } },
+    { "id": "A5", "severity": "medium", "scenario": "惡意路徑（RLO）視覺偽裝誘導誤刪 + 移除無防重入", "failSafeTest": { "file": "src/renderer/components/Worktree/worktreeDisplay.test.ts", "assert": "worktreePathDisplay 剝 RLO；WorktreePanel busy 旗標防重入＋源碼禁 dangerouslySetInnerHTML" } }
+  ],
+  "coverage": [
+    { "attackId": "A1", "status": "covered", "testFile": "src/renderer/components/Worktree/worktreeRemoveModel.test.ts" },
+    { "attackId": "A2", "status": "covered", "testFile": "e2e/worktree.spec.ts" },
+    { "attackId": "A3", "status": "covered", "testFile": "src/renderer/components/Worktree/worktreeDisplay.test.ts" },
+    { "attackId": "A4", "status": "covered", "testFile": "e2e/worktree.spec.ts" },
+    { "attackId": "A5", "status": "covered", "testFile": "src/renderer/components/Worktree/worktreeDisplay.test.ts" }
+  ]
+}

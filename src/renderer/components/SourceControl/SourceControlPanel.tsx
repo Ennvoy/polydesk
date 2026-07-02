@@ -8,10 +8,11 @@ import { ipc } from '../../ipc/client';
 import { useAppState } from '../../state/appStore';
 import { dialog } from '../Dialogs/host';
 import { editorBus } from '../../state/editorBus';
+import { WorktreePanel } from '../Worktree/WorktreePanel';
 import type { GitStatus, GitChange, GitLogEntry, AiEngine } from '../../../shared/types';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
 
-type Tab = 'changes' | 'history' | 'branches';
+type Tab = 'changes' | 'history' | 'branches' | 'worktree';
 
 // ── commit 線圖渲染常數 ──
 const GRAPH_LANE_W = 14;
@@ -94,8 +95,9 @@ function nOrNA(n: number | null): string {
 }
 
 export function SourceControlPanel(): React.JSX.Element {
-  const { activeWorkspaceId } = useAppState();
+  const { activeWorkspaceId, workspaces } = useAppState();
   const wsId = activeWorkspaceId;
+  const wsPath = workspaces.find((w) => w.id === wsId)?.path ?? '';
 
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [changes, setChanges] = useState<GitChange[]>([]);
@@ -528,6 +530,7 @@ export function SourceControlPanel(): React.JSX.Element {
             ['changes', '變更'],
             ['history', '歷史'],
             ['branches', '分支'],
+            ['worktree', 'worktree'],
           ] as [Tab, string][]
         ).map(([id, label]) => (
           <button
@@ -767,6 +770,8 @@ export function SourceControlPanel(): React.JSX.Element {
           )}
         </div>
       )}
+
+      {tab === 'worktree' && wsId && <WorktreePanel wsId={wsId} wsPath={wsPath} />}
 
       {commitMenu && (
         <div

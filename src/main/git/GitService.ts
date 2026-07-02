@@ -826,13 +826,16 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
       try {
         const list = await svc.worktreeList(req.wsId);
         // 附 managedWsId：worktree 路徑已納管者標記，供 UI「切換到此」判斷。
+        // 正規化須統一「斜線方向」——git porcelain 回 `/`、workspace.path（node resolve）回 `\`，
+        // 只比大小寫/尾斜線會漏配 → managedWsId 永遠 null。統一轉 `/` 再比。
+        const canon = (p: string): string => {
+          const s = p.replace(/[\\/]+/g, '/').replace(/\/+$/, '');
+          return process.platform === 'win32' ? s.toLowerCase() : s;
+        };
         const all = workspaces.list();
         const withManaged = list.map((w) => {
-          const norm = process.platform === 'win32' ? w.path.toLowerCase() : w.path;
-          const hit = all.find((ws) => {
-            const wp = process.platform === 'win32' ? ws.path.toLowerCase() : ws.path;
-            return wp.replace(/[\\/]+$/, '') === norm.replace(/[\\/]+$/, '');
-          });
+          const norm = canon(w.path);
+          const hit = all.find((ws) => canon(ws.path) === norm);
           return hit ? { ...w, managedWsId: hit.id } : w;
         });
         return { list: withManaged };
@@ -907,12 +910,16 @@ export function registerWorktreeRemoveHandler(
     const target = ws.path;
     const mainKey = req.wsId;
     return enqueue(workspaces.queueKeyForRepo(mainKey), async () => {
-      // 先 teardown（等程序結束、釋放檔案 handle）——不論是否刪資料夾都要收乾淨。
-      await workspaces.remove(req.wsId, false);
-      if (!req.deleteFolder) return { ok: true as const };
+      if (!req.deleteFolder) {
+        // 僅移出列表：完整 teardown＋delist，資料夾保留。
+        await workspaces.remove(req.wsId, false);
+        return { ok: true as const };
+      }
+      // 連同刪除（REQ-WT-006 順序鐵則）：先 teardown 釋放 handle（Windows 防 EBUSY）→ git remove
+      // 成功後才 delist。git remove 失敗則「不 delist」＝工作區項保留、不半殘。
+      await workspaces.teardownOnly(req.wsId);
       try {
         await svc.worktreeRemoveByPath(target, ws.worktree!.mainPath, req.force);
-        return { ok: true as const };
       } catch (e) {
         const msg = errMsg(e, 'worktree remove 失敗');
         const code = /is dirty|contains modified|use --force/i.test(msg)
@@ -920,8 +927,10 @@ export function registerWorktreeRemoveHandler(
           : /unable to|EBUSY|being used|locked/i.test(msg)
             ? ('busy' as const)
             : undefined;
-        return { error: msg, code };
+        return { error: msg, code }; // 工作區項保留（未 delist）
       }
+      await workspaces.remove(req.wsId, false); // git remove 成功才 delist（teardown 冪等）
+      return { ok: true as const };
     });
   });
 }

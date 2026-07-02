@@ -205,6 +205,15 @@ export class WorkspaceManager {
     if (purgeProfile) this.purgeProfileDir(ws.profileDir);
   }
 
+  /**
+   * REQ-WT-006＋紅軍：只 teardown 不 delist（釋放檔案 handle，Windows 下 git worktree remove 才不 EBUSY），
+   * 供「連同刪除」流程先 teardown→git remove 成功後才 delist（失敗則工作區項保留、不半殘）。
+   */
+  async teardownOnly(wsId: string): Promise<void> {
+    await this.lifecycle.teardown(wsId);
+    this.hydrated.delete(wsId);
+  }
+
   private purgeProfileDir(profileDir: string): void {
     try {
       const abs = join(this.userDataDir, profileDir);

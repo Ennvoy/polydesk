@@ -46,6 +46,10 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
 
   const [pathEdited, setPathEdited] = useState(false);
   const [pathValue, setPathValue] = useState('');
+  // 主工作樹路徑（sibling 基準）：從 worktree list 的 isMain 取；未載入前退回 wsPath。
+  // 修：在 worktree 工作區中建立時，基準須是「主 repo」而非作用中的 worktree，否則會巢狀成
+  // <main>-worktrees/<dev>-worktrees/<new>（REQ-WT-003 主工作樹收斂）。
+  const [mainPath, setMainPath] = useState(wsPath);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<{ msg: string; retry: boolean } | null>(null);
 
@@ -64,7 +68,11 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
         setCurrent(b.current);
         setBase(b.current); // 新分支起點預設當前分支（D-WT-BRANCH-BASE）
       }
-      if ('list' in wt) setWorktrees(wt.list);
+      if ('list' in wt) {
+        setWorktrees(wt.list);
+        const main = wt.list.find((x) => x.isMain);
+        if (main) setMainPath(main.path); // sibling 基準＝主工作樹（非作用中的 worktree）
+      }
       setLoading(false);
     })();
     return () => {
@@ -83,8 +91,8 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
   }, [kind, existing, newName, remoteRef]);
 
   useEffect(() => {
-    if (!pathEdited) setPathValue(slugSource ? previewTargetPath(wsPath, slugSource) : '');
-  }, [slugSource, pathEdited, wsPath]);
+    if (!pathEdited) setPathValue(slugSource ? previewTargetPath(mainPath, slugSource) : '');
+  }, [slugSource, pathEdited, mainPath]);
 
   const newNameErr = kind === 'new' && newName ? branchNameError(newName) : null;
 

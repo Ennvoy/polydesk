@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-013",
+  "status": "pass",
+  "evidence": "e2e/worktree.spec.ts 2 passed（dirty 兩段確認→連同刪除無殘留；僅移出保留資料夾）",
+  "by": "evaluator",
+  "at": "2026-07-02T04:13:55.726Z"
+}

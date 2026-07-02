@@ -531,8 +531,15 @@
       ],
       "conflictZone": [
         "src/renderer/components/Worktree/WorktreePanel.tsx",
+        "src/renderer/components/Worktree/worktreeRemoveModel.ts",
+        "src/renderer/components/Worktree/worktreeRemoveModel.test.ts",
+        "src/renderer/components/Worktree/worktreeModel.ts",
+        "src/renderer/components/Worktree/worktreeDisplay.test.ts",
         "src/renderer/components/SourceControl/SourceControlPanel.tsx",
-        "src/main/workspace/workspaceLifecycle.ts"
+        "src/main/workspace/WorkspaceManager.ts",
+        "src/main/git/GitService.ts",
+        "e2e/worktree.spec.ts",
+        "src/renderer/components/Worktree/CreateWorktreeDialog.tsx"
       ],
       "reqRefs": [
         "REQ-WT-001",
