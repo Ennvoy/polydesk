@@ -1,6 +1,7 @@
 // 持久化 schema 版本 + 遷移鏈 + 預設狀態 + 正規化（design §5.3、REQ-PERSIST-004）。
 
-import type { PersistState, ThemeId } from '../../shared/types';
+import type { PersistState, TerminalFontSettings, ThemeId } from '../../shared/types';
+import { TERMINAL_FONT_SIZE_MAX, TERMINAL_FONT_SIZE_MIN } from '../../shared/constants';
 
 export const CURRENT_SCHEMA_VERSION = 2;
 
@@ -17,6 +18,7 @@ export function defaultState(): PersistState {
     windowBounds: undefined,
     railWidth: undefined,
     aiCommit: undefined,
+    terminalFont: undefined,
   };
 }
 
@@ -59,6 +61,20 @@ function isValidAiCommit(v: unknown): boolean {
   if (typeof v !== 'object' || v === null) return false;
   const e = (v as { engine?: unknown }).engine;
   return e === 'claude' || e === 'codex' || e === 'custom';
+}
+
+/**
+ * 終端機字型設定容錯（setTerminalFont 與 normalize 共用）：family 剝引號防 CSS font-family
+ * 拼裝壞格式、截 64 字防灌爆；size 非有限數整筆拒收、超界收斂到上下限。無效 → undefined（＝用預設）。
+ */
+export function sanitizeTerminalFont(v: unknown): TerminalFontSettings | undefined {
+  if (typeof v !== 'object' || v === null) return undefined;
+  const o = v as Record<string, unknown>;
+  if (typeof o.family !== 'string' || typeof o.size !== 'number' || !Number.isFinite(o.size)) return undefined;
+  const family = o.family.replace(/["']/g, '').trim().slice(0, 64);
+  if (!family) return undefined;
+  const size = Math.min(TERMINAL_FONT_SIZE_MAX, Math.max(TERMINAL_FONT_SIZE_MIN, Math.round(o.size)));
+  return { family, size };
 }
 
 const SHELLS = ['powershell', 'cmd', 'pwsh', 'gitbash', 'wsl'];
@@ -113,5 +129,6 @@ function normalize(s: AnyState): PersistState {
     windowBounds: (s.windowBounds as PersistState['windowBounds']) ?? d.windowBounds,
     railWidth: typeof s.railWidth === 'number' ? s.railWidth : d.railWidth,
     aiCommit: isValidAiCommit(s.aiCommit) ? (s.aiCommit as PersistState['aiCommit']) : d.aiCommit,
+    terminalFont: sanitizeTerminalFont(s.terminalFont),
   };
 }

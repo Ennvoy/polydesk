@@ -20,10 +20,17 @@
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 import { ipc } from '../../ipc/client';
 import { record } from '../../../shared/perf';
-import { createSecureTerminalOptions, DEFAULT_TERMINAL_THEME } from './secureOptions';
+import {
+  createSecureTerminalOptions,
+  DEFAULT_TERMINAL_THEME,
+  buildTerminalFontFamily,
+  clampTerminalFontSize,
+} from './secureOptions';
+import { useTerminalFont } from '../../theme/TerminalFontProvider';
 import { classifyClipboardKey } from './clipboardKeys';
 import type { ITheme } from '@xterm/xterm';
 
@@ -66,6 +73,10 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  // 字型設定：建立時取當下值（ref 避免進主 effect deps 重建終端機）；變更由獨立 effect 就地套用。
+  const { font } = useTerminalFont();
+  const fontRef = useRef(font);
+  fontRef.current = font;
   // 近似按鍵延遲：使用者輸入時記時間戳，下一個回流的 chunk 視為回顯。
   const keyTsRef = useRef<number | null>(null);
   // 上次送往 main 的尺寸；避免版面每次微動都對 ConPTY 連發 resize（重複重繪）。termId 改變時重置。
@@ -82,7 +93,17 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
     lastFitBoxRef.current = { w: -1, h: -1 }; // 與反震盪基準
 
     const theme = readTerminalTheme(host);
-    const term = new Terminal(createSecureTerminalOptions(theme));
+    const term = new Terminal(createSecureTerminalOptions(theme, fontRef.current));
+    // Unicode 11 寬度表：emoji 算 2 格，與 Windows ConPTY / Claude Code 一致——修「狀態列重繪
+    // 錯位互蓋成亂碼」（VS Code 終端機同款配置）。失敗不致命：僅寬度回退內建 v6，功能不受影響。
+    try {
+      term.loadAddon(new Unicode11Addon());
+      term.unicode.activeVersion = '11';
+    } catch {
+      /* 寬度表註冊失敗：回退 v6 */
+    }
+    // 診斷 seam（比照 __pdPerf 慣例）：e2e 確定性斷言生效中的寬度表版本，不影響執行期。
+    host.dataset.termUnicode = term.unicode.activeVersion;
     // 容器底色 = xterm 實際背景色：inset 邊距與整數格 fit 的右/下剩餘空間才不會露出
     // 主題底色形成「留白框」（xterm 只能排整數 cols/rows，剩餘空隙無法靠 fit 消除）。
     if (viewRef.current && theme.background) viewRef.current.style.background = theme.background;
@@ -256,6 +277,15 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
       fitRef.current = null;
     };
   }, [termId]);
+
+  // 字型設定即時跟隨（設定面板改字型/字級 → 開啟中的終端機就地套用；cell 尺寸變了須重 fit）。
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.fontFamily = buildTerminalFontFamily(font.family);
+    term.options.fontSize = clampTerminalFontSize(font.size);
+    fitNowRef.current(); // 走同一條 safeFit（含極窄寬守衛 + skip-unchanged）
+  }, [font]);
 
   // 由隱藏切回顯示時重新 fit + 聚焦（display:none 時容器尺寸為 0，無法 fit）。
   useLayoutEffect(() => {

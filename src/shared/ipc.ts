@@ -20,6 +20,7 @@ import type {
   ThemeId,
   PersistState,
   AiCommitSettings,
+  TerminalFontSettings,
   AiUsage,
   McpWireResult,
   ConflictInfo,
@@ -152,6 +153,7 @@ export interface InvokeChannels {
   'store:setLayout': { req: { layout: LayoutJson }; res: { ok: true } };
   'store:setRailWidth': { req: { width: number }; res: { ok: true } };
   'store:setAiCommit': { req: { cfg: AiCommitSettings }; res: { ok: true } };
+  'store:setTerminalFont': { req: { cfg: TerminalFontSettings }; res: { ok: true } };
   'store:export': { req: void; res: { json: string } };
   'store:import': { req: { json: string }; res: { ok: true } | { error: string } };
   // 更新

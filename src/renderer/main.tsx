@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { ThemeProvider } from './theme/ThemeProvider';
+import { TerminalFontProvider } from './theme/TerminalFontProvider';
 import { appStore } from './state/appStore';
 import { registerAllFeatures } from './features';
 import { getMeasures, clearPerf } from '../shared/perf';
@@ -20,7 +21,9 @@ if (rootEl) {
   createRoot(rootEl).render(
     <React.StrictMode>
       <ThemeProvider>
-        <App />
+        <TerminalFontProvider>
+          <App />
+        </TerminalFontProvider>
       </ThemeProvider>
     </React.StrictMode>,
   );

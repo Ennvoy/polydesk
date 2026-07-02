@@ -9,9 +9,26 @@
 //    TUI 選取複製）、查詢（讀取方向）照封不回應、序列本體不進 renderer。
 
 import type { ITerminalOptions, ITheme } from '@xterm/xterm';
+import type { TerminalFontSettings } from '../../../shared/types';
+import { TERMINAL_FONT_SIZE_MAX, TERMINAL_FONT_SIZE_MIN } from '../../../shared/constants';
 
-export const TERMINAL_FONT_FAMILY =
-  '"Geist Mono", "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", ui-monospace, monospace';
+/** 預設終端機字型：對齊 VS Code Windows 預設（Consolas 14px，2026-07-02 拍板）。 */
+export const DEFAULT_TERMINAL_FONT: TerminalFontSettings = { family: 'Consolas', size: 14 };
+
+/** 首選字型未安裝/缺字時的後備鏈。 */
+const TERMINAL_FONT_FALLBACK = '"Cascadia Mono", Consolas, "Liberation Mono", ui-monospace, monospace';
+
+/** 組 CSS font-family：首選字型剝引號（防拼裝壞格式）再加引號（容納含空白字型名），接固定後備鏈。 */
+export function buildTerminalFontFamily(family: string): string {
+  const f = family.replace(/["']/g, '').trim();
+  return f ? `"${f}", ${TERMINAL_FONT_FALLBACK}` : TERMINAL_FONT_FALLBACK;
+}
+
+/** 字級守界（與 main 端 sanitize 同一組上下限；防呆非防駭）。 */
+export function clampTerminalFontSize(size: number): number {
+  if (!Number.isFinite(size)) return DEFAULT_TERMINAL_FONT.size;
+  return Math.min(TERMINAL_FONT_SIZE_MAX, Math.max(TERMINAL_FONT_SIZE_MIN, Math.round(size)));
+}
 
 /**
  * 全部視窗回報旗標關閉（xterm IWindowOptions）。預設雖多為 off，仍明示釘死＝確定性防禦，
@@ -51,12 +68,18 @@ export const DEFAULT_TERMINAL_THEME: ITheme = {
 };
 
 /** 產生單一 xterm 實例的安全初始化選項。 */
-export function createSecureTerminalOptions(theme: ITheme = DEFAULT_TERMINAL_THEME): ITerminalOptions {
+export function createSecureTerminalOptions(
+  theme: ITheme = DEFAULT_TERMINAL_THEME,
+  font: TerminalFontSettings = DEFAULT_TERMINAL_FONT,
+): ITerminalOptions {
   return {
-    // 最小權限（REQ-TERM-008）：不啟用 xterm proposed/不穩定 API（現有 addon 不需要）。
-    allowProposedApi: false,
-    fontFamily: TERMINAL_FONT_FAMILY,
-    fontSize: 13,
+    // allowProposedApi 只閘「本 app 程式碼可否呼叫 xterm 實驗性 JS API」（Terminal.unicode 等），
+    // 不是 PTY 輸出可觸及的防禦邊界——惡意輸出的攻擊面仍由 windowOptions 全關＋不設 linkHandler 守。
+    // 開啟是為載入 Unicode11Addon（emoji 算 2 格，與 Windows ConPTY 一致；修狀態列重繪錯位互蓋），
+    // 與 VS Code 終端機同款配置（其 terminal.integrated.unicodeVersion 預設 "11"）。
+    allowProposedApi: true,
+    fontFamily: buildTerminalFontFamily(font.family),
+    fontSize: clampTerminalFontSize(font.size),
     lineHeight: 1.2,
     cursorBlink: true,
     scrollback: 5000,

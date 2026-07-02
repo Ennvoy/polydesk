@@ -18,3 +18,7 @@ export const AI_COMMIT_TIMEOUT_MS = 90_000;
 export const AI_DIFF_MAX_CHARS = 12_000;
 /** 搜尋結果上限（超量截斷，REQ-SEARCH-004）。 */
 export const SEARCH_RESULT_LIMIT = 5_000;
+
+/** 終端機字級可調範圍（px）；schema sanitize 與設定 UI 共用同一組上下限。 */
+export const TERMINAL_FONT_SIZE_MIN = 8;
+export const TERMINAL_FONT_SIZE_MAX = 32;

@@ -16,7 +16,7 @@ import {
   renameSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
-import type { AiCommitSettings, LayoutJson, PersistState, ThemeId, WindowBounds } from '../../shared/types';
+import type { AiCommitSettings, LayoutJson, PersistState, TerminalFontSettings, ThemeId, WindowBounds } from '../../shared/types';
 import { CURRENT_SCHEMA_VERSION, defaultState, migrate } from './schema';
 
 export class StateStore {
@@ -102,6 +102,11 @@ export class StateStore {
 
   setAiCommit(cfg: AiCommitSettings): void {
     this.set('aiCommit', cfg);
+  }
+
+  /** undefined＝清除自訂、回落預設（Consolas 14）。 */
+  setTerminalFont(cfg: TerminalFontSettings | undefined): void {
+    this.set('terminalFont', cfg);
   }
 
   /** 匯出目前狀態字串（REQ-PERSIST-005）。 */

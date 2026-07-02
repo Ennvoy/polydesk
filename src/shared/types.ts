@@ -156,6 +156,16 @@ export interface PersistState {
   railWidth?: number;
   /** 智慧 commit message 引擎設定（undefined＝預設 claude）。 */
   aiCommit?: AiCommitSettings;
+  /** 終端機字型（undefined＝預設 Consolas 14）。 */
+  terminalFont?: TerminalFontSettings;
+}
+
+/** 終端機字型設定（undefined＝預設 Consolas 14，對齊 VS Code Windows 預設）。 */
+export interface TerminalFontSettings {
+  /** 首選字型名（CSS font-family 首位；後備鏈固定由 renderer 補）。 */
+  family: string;
+  /** 字級 px（TERMINAL_FONT_SIZE_MIN–MAX）。 */
+  size: number;
 }
 
 /** 智慧 commit message 的產生引擎。custom＝使用者自訂 argv 範本（任何 CLI；prompt 走 stdin）。 */

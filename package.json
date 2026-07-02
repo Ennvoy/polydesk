@@ -19,7 +19,7 @@
   "dependencies": {
     "@vscode/ripgrep": "^1.18.0",
     "@xterm/addon-fit": "^0.11.0",
-    "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/addon-unicode11": "^0.9.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "chokidar": "^5.0.0",
@@ -55,11 +55,27 @@
   "build": {
     "appId": "com.polydesk.app",
     "productName": "Polydesk",
-    "directories": { "output": "../polydesk-dist" },
+    "directories": {
+      "output": "../polydesk-dist"
+    },
     "npmRebuild": false,
-    "files": ["out/**/*", "package.json"],
-    "asarUnpack": ["**/*.node", "**/node_modules/node-pty/**", "**/node_modules/@vscode/ripgrep/**"],
-    "win": { "target": ["portable"], "icon": "build/icon.ico" },
-    "portable": { "artifactName": "Polydesk-${version}-portable.exe" }
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/*.node",
+      "**/node_modules/node-pty/**",
+      "**/node_modules/@vscode/ripgrep/**"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "Polydesk-${version}-portable.exe"
+    }
   }
 }

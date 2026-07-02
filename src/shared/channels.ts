@@ -65,6 +65,7 @@ export const INVOKE_CHANNELS = [
   'store:setLayout',
   'store:setRailWidth',
   'store:setAiCommit',
+  'store:setTerminalFont',
   'store:export',
   'store:import',
   'update:check',
