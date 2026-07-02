@@ -1,0 +1,7 @@
+{
+  "id": "REQ-E2E-012",
+  "status": "pass",
+  "evidence": "e2e/worktree.spec.ts 1 passed（分支→建立→納管→⎇ dev 徽章、git worktree list 有、sibling 路徑）",
+  "by": "evaluator",
+  "at": "2026-07-02T03:42:09.259Z"
+}

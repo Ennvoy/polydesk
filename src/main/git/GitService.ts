@@ -455,7 +455,7 @@ export class GitService {
     op: 'list' | 'create' | 'checkout',
     name?: string,
     startPoint?: string,
-  ): Promise<{ branches: string[]; current: string } | { ok: true }> {
+  ): Promise<{ branches: string[]; current: string; remotes?: string[] } | { ok: true }> {
     const cwd = this.path(wsId);
     if (!cwd) throw new Error('workspace not found');
 
@@ -468,6 +468,20 @@ export class GitService {
         .split('\n')
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
+      // 遠端分支（REQ-WT-002 來源③；排除 origin/HEAD 符號指標）——供 worktree 建立來源選單。
+      let remotes: string[] = [];
+      try {
+        const r = await this.run(
+          [...readHardeningArgs(), 'for-each-ref', '--format=%(refname:short)', 'refs/remotes'],
+          { cwd, env: readEnv() },
+        );
+        remotes = r.stdout
+          .split('\n')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0 && !/\/HEAD$/.test(s));
+      } catch {
+        remotes = [];
+      }
       let current = '';
       try {
         const r = await this.run([...readHardeningArgs(), 'rev-parse', '--abbrev-ref', 'HEAD'], {
@@ -479,7 +493,7 @@ export class GitService {
       } catch {
         current = '';
       }
-      return { branches, current };
+      return { branches, current, remotes };
     }
 
     // create / checkout：白名單驗證，未過＝注入嫌疑 → 永不進 argv

@@ -1,0 +1,16 @@
+{
+  "attacks": [
+    { "id": "A1", "severity": "high", "scenario": "分支名（git check-ref-format 允許 <>&\"'`$; 與 RLO）經 rail 徽章渲染 → 若用 innerHTML 即 renderer XSS/RCE；RLO 可視覺偽裝 main。detached 須顯示 (detached HEAD) 非 'null'", "failSafeTest": { "file": "e2e/worktree.spec.ts", "assert": "seed 惡意分支名 worktree → rail 無 <img>、window.__pwned undefined、徽章 textContent 無 bidi 字元、detached 徽章非 'null'" } },
+    { "id": "A2", "severity": "medium", "scenario": "互斥開窗快照過期（TOCTOU）：使用者在終端機手動 checkout 繞過佇列 → 送出仍用舊快照", "failSafeTest": { "file": "src/renderer/components/Worktree/worktreeModel.test.ts", "assert": "isBranchTaken 以新快照回 {taken:true,at:P}；送出決策採重抓的新 list" } },
+    { "id": "A3", "severity": "medium", "scenario": "送出中重複點擊/Enter → 兩個 worktreeAdd 併發 → 重複/半殘工作區", "failSafeTest": { "file": "src/renderer/components/Worktree/worktreeSubmit.test.ts", "assert": "worktreeAdd 永不 resolve stub，連續同步呼叫 submit 兩次 → 恰呼叫 1 次（ref 防重入）" } },
+    { "id": "A4", "severity": "medium", "scenario": "前端分支驗證與 backend validateRef 漂移 → 非法名前端放行、後端才擋（無 inline 原因）", "failSafeTest": { "file": "src/renderer/components/Worktree/worktreeModel.test.ts", "assert": "branchNameError 為 null ⇔ validateRef 為 true（對拍多例含 HEAD/-x/a..b/x.lock/a:b/U+200E）" } },
+    { "id": "A5", "severity": "medium", "scenario": "remote 分支列舉/建立失敗凍結 UI", "failSafeTest": { "file": "e2e/worktree.spec.ts", "assert": "worktreeAdd remote 回 code:net → 出現重試按鈕、取消仍 enabled、無 pageerror" } }
+  ],
+  "coverage": [
+    { "attackId": "A1", "status": "covered", "testFile": "src/renderer/components/Worktree/worktreeDisplay.test.ts" },
+    { "attackId": "A2", "status": "covered", "testFile": "src/renderer/components/Worktree/worktreeModel.test.ts" },
+    { "attackId": "A3", "status": "covered", "testFile": "src/renderer/components/Worktree/worktreeSubmit.test.ts" },
+    { "attackId": "A4", "status": "covered", "testFile": "src/renderer/components/Worktree/worktreeModel.test.ts" },
+    { "attackId": "A5", "status": "covered", "testFile": "src/renderer/components/Worktree/worktreeSubmit.test.ts" }
+  ]
+}

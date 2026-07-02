@@ -6,32 +6,13 @@
 
 import { resolve, join, dirname, basename, parse as parsePath, sep } from 'node:path';
 import { existsSync, realpathSync } from 'node:fs';
+// slug/sibling 命名＝純邏輯，抽到 shared（renderer 也 import；避免把 node:fs 拉進 renderer bundle）。
+import { branchSlug, defaultWorktreeBase } from '../../shared/worktreeNaming';
 
-/** Windows 保留裝置名（完整名或「名.副檔名」皆不可當資料夾名）。 */
-const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
-/** Windows 非法檔名字元＋控制字元（'/' 已先轉 '-'；'\' 一併剔除；空白/連字號合法保留）。 */
-// eslint-disable-next-line no-control-regex
-const ILLEGAL = /[<>:"|?*\\\u0000-\u001f]/g;
-const MAX_SLUG = 60;
+export { branchSlug, defaultWorktreeBase };
+
 /** 完整路徑預檢上限（MAX_PATH 260 留 buffer 給 repo 內部深層檔案）。 */
 const MAX_PATH_LEN = 240;
-
-/** 分支名 → 資料夾 slug：`/`→`-`、剔非法字元、去結尾點/空白（A3：先 trim 再判保留名，
- *  否則 'aux ' 躲過檢查、NTFS 又剝尾空白 → 記錄路徑≠磁碟實名）、≤60、保留名前綴 wt-。 */
-export function branchSlug(branch: string): string {
-  let s = (branch ?? '').replace(/\//g, '-').replace(ILLEGAL, '');
-  s = s.replace(/[. ]+$/g, '');
-  if (s.length > MAX_SLUG) s = s.slice(0, MAX_SLUG).replace(/[. ]+$/g, '');
-  if (RESERVED.test(s)) s = `wt-${s}`;
-  if (s.length === 0) s = 'wt';
-  return s;
-}
-
-/** sibling 慣例：`<repo 上層>/<repo 名>-worktrees`。 */
-export function defaultWorktreeBase(mainPath: string): string {
-  const abs = resolve(mainPath).replace(/[\\/]+$/, '');
-  return join(dirname(abs), `${basename(abs)}-worktrees`);
-}
 
 /** 目標＝base/slug；已存在則 -2、-3…（REQ-WT-010 序號策略；slug 碰撞同走此路）。 */
 export function resolveTargetPath(baseDir: string, slug: string, exists: (p: string) => boolean): string {

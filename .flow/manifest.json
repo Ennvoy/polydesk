@@ -496,7 +496,17 @@
       ],
       "conflictZone": [
         "src/renderer/components/Worktree/CreateWorktreeDialog.tsx",
-        "src/renderer/components/WorkspaceRail.tsx"
+        "src/renderer/components/Worktree/worktreeModel.ts",
+        "src/renderer/components/Worktree/worktreeModel.test.ts",
+        "src/renderer/components/Worktree/worktreeSubmit.ts",
+        "src/renderer/components/Worktree/worktreeSubmit.test.ts",
+        "src/renderer/components/WorkspaceRail.tsx",
+        "src/main/git/GitService.ts",
+        "src/shared/ipc.ts",
+        "e2e/worktree.spec.ts",
+        "src/shared/worktreeNaming.ts",
+        "src/renderer/components/Worktree/worktreeDisplay.test.ts",
+        "src/main/git/worktreePath.ts"
       ],
       "reqRefs": [
         "REQ-WT-001",

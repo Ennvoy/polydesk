@@ -76,7 +76,7 @@ export interface InvokeChannels {
   'git:pull': { req: { wsId: string }; res: { ok: true } | { error: string } };
   'git:branch': {
     req: { wsId: string; op: 'list' | 'create' | 'checkout'; name?: string; startPoint?: string };
-    res: { branches: string[]; current: string } | { ok: true };
+    res: { branches: string[]; current: string; remotes?: string[] } | { ok: true };
   };
   'git:log': { req: { wsId: string; limit: number }; res: GitLogEntry[] };
   /** commit diff（git show <ref>；給 path 則限定單檔）；PE-1 右鍵/展開檔案用。 */

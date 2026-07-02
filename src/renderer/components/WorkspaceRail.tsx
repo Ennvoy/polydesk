@@ -20,6 +20,8 @@ import { EmptyWelcome } from './EmptyWelcome';
 import { ClaudeStatusBadge } from './ClaudeStatusBadge';
 import { TrustConfirm, neutralizeBidi } from './Dialogs/TrustConfirm';
 import { confirmCloseWorkspace } from './Dialogs/CloseConfirm';
+import { CreateWorktreeDialog } from './Worktree/CreateWorktreeDialog';
+import { worktreeBranchDisplay } from './Worktree/worktreeModel';
 import type { Workspace } from '../../shared/types';
 
 // ── 一次性注入本 feature 的 rail 樣式（不改 P-2 的 components.css；全用 var(--*) token）──
@@ -100,6 +102,87 @@ export async function addWorkspaceFlow(): Promise<void> {
   }
   await appStore.loadWorkspaces();
   appStore.setActiveWorkspace(res.id);
+}
+
+/**
+ * 從 Git 分支建立 worktree（入口②）：以當前作用工作區為來源 repo 開對話框（REQ-WT-001②）。
+ * 無作用工作區時提示先選一個 git repo 工作區。
+ */
+export async function createWorktreeFlow(): Promise<void> {
+  const active = appStore.activeWorkspace();
+  if (!active) {
+    await dialog.confirm({ title: '請先選擇工作區', body: '從分支建立 worktree 需要一個 git repo 工作區當來源。', confirmText: '知道了', cancelText: '關閉' });
+    return;
+  }
+  await dialog.open((close) => (
+    <CreateWorktreeDialog wsId={active.id} wsPath={active.path} onResult={(v) => close(v)} />
+  ));
+}
+
+/**
+ * worktree 工作區的即時分支徽章（REQ-WT-004＋紅軍 A1）：分支名經 git status 即時查、
+ * 一律走 React 文字節點＋neutralizeBidi（禁 innerHTML，防惡意分支名 XSS/RLO 偽裝）；
+ * detached HEAD 顯示明確文字、不渲染 'null'、不由資料夾名回推。
+ */
+function WorktreeBranchTag({ wsId }: { wsId: string }): React.JSX.Element {
+  const [branch, setBranch] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const s = await ipc.git.status({ wsId });
+        if (alive) setBranch(s.isRepo ? s.branch : null);
+      } catch {
+        if (alive) setBranch(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [wsId]);
+  const text = worktreeBranchDisplay(branch);
+  return (
+    <span
+      title={text}
+      style={{
+        fontSize: 'var(--text-xs)',
+        color: 'var(--meta)',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        maxWidth: 90,
+      }}
+    >
+      ⎇ {text}
+    </span>
+  );
+}
+
+/**
+ * 排序＋分組：worktree 工作區緊列於「所屬主工作樹」項之下（REQ-WT-004）。
+ * 以 worktree.mainPath 比對主工作樹 path（win32 大小寫不敏感）；主工作樹不在列表的 worktree 置尾。
+ */
+function groupByMainRepo(list: Workspace[]): Workspace[] {
+  const norm = (p: string): string => {
+    const s = p.replace(/[\\/]+$/, '');
+    return typeof navigator !== 'undefined' && /win/i.test(navigator.platform) ? s.toLowerCase() : s;
+  };
+  const mains = list.filter((w) => !w.worktree).sort((a, b) => a.order - b.order);
+  const wts = list.filter((w) => w.worktree);
+  const byMain = new Map<string, Workspace[]>();
+  const orphans: Workspace[] = [];
+  for (const wt of wts) {
+    const key = norm(wt.worktree!.mainPath);
+    const main = mains.find((m) => norm(m.path) === key);
+    if (main) (byMain.get(main.id) ?? byMain.set(main.id, []).get(main.id)!).push(wt);
+    else orphans.push(wt);
+  }
+  const out: Workspace[] = [];
+  for (const m of mains) {
+    out.push(m);
+    for (const wt of byMain.get(m.id) ?? []) out.push(wt);
+  }
+  return [...out, ...orphans];
 }
 
 /** 移除確認彈窗：purge checkbox 狀態存於本元件（隔離外部列表重繪），勾選刪資料需二次確認（F-1-A5）。 */
@@ -196,12 +279,14 @@ export function WorkspaceRail(): React.JSX.Element {
   const [editValue, setEditValue] = useState('');
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
 
   useEffect(() => {
     ensureStyle();
   }, []);
 
-  const ordered = [...workspaces].sort((a, b) => a.order - b.order);
+  // worktree 緊列所屬主工作樹之下（REQ-WT-004）。
+  const ordered = groupByMainRepo(workspaces);
 
   const startRename = (w: Workspace): void => {
     setEditingId(w.id);
@@ -242,16 +327,65 @@ export function WorkspaceRail(): React.JSX.Element {
         minHeight: 0,
       }}
     >
-      <div className="pd-panel-header">
+      <div className="pd-panel-header" style={{ position: 'relative' }}>
         <span>工作區</span>
         <button
           className="pdws-actbtn"
-          aria-label="新增工作區"
-          title="新增工作區"
-          onClick={() => void addWorkspaceFlow()}
+          aria-label="新增"
+          title="新增工作區 / worktree"
+          aria-haspopup="menu"
+          aria-expanded={addMenuOpen}
+          onClick={() => setAddMenuOpen((v) => !v)}
         >
           ＋
         </button>
+        {addMenuOpen && (
+          <>
+            {/* 點外關閉 */}
+            <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setAddMenuOpen(false)} />
+            <div
+              role="menu"
+              aria-label="新增選單"
+              style={{
+                position: 'absolute',
+                top: '100%',
+                right: 4,
+                zIndex: 41,
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                boxShadow: 'var(--elev-raised)',
+                minWidth: 210,
+                padding: 4,
+              }}
+            >
+              <button
+                role="menuitem"
+                className="pd-row"
+                style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit', font: 'inherit', padding: '8px 10px', borderRadius: 'var(--radius-sm)' }}
+                aria-label="新增工作區"
+                onClick={() => {
+                  setAddMenuOpen(false);
+                  void addWorkspaceFlow();
+                }}
+              >
+                📁 新增工作區…
+              </button>
+              <button
+                role="menuitem"
+                className="pd-row"
+                style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit', font: 'inherit', padding: '8px 10px', borderRadius: 'var(--radius-sm)' }}
+                aria-label="從 Git 分支建立 worktree"
+                onClick={() => {
+                  setAddMenuOpen(false);
+                  void createWorktreeFlow();
+                }}
+              >
+                ⎇ 從 Git 分支建立 worktree…
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {ordered.length === 0 ? (
@@ -267,11 +401,13 @@ export function WorkspaceRail(): React.JSX.Element {
             const isMissing = w.status === 'missing';
             const isActive = activeWorkspaceId === w.id && !isMissing;
             const isEditing = editingId === w.id;
+            const isWorktree = !!w.worktree;
             return (
               <div
                 key={w.id}
                 role="listitem"
                 aria-current={isActive ? 'true' : undefined}
+                style={isWorktree ? { paddingLeft: 'var(--space-4)' } : undefined}
                 className={`pdws-item pd-row${isActive ? ' is-active' : ''}${isMissing ? ' is-missing' : ''}${
                   overId === w.id ? ' is-dragover' : ''
                 }`}
@@ -303,6 +439,10 @@ export function WorkspaceRail(): React.JSX.Element {
                 {isMissing ? (
                   <span aria-hidden="true" title="資料夾遺失" style={{ color: 'var(--warn)', flexShrink: 0 }}>
                     ⚠
+                  </span>
+                ) : isWorktree ? (
+                  <span aria-label="worktree 工作區" title="git worktree" style={{ color: 'var(--accent)', flexShrink: 0 }}>
+                    ⎇
                   </span>
                 ) : (
                   <ClaudeStatusBadge wsId={w.id} />
@@ -339,6 +479,8 @@ export function WorkspaceRail(): React.JSX.Element {
                     <span className="pdws-name">{neutralizeBidi(w.name)}</span>
                   </button>
                 )}
+
+                {!isEditing && isWorktree && !isMissing && <WorktreeBranchTag wsId={w.id} />}
 
                 {!isEditing && (
                   <span className="pdws-actions">

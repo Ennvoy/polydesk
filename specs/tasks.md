@@ -180,7 +180,7 @@
       conflictZone：src/shared/ipc.ts、src/shared/types.ts、src/shared/channels.ts、src/main/git/GitService.ts、src/main/git/gitSafeArgs.ts、src/main/git/worktreePath.ts、src/main/workspace/WorkspaceManager.ts、src/main/store/schema.ts
       verify：vitest 全綠——slug 全規則（Windows 保留名/長度/序號/非法字元）、路徑驗證、porcelain 解析、schema v2 遷移、argv 硬化不變量、納管信任繼承單測。
 
-- [ ] **F-11 建立 worktree 全流程（入口②＋對話框＋納管開啟＋rail 識別）**
+- [x] **F-11 建立 worktree 全流程（入口②＋對話框＋納管開啟＋rail 識別）**
       story：工作區「＋」選單→「從 Git 分支建立 worktree…」→ 對話框（repo 預設當前、分支三來源＋validateRef 即時＋互斥標禁＋送出前複查、路徑預設 sibling 可改）→ 建立 → 自動納管（信任繼承、不重彈）→ 切換開啟 → rail 顯示 ⎇＋即時分支徽章緊列主工作樹下；失敗顯示原始錯誤＋自動清理半成品；remote 抓取失敗＋重試；資料夾衝突聰明處置（有效 worktree→加入、否則序號）。
       reqRefs：REQ-WT-001②/002/003/004/005（標禁複查）/010/011/013、REQ-E2E-012
       blockedBy：P-4
