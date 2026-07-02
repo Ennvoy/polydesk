@@ -54,6 +54,7 @@ function createWindow(): void {
     x: bounds?.x,
     y: bounds?.y,
     show: false,
+    icon: join(__dirname, '../../build/icon.ico'),
     title: APP_NAME,
     backgroundColor: '#0a0a0a',
     // 無框：標題列/選單/視窗鈕全由 renderer 自畫（深色一致）。仍可調整大小。

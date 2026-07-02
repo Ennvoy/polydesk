@@ -98,9 +98,12 @@ export function TitleBar(): React.JSX.Element {
   return (
     <header className="pd-titlebar" ref={barRef} aria-label="標題列">
       <div className="pd-titlebar-brand">
-        <span className="pd-titlebar-logo" aria-hidden="true">
-          ▣
-        </span>
+        <svg className="pd-titlebar-logo" width="16" height="16" viewBox="0 0 100 100" aria-hidden="true">
+          {/* Polydesk 疊層星芒：三個三角 currentColor + 不同透明度，隨 --accent 主題換色 */}
+          <polygon points="50,20 22,72 78,72" fill="currentColor" opacity="0.95" />
+          <polygon points="24,28 80,44 44,80" fill="currentColor" opacity="0.6" />
+          <polygon points="76,30 56,80 20,50" fill="currentColor" opacity="0.45" />
+        </svg>
         <span className="pd-titlebar-title">Polydesk</span>
       </div>
 

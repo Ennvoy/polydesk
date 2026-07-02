@@ -24,6 +24,7 @@ afterPack: build/afterPack.js
 win:
   target:
     - nsis
+  icon: build/icon.ico
   artifactName: ${productName}-Setup-${version}.${ext}
 nsis:
   perMachine: false

@@ -55,11 +55,11 @@
   "build": {
     "appId": "com.polydesk.app",
     "productName": "Polydesk",
-    "directories": { "output": "release" },
+    "directories": { "output": "../polydesk-dist" },
     "npmRebuild": false,
     "files": ["out/**/*", "package.json"],
     "asarUnpack": ["**/*.node", "**/node_modules/node-pty/**", "**/node_modules/@vscode/ripgrep/**"],
-    "win": { "target": ["portable"] },
+    "win": { "target": ["portable"], "icon": "build/icon.ico" },
     "portable": { "artifactName": "Polydesk-${version}-portable.exe" }
   }
 }
