@@ -168,3 +168,42 @@
 - **Wave 2（並行）**：F-1（WorkspaceRail）∥ F-2（Explorer+FileWatcher）∥ F-3（Terminal+PTY）∥ F-4（Editor+fileService）∥ F-7（git）— 五者 conflictZone 互斥（F-2/F-4 同在 main/fs 但檔不同：FileWatcher.ts vs fileService.ts）。
 - **Wave 3（並行）**：F-5（LSP，依 F-4）∥ F-6（搜尋跳檔，依 F-4）∥ F-8（Claude 監控，依 F-1+F-3）∥ F-10（dock 持久化，依 P-2）— 各寫各自 main/renderer 子目錄，無重疊。（F-9 已砍除，見上。）
 - **Wave 4（X，ship 前序列為主）**：X-1 效能量測 → X-2 打包/更新 → X-3 a11y → X-4 安全硬化（X 多為跨檔稽核/量測，序列執行避免互踩）。
+
+---
+
+## 第二迭代：Git Worktree（2026-07-02 凍結立項；波次 [P-4]→[F-11]→[F-12]→[F-13]→[X-5]，序列——並行度自檢見 design §6.4）
+
+- [ ] **P-4 worktree 契約＋GitService 擴充＋持久化 schema v2**
+      story：main 端具備完整 worktree 能力——`types.ts`/`ipc.ts`/`channels.ts` 釘 `GitWorktree`＋`git:worktree*` 四通道；GitService worktree list/add/remove/prune（argv 硬化＋序列佇列＋逾時，`--porcelain -z` 解析）；`worktreePath.ts` slug/路徑驗證純函式（≤60、Windows 保留名 `wt-`、序號、≤240 預檢、禁工作區內/系統目錄）；WorkspaceManager worktree 標記納管＋信任繼承；schema v2 遷移。
+      reqRefs：REQ-WT-002/003/010/012/015、REQ-PERSIST-004
+      blockedBy：—
+      conflictZone：src/shared/ipc.ts、src/shared/types.ts、src/shared/channels.ts、src/main/git/GitService.ts、src/main/git/gitSafeArgs.ts、src/main/git/worktreePath.ts、src/main/workspace/WorkspaceManager.ts、src/main/store/schema.ts
+      verify：vitest 全綠——slug 全規則（Windows 保留名/長度/序號/非法字元）、路徑驗證、porcelain 解析、schema v2 遷移、argv 硬化不變量、納管信任繼承單測。
+
+- [ ] **F-11 建立 worktree 全流程（入口②＋對話框＋納管開啟＋rail 識別）**
+      story：工作區「＋」選單→「從 Git 分支建立 worktree…」→ 對話框（repo 預設當前、分支三來源＋validateRef 即時＋互斥標禁＋送出前複查、路徑預設 sibling 可改）→ 建立 → 自動納管（信任繼承、不重彈）→ 切換開啟 → rail 顯示 ⎇＋即時分支徽章緊列主工作樹下；失敗顯示原始錯誤＋自動清理半成品；remote 抓取失敗＋重試；資料夾衝突聰明處置（有效 worktree→加入、否則序號）。
+      reqRefs：REQ-WT-001②/002/003/004/005（標禁複查）/010/011/013、REQ-E2E-012
+      blockedBy：P-4
+      conflictZone：src/renderer/components/Worktree/CreateWorktreeDialog.tsx、src/renderer/components/WorkspaceRail.tsx
+      verify：Playwright REQ-E2E-012 全旅程綠（真 git fixture ≥2 分支；不重彈信任窗、cwd＝worktree、切回主 repo 終端機仍在）。
+
+- [ ] **F-12 SCM worktree 分頁（入口①＋列表/切換/移除/prune）**
+      story：SCM 面板第 4 分頁 `worktree`：列出全部 worktree（即時分支/路徑/missing 狀態）＋空狀態說明 CTA；「切換到此」（未納管→lineage 驗證→提示加入並開啟）；「＋建立」重用對話框；移除→二選一彈窗（僅移出/連同刪除）→dirty 兩段確認（列變更數＋跑中程序）→teardown 先行等 handle 釋放→`git worktree remove`；「清理失效登記（prune）」。
+      reqRefs：REQ-WT-001①/006/007/008/009/014、REQ-E2E-013
+      blockedBy：P-4、F-11
+      conflictZone：src/renderer/components/Worktree/WorktreePanel.tsx、src/renderer/components/SourceControl/SourceControlPanel.tsx、src/main/workspace/workspaceLifecycle.ts
+      verify：Playwright REQ-E2E-013 全旅程綠（dirty＋跑中程序→兩段確認→teardown→資料夾成功刪、無 EBUSY 殘留、worktree list 無殘留；另驗僅移出保留資料夾）。
+
+- [ ] **F-13 分支分頁整合（入口①③：「在新 worktree 開啟」＋checkout 衝突跳轉）**
+      story：分支分頁每分支 hover「⎇ 在新 worktree 開啟」（預填分支開對話框）；checkout 撞「已被其他 worktree 簽出」→ 錯誤提示升級為「跳到該 worktree」動作（已納管→切換；未納管→lineage 驗證→提示加入並開啟）。
+      reqRefs：REQ-WT-001③/005、REQ-E2E-012（入口變體）
+      blockedBy：F-11、F-12
+      conflictZone：src/renderer/components/SourceControl/SourceControlPanel.tsx
+      verify：Playwright 兩案例綠——分支分頁入口建立成功；衝突分支點擊→跳到對應 worktree 工作區。
+
+- [ ] **X-5 worktree 效能 budget＋整合回歸**
+      story：REQ-PERF-005（`git worktree list`→分頁渲染 <300ms p95）、REQ-PERF-006（基準 fixture ≤1000 檔建立 <5s p95；不凍結謂詞獨立驗）程式埋點連續 30 次取 p95；全套 vitest＋worktree e2e 回歸。
+      reqRefs：REQ-PERF-005/006
+      blockedBy：F-11、F-12、F-13
+      conflictZone：e2e/、tests/perf/
+      verify：perf 數據落檔達標＋vitest/e2e 回歸全綠。

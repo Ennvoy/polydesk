@@ -421,3 +421,40 @@ export interface PersistState {
 ---
 
 done
+
+---
+
+## 6. 第二迭代：Git Worktree 設計（2026-07-02）
+
+### 6.1 UI 對焦結論
+mockup：`specs/ui-mockups/04-worktree.html`（使用者已拍板：混合案＋三入口＋sibling）。品牌基底：沿用第一迭代 Polydesk 自有 tokens（`src/renderer/theme/tokens.css` 三主題），無外部基底。
+- 畫面/元件：CreateWorktreeDialog（repo 下拉、分支三來源選單＋validateRef 即時驗證＋互斥標禁、路徑欄預設 sibling 可改、進行中 spinner）；WorktreePanel（SCM 第 4 分頁：列表列＝⎇ 分支＋路徑＋狀態＋hover「切換到此」/移除、底部「＋建立」與「清理失效登記」、空狀態說明＋CTA）；WorkspaceRail worktree 項（⎇ 圖示＋縮排＋worktree 徽章，緊列主工作樹之下）；移除確認彈窗（二選一＋dirty 兩段確認）。
+- 關鍵 journey 對齊：REQ-E2E-012（分支→建立→納管→平行終端機）、REQ-E2E-013（dirty＋跑中程序移除防護）。
+
+### 6.2 關鍵技術決策
+- **(k) worktree 走 GitService 擴充、非新服務**：沿用 `run()`＋序列佇列＋硬化 env＋逾時。為什麼：git 呼叫單一入口，硬化/序列化不重複。不這樣：兩套呼叫路徑，REQ-SCM-009 硬化必漏。
+- **(l) worktree＝Workspace 標記欄位（`worktree?: { mainPath }`），非新實體**：復用 CRUD/hydrate/teardown/持久化/missing 偵測。分支名不入 schema、顯示時 `git worktree list --porcelain -z` 即時查（防終端機手動 checkout 造成過期）。schema v2：舊檔無欄位→非 worktree（向後相容零遷移成本，仍升版號記遷移鏈）。
+- **(m) 主工作樹解析**：`git rev-parse --git-common-dir` → 其上層目錄＝主工作樹（自任一 worktree 執行皆收斂）。納管外部 worktree 前以主工作樹的 `git worktree list` 驗 lineage，驗不過走 REQ-WS-008 正常信任彈窗。
+- **(n) UI 拆檔降 conflictZone**：對話框與分頁皆為 `components/Worktree/` 新檔，SourceControlPanel 只加掛載點/入口——但入口①③仍動同檔，故 F-12/F-13 序列（見 6.4）。
+- **(o) slug/路徑驗證獨立純函式 `worktreePath.ts`**：slug（`/`→`-`、剔非法字元、≤60、Windows 保留名前綴 `wt-`）、序號策略、完整路徑 ≤240 預檢、禁指向既有工作區內/系統目錄。純函式可 vitest 全覆蓋。
+- **(p) 移除順序鐵則**：teardown（等程序結束+handle 釋放）→ `git worktree remove [--force]` → 失敗則工作區項保留＋原始錯誤（Windows EBUSY 防半殘）。
+
+### 6.3 接縫契約增補（`src/shared/types.ts`＋`ipc.ts` 單一真相，P-4 釘死）
+```ts
+// types.ts
+export interface GitWorktree { path: string; branch: string | null; head: string; isMain: boolean; prunable: boolean; managedWsId?: string }
+// Workspace 增欄位（persist）：worktree?: { mainPath: string }
+// ipc.ts InvokeChannels 增：
+// 'git:worktreeList':  { req: { wsId: string }; res: { list: GitWorktree[] } | { error: string } }
+// 'git:worktreeAdd':   { req: { wsId: string; branch: { kind: 'existing'|'new'|'remote'; name: string; base?: string }; path: string }; res: { wsId: string } | { error: string; code?: 'branch-taken'|'path-exists'|'net' } }
+// 'git:worktreeRemove':{ req: { wsId: string; deleteFolder: boolean; force: boolean }; res: { ok: true } | { error: string; code?: 'dirty'|'busy' } }
+// 'git:worktreePrune': { req: { wsId: string }; res: { pruned: number } | { error: string } }
+```
+
+### 6.4 並行度自檢結論（Step 4.5）
+本迭代為單一 feature 域：F-12/F-13 同動 `SourceControlPanel.tsx`、F-12 重用 F-11 的對話框元件與納管流程、全部依賴 P-4 契約——真依賴非型別型，**不硬拆、序列波次**（護欄：並行需求低就別拆）。波次：[P-4]→[F-11]→[F-12]→[F-13]→[X-5]。
+
+### 6.5 Decision Log（2026-07-02）
+- 契約先行：`git:worktree*` 四通道與 `GitWorktree` 型別 P-4 一次釘死，UI 兩波皆 import 同一份（編譯期擋形狀漂移）。
+- 效能：REQ-PERF-005 量 `git worktree list`→渲染（本地、輕）；REQ-PERF-006 只在基準 fixture 套 5s、不凍結謂詞獨立驗。
+- reviewer 7 條質疑全數已入 REQ（teardown 先行/平輩模型/信任邊界/互斥複查/規模前提/持久化遷移/Windows 路徑）。

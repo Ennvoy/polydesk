@@ -298,3 +298,10 @@
 {"t":"2026-07-02T01:56:10.928Z","ev":"task.transition","id":"DF-6","from":"pending","to":"delivered"}
 {"t":"2026-07-02T01:57:15.295Z","ev":"task.transition","id":"DF-7","from":"delivered","to":"delivered"}
 {"t":"2026-07-02T01:57:15.839Z","ev":"task.transition","id":"DF-8","from":"delivered","to":"delivered"}
+{"t":"2026-07-02T02:24:23.567Z","ev":"decision","id":"D-WT-BRANCH-BASE","choice":"新分支預設起點＝主 repo 當前簽出分支（對話框可改）","by":"auto"}
+{"t":"2026-07-02T02:24:23.811Z","ev":"decision","id":"D-WT-DIR-CONFLICT","choice":"目標資料夾已存在：有效 worktree→提示直接加入；否則自動加序號","by":"auto"}
+{"t":"2026-07-02T02:24:24.110Z","ev":"decision","id":"D-WT-EXTERNAL-JUMP","choice":"跳轉外部未納管 worktree→提示加入為工作區並開啟","by":"auto"}
+{"t":"2026-07-02T02:24:24.371Z","ev":"decision","id":"D-WT-UI-MOCKUP","choice":"UI 方向以規劃期互動 mockup 定版（specs/ui-mockups/04-worktree.html，方案A混合+三入口+sibling）","by":"auto"}
+{"t":"2026-07-02T02:36:03.917Z","ev":"spec.frozen"}
+{"t":"2026-07-02T02:39:35.683Z","ev":"verify.attempt","id":"[console]::outputencoding=[text.encoding]::utf8; cd \"c:\\users\\ennvoy.lin\\documents\\我的終端機\" $md = @' ## 6. 第二迭代：git worktree 設計（2026-07-02） ### 6.1 ui 對焦結論 mockup：`specs/ui-mockups/04-worktree.html`（使用者","sig":"ok","exit":0}
+{"t":"2026-07-02T02:40:16.041Z","ev":"verify.attempt","id":"[console]::outputencoding=[text.encoding]::utf8; cd \"c:\\users\\ennvoy.lin\\documents\\我的終端機\" $md = @' ## 第二迭代：git worktree（2026-07-02 凍結立項；波次 [p-4]→[f-11]→[f-12]→[f-13]→[x-5]，序列——並行度自檢見 design §6.4） [ ] ","sig":"ok","exit":0}

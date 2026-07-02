@@ -1,0 +1,8 @@
+{
+  "id": "D-WT-BRANCH-BASE",
+  "question": "",
+  "choice": "新分支預設起點＝主 repo 當前簽出分支（對話框可改）",
+  "why": "訪談時使用者離席，採 AI 建議預設入 REQ-WT-002；freeze 前可改",
+  "by": "auto",
+  "at": "2026-07-02T02:24:23.528Z"
+}

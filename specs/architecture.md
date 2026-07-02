@@ -292,3 +292,19 @@ polydesk/
 - **隔離**：renderer sandbox + contextIsolation；子程序最小環境；每工作區 Playwright profile 互斥（同 profile 併發禁用）。
 - **注入防禦**：git 一律 argv + `shell:false` + `--` 前置 + 名稱格式驗證 + commit message 經檔案/stdin。
 - **誠實單點**：main/GPU process 為 Electron 固有單點故障，不假裝可隔離（REQ-NFR-002）。
+
+---
+
+## 7. 第二迭代：Git Worktree（2026-07-02 立項）
+
+### 7.1 路徑地圖增補
+| 模組 | 檔案 | 動作 |
+|---|---|---|
+| 契約（單一真相） | `src/shared/types.ts`（`GitWorktree`、`Workspace.worktree?`）、`src/shared/ipc.ts`、`src/shared/channels.ts`（`git:worktree*` ×4） | P-4 一次釘死 |
+| git 後端 | `src/main/git/GitService.ts`（worktree list/add/remove/prune，沿用 run()+序列佇列+硬化）、`src/main/git/worktreePath.ts`（新：slug/路徑驗證純函式）、`src/main/git/gitSafeArgs.ts`（沿用 validateRef） | P-4 |
+| workspace 模型 | `src/main/workspace/WorkspaceManager.ts`（worktree 標記納管+信任繼承）、`src/main/store/schema.ts`（schema v2 遷移）、`src/main/workspace/workspaceLifecycle.ts`（移除時 teardown→remove 順序） | P-4 / F-12 |
+| UI | `src/renderer/components/Worktree/`（新：CreateWorktreeDialog.tsx、WorktreePanel.tsx）、`WorkspaceRail.tsx`（⎇ 識別+入口②）、`SourceControl/SourceControlPanel.tsx`（worktree 分頁掛載+分支分頁入口①③） | F-11/F-12/F-13 |
+
+### 7.2 資料流
+建立：renderer 對話框 → `git:worktreeAdd`（invoke）→ main：序列佇列內 `git worktree add`（必要時先 fetch remote 分支）→ WorkspaceManager 納管（worktree 標記+信任繼承）→ 回新 wsId → renderer 切換開啟。
+狀態：worktree 清單/分支名一律 `git worktree list --porcelain -z` 即時查（不持久化死值）；持久化只存 `Workspace.worktree.mainPath`。

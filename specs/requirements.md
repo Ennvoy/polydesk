@@ -127,6 +127,27 @@
 - **REQ-SEC-002**（子程序環境最小化）：app 主動 spawn 的子程序（尤其 git）應傳入清洗過的最小環境，移除接線機密與無關 `GIT_*`；接線 env 僅注入終端機 PTY。
 - **REQ-SEC-003**（威脅模型）：design 應明文威脅模型，把「工作區內執行的程式碼」視為半可信對手（對齊 REQ-WS-008 信任決策）。
 
+### 4.11 Git Worktree 平行開發（REQ-WT）— 第二迭代（2026-07-02 立項）
+> 定位（訪談＋mockup 定版，`specs/ui-mockups/04-worktree.html`）：**混合案**——底層「worktree＝一種工作區」（終端機/檔案樹/git/Claude 監控/持久化以 workspace.path 為軸零改動生效、可多 worktree 並行作業），管理集中於 SCM 面板新 `worktree` 分頁。存放慣例：repo 旁 sibling `<repo>-worktrees/<branch-slug>`（可改）。
+
+**User Story**：作為同時開發同一專案多個功能的開發者，我想要從分支一鍵建立 worktree 並以獨立工作區開啟，以便多條功能線各自開終端機/dev server/Claude 平行作業互不干擾。
+
+- **REQ-WT-001**（建立入口×3）：當使用者自 ①SCM `worktree` 分頁「＋建立」②SCM `分支` 分頁分支項的「在新 worktree 開啟」③工作區「＋」選單「從 Git 分支建立 worktree…」任一入口發起時，系統應開啟建立對話框：來源 repo（預設當前工作區）、分支來源（現有本地分支／新分支／remote 分支）、目標路徑（預設 sibling 慣例、可改），並以 `git worktree add` 執行。
+- **REQ-WT-002**（分支來源三種）：分支來源應支援 ①現有本地分支 ②現場命名之新分支（預設自主 repo 當前簽出分支分出，起點可改為任一分支）③僅存在於 remote 的分支（自動建立本地追蹤分支後開 worktree）。submodule／bare repo 顯示「不支援」提示。
+- **REQ-WT-003**（納管＋開啟＋信任模型）：建立成功後系統應自動將該資料夾加入為工作區（記錄 worktree 標記，**納入 REQ-PERSIST-001 持久化並依 REQ-PERSIST-004 升 schema 版本走遷移**）並切換開啟。「所屬主 repo」定義＝以 `git rev-parse --git-common-dir` 解出的**主工作樹**（自任一 worktree 建立皆收斂到同一主工作樹，非樹狀父子）。信任：繼承主工作樹的 trusted 狀態、不重彈信任確認（理由明文：worktree 簽出內容屬使用者已信任 repo 的版控範圍、共用同一 common `.git`）。持久化只存主工作樹路徑；**分支名於顯示時即時查**（`git worktree list`），不存死值（避免與終端機內手動切分支不同步）。
+- **REQ-WT-004**（列表識別）：worktree 工作區應於工作區列表以 ⎇ 圖示＋**即時查得的分支名**＋worktree 徽章顯示，緊列於所屬主工作樹項之下；主工作樹不在列表時獨立顯示並以徽章標示所屬 repo 名（徽章一律顯示真實分支名，不由資料夾名回推）。
+- **REQ-WT-005**（互斥標示＋即時複查）：建立對話框的分支選單中，已被任一工作樹簽出的分支應標示「已簽出於 …」並禁選；互斥判斷應於**送出前即時複查**（非開窗快照——使用者可能在終端機手動 checkout 繞過 app 佇列），複查發現衝突時就地提示不執行。SCM `分支` 分頁對已簽出於其他 worktree 的分支應以「跳到該 worktree」動作取代 checkout；目標未納管時提示「加入為工作區並開啟」，**納管前應以 `git worktree list` 驗證該路徑確實隸屬某已信任主工作樹**，否則走 REQ-WS-008 正常信任彈窗。
+- **REQ-WT-006**（移除二選一＋先 teardown）：當使用者移除 worktree 工作區時，系統應彈確認窗提供「僅移出列表（保留資料夾）」與「連同刪除（`git worktree remove`）」二選一；有跑中程序時確認窗應列出（對齊 REQ-WS-009/REQ-E2E-008）。選「連同刪除」時應**先執行 REQ-WS-009 完整 teardown 並等待程序結束、檔案 handle 釋放，再執行 `git worktree remove`**（Windows 下持鎖程序未結束會 EBUSY——不得在 teardown 完成前動手刪）；刪除失敗時顯示原始錯誤、工作區項保留不得呈半殘狀態。
+- **REQ-WT-007**（Unwanted｜dirty 防護）：若選「連同刪除」且該 worktree 有未提交變更，系統應列出變更數並要求先 commit/stash；使用者須另行勾選「確定丟棄變更」後方以 `--force` 執行（兩段確認）。
+- **REQ-WT-008**（worktree 分頁）：SCM 面板應新增 `worktree` 分頁：列出該 repo 全部 worktree（分支/路徑/狀態）、每項提供「切換到此」（開啟對應工作區；未納管者先納管）與移除、分頁層級提供「＋建立」與「清理失效登記（prune）」；無項目時顯示簡短說明＋建立 CTA（非空白）。
+- **REQ-WT-009**（Unwanted｜失效登記）：若 worktree 資料夾被外部刪除，工作區列表沿用 missing 標記；`prune` 應清除失效登記且不影響有效 worktree。
+- **REQ-WT-010**（Unwanted｜建立失敗）：若 `git worktree add` 失敗（磁碟滿/權限不足/路徑衝突/**分支於確認瞬間被他處簽出**），系統應顯示原始錯誤（分支被佔用時具名提示「分支已於 … 簽出」並提供跳轉）、自動清理半成品資料夾、不得在列表留下失效項目。目標資料夾已存在時：若係該 repo 之有效 worktree → 提示「直接加入列表」；否則預設路徑自動加序號（`-2`、`-3`…；**slug 碰撞**（如 `feat/x` 與 `feat-x`）同走序號策略）。
+- **REQ-WT-011**（Unwanted｜輸入非法）：新分支名應經 validateRef 即時驗證，非法時輸入框即時標示原因（不等送出才報錯）。
+- **REQ-WT-012**（併發）：worktree 操作應納入該 repo 既有 git 序列佇列（對齊 REQ-SCM-008）；執行中按鈕顯示進行中並防重入。
+- **REQ-WT-013**（Unwanted｜網路）：remote 分支抓取失敗（斷網/逾時）應顯示錯誤＋「重試」、不凍結 UI（逾時規範對齊 REQ-SCM-007）。
+- **REQ-WT-014**（連動）：主工作樹工作區自 Polydesk **移出列表**時，其 worktree 工作區應保留且照常可用（`git worktree` 為平輩共用 common `.git`，移出列表不動磁碟）。**例外明文**：若主工作樹資料夾自磁碟被刪除（外部行為），其所有 worktree 隨之失效——各 worktree 工作區依 REQ-WT-009 標 missing，不承諾可用。
+- **REQ-WT-015**（安全＋Windows 路徑）：worktree 目標路徑應經專用路徑驗證（正規化絕對路徑；禁指向既有工作區內部與系統目錄）；分支名資料夾 slug 規則：`/`→`-`、剔除非法檔名字元、**長度上限 60 字元（截斷）、規避 Windows 保留名（CON/PRN/AUX/NUL/COM*/LPT* → 前綴 `wt-`）**；建立前預檢完整路徑長度，逾 240 字元即擋並提示改短路徑；git 呼叫沿用 REQ-SCM-009 argv 硬化。
+
 ---
 
 ## 5. 端到端旅程（REQ-E2E）— Phase 4/5 驗證來源（皆從真實入口走到目標、禁 deep-link）
@@ -142,6 +163,8 @@
 - **REQ-E2E-010（profile 隔離）**：於工作區 A 的測試瀏覽器登入某站→於工作區 B 開同站→B 看不到 A 的登入（profile 隔離）。
 - **REQ-E2E-011（a11y）**：以鍵盤（不用滑鼠）完成「新增工作區→開檔→存檔」主路徑，焦點順序與 aria 標籤正確。
 - **REQ-E2E-NOTE（驗證分層，journey-check 核可例外）**：REQ-E2E-004 的硬性自動化關卡以**決定性 Playwright 腳本**（下達與 Claude 等價的 navigate/click）驗接線/profile 路由/headed 可見/徽章/跨工作區隔離；**「真的 claude 端到端」列為人工/半自動驗收、不進硬閘門**（避免將完成謂詞綁在 flaky + 有費用 + 遞迴呼叫 Claude 的測試上）。此為 flow journey-check 的明示核可例外。
+- **REQ-E2E-012（worktree 平行開發｜第二迭代）**：開啟 git repo 工作區（fixture ≥2 本地分支）→ SCM `分支` 分頁對未簽出分支點「在新 worktree 開啟」→ 對話框顯示預設 sibling 路徑 → 確認建立 → 工作區列表出現 ⎇ 項並自動切入（不重彈信任窗）→ 開終端機（cwd＝worktree 資料夾）→ 切回主 repo 工作區，原終端機仍在背景 → 兩工作區檔案樹/git 各自獨立。
+- **REQ-E2E-013（worktree 移除防護｜第二迭代）**：於 worktree 內造成未提交變更**並開啟跑中終端機程序** → SCM `worktree` 分頁移除該項選「連同刪除」→ 被 dirty 兩段確認擋下（列出變更數＋跑中程序）→ 勾「確定丟棄」確認 → 程序先被完整 teardown（無殭屍）→ 資料夾成功刪除（Windows 無 EBUSY 殘留）、列表項消失、`git worktree list` 無殘留；另驗「僅移出列表」路徑資料夾保留。
 
 ---
 
@@ -150,6 +173,8 @@
 - **REQ-PERF-002**：切換至**已載入**（已實體化）的工作區 < **200ms**（p95）。首次載入某工作區允許較長，但應顯示 loading/skeleton、不阻塞 UI。
 - **REQ-PERF-003**：開啟**一般檔案**（≤1MB 或 ≤5000 行；超過走 large-file 模式另計）至**顯示完成**（Monaco 首屏 token 化渲染完成事件）< **500ms**（p95）。
 - **REQ-PERF-004**：終端機按鍵輸入延遲 < **50ms**（p95）。
+- **REQ-PERF-005（第二迭代）**：SCM `worktree` 分頁載入（`git worktree list` → 渲染完成）< **300ms**（p95，本地操作）。
+- **REQ-PERF-006（第二迭代）**：建立 worktree（本地分支來源，不含 remote 抓取）至工作區出現可點擊 < **5s**（p95，**基準 fixture：工作樹 ≤1000 檔/≤100MB**——checkout 成本隨 repo 規模線性成長，超規模 repo 不套 5s）；**「UI 不凍結（非同步＋進行中指示）」為獨立謂詞、任何規模皆適用**。
 
 ---
 
@@ -173,3 +198,6 @@
 - **D-CLAUDE-PANEL**：app 內建 Claude 對話面板延後（v1 用外部 Claude Code）。
 - **D-LOGIN-UI**：app 內 Claude 登入狀態指示延後。
 - **D-INAPP-BROWSER**：app 內手動瀏覽網頁的內嵌瀏覽器延後（v1 拿掉、純 Playwright）。需要再評估。
+- **D-WT-BRANCH-BASE**（第二迭代，AI 建議預設）：新分支預設起點＝主 repo 當前簽出分支、對話框可改（訪談時使用者離席，採建議值入 REQ-WT-002；freeze 前可改）。
+- **D-WT-DIR-CONFLICT**（第二迭代，AI 建議預設）：目標資料夾已存在之處置——有效 worktree→提示直接加入列表、否則自動加序號（入 REQ-WT-010；freeze 前可改）。
+- **D-WT-EXTERNAL-JUMP**（第二迭代，AI 建議預設）：跳轉目標為外部建立、未納管之 worktree 時→提示「加入為工作區並開啟」（入 REQ-WT-005；freeze 前可改）。

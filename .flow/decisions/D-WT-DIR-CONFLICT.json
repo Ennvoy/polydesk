@@ -1,0 +1,8 @@
+{
+  "id": "D-WT-DIR-CONFLICT",
+  "question": "",
+  "choice": "目標資料夾已存在：有效 worktree→提示直接加入；否則自動加序號",
+  "why": "AI 建議預設入 REQ-WT-010；freeze 前可改",
+  "by": "auto",
+  "at": "2026-07-02T02:24:23.784Z"
+}

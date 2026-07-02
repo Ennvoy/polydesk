@@ -1,0 +1,8 @@
+{
+  "id": "D-WT-EXTERNAL-JUMP",
+  "question": "",
+  "choice": "跳轉外部未納管 worktree→提示加入為工作區並開啟",
+  "why": "AI 建議預設入 REQ-WT-005；freeze 前可改",
+  "by": "auto",
+  "at": "2026-07-02T02:24:24.083Z"
+}
