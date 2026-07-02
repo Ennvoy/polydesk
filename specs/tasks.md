@@ -173,7 +173,7 @@
 
 ## 第二迭代：Git Worktree（2026-07-02 凍結立項；波次 [P-4]→[F-11]→[F-12]→[F-13]→[X-5]，序列——並行度自檢見 design §6.4）
 
-- [ ] **P-4 worktree 契約＋GitService 擴充＋持久化 schema v2**
+- [x] **P-4 worktree 契約＋GitService 擴充＋持久化 schema v2**
       story：main 端具備完整 worktree 能力——`types.ts`/`ipc.ts`/`channels.ts` 釘 `GitWorktree`＋`git:worktree*` 四通道；GitService worktree list/add/remove/prune（argv 硬化＋序列佇列＋逾時，`--porcelain -z` 解析）；`worktreePath.ts` slug/路徑驗證純函式（≤60、Windows 保留名 `wt-`、序號、≤240 預檢、禁工作區內/系統目錄）；WorkspaceManager worktree 標記納管＋信任繼承；schema v2 遷移。
       reqRefs：REQ-WT-002/003/010/012/015、REQ-PERSIST-004
       blockedBy：—

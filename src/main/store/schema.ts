@@ -2,7 +2,7 @@
 
 import type { PersistState, ThemeId } from '../../shared/types';
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 const THEMES: readonly ThemeId[] = ['dark', 'light', 'warm'];
 
@@ -27,6 +27,9 @@ type Migration = (s: AnyState) => AnyState;
 const MIGRATIONS: Record<number, Migration> = {
   // v0（無版本欄位的早期狀態）→ v1：補上 schemaVersion，欄位由 normalize 補齊。
   0: (s) => ({ ...s, schemaVersion: 1 }),
+  // v1 → v2：新增 Workspace.worktree? 標記（第二迭代）。既有工作區不帶＝非 worktree，
+  // 逐筆 sanitize 由 normalize 的 sanitizeWorkspaces 負責（不在此塞欄位）。
+  1: (s) => ({ ...s, schemaVersion: 2 }),
 };
 
 /**
@@ -58,6 +61,44 @@ function isValidAiCommit(v: unknown): boolean {
   return e === 'claude' || e === 'codex' || e === 'custom';
 }
 
+const SHELLS = ['powershell', 'cmd', 'pwsh', 'gitbash', 'wsl'];
+
+/**
+ * 逐筆 sanitize workspaces（紅軍 A4）：竄改的 state.json 不得靠半損毀筆繞過信任或讓 list()/git crash。
+ * - 必要欄位（id/name/path 字串、order 數）缺或型別錯 → 整筆剔除。
+ * - trusted 只認 boolean true（字串 'true' 不當真）。
+ * - worktree 僅接受 { mainPath: 非空字串 }，否則丟棄該欄（不讓半損毀標記留存）。
+ */
+function sanitizeWorkspaces(raw: unknown): PersistState['workspaces'] {
+  if (!Array.isArray(raw)) return [];
+  const out: PersistState['workspaces'] = [];
+  for (const w of raw) {
+    if (typeof w !== 'object' || w === null) continue;
+    const o = w as Record<string, unknown>;
+    if (typeof o.id !== 'string' || typeof o.name !== 'string' || typeof o.path !== 'string') continue;
+    if (typeof o.order !== 'number') continue;
+    const wt =
+      typeof o.worktree === 'object' &&
+      o.worktree !== null &&
+      typeof (o.worktree as Record<string, unknown>).mainPath === 'string' &&
+      ((o.worktree as Record<string, unknown>).mainPath as string).trim() !== ''
+        ? { mainPath: (o.worktree as { mainPath: string }).mainPath }
+        : undefined;
+    out.push({
+      id: o.id,
+      name: o.name,
+      path: o.path,
+      order: o.order,
+      status: o.status === 'missing' ? 'missing' : 'ok',
+      defaultShell: (SHELLS.includes(o.defaultShell as string) ? o.defaultShell : 'powershell') as PersistState['workspaces'][number]['defaultShell'],
+      trusted: o.trusted === true,
+      profileDir: typeof o.profileDir === 'string' ? o.profileDir : `pw-profiles/${o.id}`,
+      ...(wt ? { worktree: wt } : {}),
+    });
+  }
+  return out;
+}
+
 /** 以預設值補齊缺漏 / 型別不符的欄位（防半損毀狀態）。 */
 function normalize(s: AnyState): PersistState {
   const d = defaultState();
@@ -65,7 +106,7 @@ function normalize(s: AnyState): PersistState {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     theme,
-    workspaces: Array.isArray(s.workspaces) ? (s.workspaces as PersistState['workspaces']) : d.workspaces,
+    workspaces: sanitizeWorkspaces(s.workspaces),
     layout: 'layout' in s ? (s.layout as PersistState['layout']) : d.layout,
     openFiles: Array.isArray(s.openFiles) ? (s.openFiles as PersistState['openFiles']) : d.openFiles,
     terminals: Array.isArray(s.terminals) ? (s.terminals as PersistState['terminals']) : d.terminals,

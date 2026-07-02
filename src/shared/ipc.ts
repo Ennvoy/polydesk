@@ -9,6 +9,7 @@ import type {
   GitStatus,
   GitChange,
   GitLogEntry,
+  GitWorktree,
   TermState,
   ShellKind,
   FileEncoding,
@@ -84,6 +85,22 @@ export interface InvokeChannels {
   'git:commitFiles': { req: { wsId: string; ref: string }; res: { files: { path: string; status: string }[] } };
   'git:stash': { req: { wsId: string; op: 'push' | 'pop' | 'list'; includeUntracked?: boolean }; res: unknown };
   'git:init': { req: { wsId: string }; res: { ok: true } };
+  // Git Worktree（REQ-WT，第二迭代）
+  'git:worktreeList': { req: { wsId: string }; res: { list: GitWorktree[] } | { error: string } };
+  'git:worktreeAdd': {
+    req: {
+      wsId: string;
+      branch: { kind: 'existing' | 'new' | 'remote'; name: string; base?: string };
+      /** 使用者選定/預設路徑；main 端仍過 validateWorktreeTarget 驗證。 */
+      path: string;
+    };
+    res: { wsId: string } | { error: string; code?: 'branch-taken' | 'path-exists' | 'net' | 'invalid-path' };
+  };
+  'git:worktreeRemove': {
+    req: { wsId: string; deleteFolder: boolean; force: boolean };
+    res: { ok: true } | { error: string; code?: 'dirty' | 'busy' };
+  };
+  'git:worktreePrune': { req: { wsId: string }; res: { pruned: number } | { error: string } };
   // AI 智慧 commit message（取 staged diff → 選定引擎產生；只回填訊息框、不自動 commit）
   'ai:generateCommitMessage': { req: { wsId: string }; res: { message: string } | { error: string } };
   // 總覽面板：claude/codex 的 5h/週用量額度

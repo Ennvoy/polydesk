@@ -10,6 +10,9 @@ import { resolve, basename, join, parse } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { StateStore } from '../store/StateStore';
 import type { Workspace, WorkspaceInput, ShellKind } from '../../shared/types';
+
+/** addWorktree 輸入：worktree 資料夾路徑 + 所屬主工作樹路徑；trusted 省略時須主工作樹已納管。 */
+export type WorktreeInput = { path: string; mainPath: string; name?: string; trusted?: boolean };
 import type { WorkspaceLifecycle } from './workspaceLifecycle';
 
 const DEFAULT_SHELL: ShellKind = 'powershell';
@@ -97,6 +100,60 @@ export class WorkspaceManager {
     };
     this.write([...list, ws]);
     return { ...ws, hydrated: false };
+  }
+
+  /**
+   * REQ-WT-003：納管一個 worktree 資料夾為工作區。信任繼承規則（紅軍 A2）：
+   *  - 主工作樹已納管 → 繼承其 trusted、記 worktree.mainPath。
+   *  - 主工作樹未納管：僅在呼叫端已完成 lineage 交叉驗證後、明確傳 trusted:true 才納管；
+   *    否則回 main-not-managed（呼叫端應走 REQ-WS-008 正常信任彈窗）。
+   * mainPath 一律正規化持久化；分支名不存（顯示時即時查）。
+   */
+  addWorktree(input: WorktreeInput): Workspace | { error: 'duplicate' | 'invalid' | 'main-not-managed' } {
+    const raw = input?.path;
+    if (typeof raw !== 'string' || raw.trim() === '') return { error: 'invalid' };
+    if (!isExistingDir(raw)) return { error: 'invalid' };
+    if (typeof input.mainPath !== 'string' || input.mainPath.trim() === '') return { error: 'invalid' };
+    const key = this.normKey(raw);
+    const list = this.read();
+    if (list.some((w) => this.normKey(w.path) === key)) return { error: 'duplicate' };
+
+    const mainAbs = resolve(input.mainPath).replace(/[\\/]+$/, '');
+    const mainKey = this.normKey(mainAbs);
+    const main = list.find((w) => this.normKey(w.path) === mainKey);
+    let trusted: boolean;
+    if (main) trusted = main.trusted;
+    else if (input.trusted === true) trusted = true;
+    else return { error: 'main-not-managed' };
+
+    const id = `ws_${randomUUID()}`;
+    const abs = resolve(raw).replace(/[\\/]+$/, '');
+    const order = list.length ? Math.max(...list.map((w) => w.order)) + 1 : 0;
+    const ws: StoredWorkspace = {
+      id,
+      name: input.name?.trim() || basename(abs) || abs,
+      path: abs,
+      order,
+      status: 'ok',
+      defaultShell: DEFAULT_SHELL,
+      trusted,
+      profileDir: join('pw-profiles', id),
+      worktree: { mainPath: mainAbs },
+    };
+    this.write([...list, ws]);
+    return { ...ws, hydrated: false };
+  }
+
+  /**
+   * REQ-WT-012＋紅軍 A5：某工作區的 git 序列佇列鍵。worktree 工作區解回其主工作樹的 wsId
+   * （若主工作樹已納管），使「同一 repo 的所有 worktree」共用單一序列佇列鍵，避免 index.lock 交錯。
+   */
+  queueKeyForRepo(wsId: string): string {
+    const ws = this.get(wsId);
+    if (!ws?.worktree) return wsId;
+    const mainKey = this.normKey(ws.worktree.mainPath);
+    const main = this.list().find((w) => this.normKey(w.path) === mainKey);
+    return main?.id ?? wsId;
   }
 
   /** 改名（REQ-WS-003）。空名忽略。 */

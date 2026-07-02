@@ -17,7 +17,7 @@ import {
 } from 'node:child_process';
 import { shell, type IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
-import type { GitStatus, GitChange, GitLogEntry } from '../../shared/types';
+import type { GitStatus, GitChange, GitLogEntry, GitWorktree } from '../../shared/types';
 import type { InvokeReq } from '../../shared/ipc';
 import { GIT_LOCAL_TIMEOUT_MS, GIT_NETWORK_TIMEOUT_MS } from '../../shared/constants';
 import {
@@ -31,7 +31,9 @@ import {
 import { enqueue } from './gitSerialQueue';
 import { buildSpawnEnv } from '../security/spawnEnv';
 import { readFile, writeFile } from 'node:fs/promises';
-import { join as pathJoin } from 'node:path';
+import { realpathSync, existsSync, rmSync } from 'node:fs';
+import { join as pathJoin, resolve as pathResolve } from 'node:path';
+import { validateWorktreeTarget } from './worktreePath';
 
 const GIT_BIN = 'git';
 const MAX_BUFFER = 64 * 1024 * 1024;
@@ -584,6 +586,162 @@ export class GitService {
     await this.run(['init'], { cwd, env: writeEnv() });
     return { ok: true };
   }
+
+  // ─────────────── Git Worktree（REQ-WT，第二迭代）───────────────
+
+  /** REQ-WT-008：列該 repo 全部 worktree（--porcelain -z 解析，特殊字元安全）。 */
+  async worktreeList(wsId: string): Promise<GitWorktree[]> {
+    const cwd = this.path(wsId);
+    if (!cwd) return [];
+    try {
+      const { stdout } = await this.run([...readHardeningArgs(), 'worktree', 'list', '--porcelain', '-z'], {
+        cwd,
+        env: readEnv(),
+      });
+      return parseWorktreeList(stdout);
+    } catch (e) {
+      if (isNotARepo(e)) return [];
+      throw e;
+    }
+  }
+
+  /**
+   * 解出主工作樹的 git-common-dir 絕對路徑（realpath，紅軍 A2 lineage 交叉驗證用）。
+   * 回 null＝非 repo / 失敗。
+   */
+  async gitCommonDir(wsId: string): Promise<string | null> {
+    const cwd = this.path(wsId);
+    if (!cwd) return null;
+    try {
+      const { stdout } = await this.run(
+        [...readHardeningArgs(), 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+        { cwd, env: readEnv() },
+      );
+      const p = stdout.split('\0')[0].trim() || stdout.trim();
+      return p ? canonicalPath(p) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * REQ-WT-002/010/015：建立 worktree。分支名經 validateRef（非法即 throw、永不執行 git）；
+   * 路徑經 '--' 分隔（literal，選項終止）。kind：existing=既有分支、new=-b 新分支（可帶 base 起點）、
+   * remote=先建本地追蹤分支（-b <name> --track <origin/name> 由呼叫端組 base）。
+   * 失敗 throw GitError；半成品清理由 handler 層負責（見 registerWorktreeHandlers）。
+   */
+  async worktreeAdd(
+    wsId: string,
+    branch: { kind: 'existing' | 'new' | 'remote'; name: string; base?: string },
+    targetPath: string,
+  ): Promise<{ ok: true }> {
+    const cwd = this.path(wsId);
+    if (!cwd) throw new Error('workspace not found');
+    if (!validateRef(branch.name)) throw new Error(`invalid branch name: ${branch.name}`);
+    if (branch.base !== undefined && !validateRef(branch.base)) {
+      throw new Error(`invalid base ref: ${branch.base}`);
+    }
+    const base = [...readHardeningArgs(), 'worktree', 'add'];
+    // 路徑一律置於 '--' 之後（選項終止符），分支/起點續接其後。
+    let tail: string[];
+    if (branch.kind === 'existing') {
+      tail = ['--', targetPath, branch.name];
+    } else {
+      // new / remote：-b 建新分支；base（起點或 origin/<name>）置尾。
+      tail = ['-b', branch.name, '--', targetPath, ...(branch.base ? [branch.base] : [])];
+    }
+    await this.run([...base, ...tail], { cwd, env: writeEnv() });
+    return { ok: true };
+  }
+
+  /** REQ-WT-006/007：移除 worktree（force 才帶 --force；路徑置 '--' 後）。teardown 由 handler 先做。 */
+  async worktreeRemove(wsId: string, targetPath: string, force: boolean): Promise<{ ok: true }> {
+    const cwd = this.path(wsId);
+    if (!cwd) throw new Error('workspace not found');
+    return this.worktreeRemoveByPath(targetPath, cwd, force);
+  }
+
+  /**
+   * 由主工作樹 cwd 執行 remove（移除 handler 已先把該 worktree 工作區移出列表，
+   * 故不能再靠其 wsId 取 cwd——改用主工作樹路徑當 cwd）。
+   */
+  async worktreeRemoveByPath(targetPath: string, mainCwd: string, force: boolean): Promise<{ ok: true }> {
+    const args = [...readHardeningArgs(), 'worktree', 'remove', ...(force ? ['--force'] : []), '--', targetPath];
+    await this.run(args, { cwd: mainCwd, env: writeEnv() });
+    return { ok: true };
+  }
+
+  /** REQ-WT-009：清除失效登記。 */
+  async worktreePrune(wsId: string): Promise<{ pruned: number }> {
+    const cwd = this.path(wsId);
+    if (!cwd) return { pruned: 0 };
+    const { stdout } = await this.run([...readHardeningArgs(), 'worktree', 'prune', '-v'], {
+      cwd,
+      env: writeEnv(),
+    });
+    // -v 每 prune 一筆輸出一行；數行數當計數（無輸出＝0）。
+    const pruned = stdout.split('\n').filter((l) => l.trim().length > 0).length;
+    return { pruned };
+  }
+}
+
+/** git-common-dir / 路徑正規化（realpath 後小寫化 on win32；解不了退 resolve）。紅軍 A2 lineage 用。 */
+export function canonicalPath(p: string): string {
+  let abs = pathResolve(p);
+  try {
+    abs = (realpathSync.native ?? realpathSync)(abs);
+  } catch {
+    /* 路徑不存在：用 lexical resolve */
+  }
+  return process.platform === 'win32' ? abs.toLowerCase() : abs;
+}
+
+/**
+ * REQ-WT-003＋紅軍 A2：驗證候選 worktree 路徑確實隸屬指定主工作樹。
+ * 比對「候選路徑解出的 git-common-dir」與「主工作樹解出的 git-common-dir」是否為同一實體
+ * （皆 realpath 正規化）——git 自報的 worktree 登記路徑可被惡意 repo 竄改，故不可只信 list 輸出。
+ */
+export async function verifyWorktreeLineage(
+  svc: GitService,
+  candidateWsId: string,
+  mainWsId: string,
+): Promise<boolean> {
+  const [cand, main] = await Promise.all([svc.gitCommonDir(candidateWsId), svc.gitCommonDir(mainWsId)]);
+  if (!cand || !main) return false;
+  return cand === main;
+}
+
+/** 解析 `git worktree list --porcelain -z`：NUL 分隔、空 record 分段；attributes 逐行。 */
+export function parseWorktreeList(raw: string): GitWorktree[] {
+  if (!raw) return [];
+  const records: string[][] = [];
+  let cur: string[] = [];
+  for (const tok of raw.split('\0')) {
+    if (tok === '') {
+      if (cur.length) records.push(cur);
+      cur = [];
+      continue;
+    }
+    cur.push(tok);
+  }
+  if (cur.length) records.push(cur);
+
+  const out: GitWorktree[] = [];
+  records.forEach((rec, idx) => {
+    let path = '';
+    let head = '';
+    let branch: string | null = null;
+    let prunable = false;
+    for (const line of rec) {
+      if (line.startsWith('worktree ')) path = line.slice('worktree '.length);
+      else if (line.startsWith('HEAD ')) head = line.slice('HEAD '.length);
+      else if (line.startsWith('branch ')) branch = line.slice('branch '.length).replace(/^refs\/heads\//, '');
+      else if (line === 'detached') branch = null;
+      else if (line === 'prunable' || line.startsWith('prunable ')) prunable = true;
+    }
+    if (path) out.push({ path, branch, head, isMain: idx === 0, prunable });
+  });
+  return out;
 }
 
 function errMsg(e: unknown, fallback: string): string {
@@ -644,4 +802,112 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
   ipc.handle('git:init', (_e, req: InvokeReq<'git:init'>) =>
     enqueue(req.wsId, () => svc.init(req.wsId)),
   );
+
+  // ── Git Worktree（REQ-WT）──
+  // 佇列鍵一律用該 repo 的統一鍵（worktree 工作區解回主工作樹），避免 index.lock 交錯（紅軍 A5）。
+  const qkey = (wsId: string): string => workspaces.queueKeyForRepo(wsId);
+
+  ipc.handle('git:worktreeList', (_e, req: InvokeReq<'git:worktreeList'>) =>
+    enqueue(qkey(req.wsId), async () => {
+      try {
+        const list = await svc.worktreeList(req.wsId);
+        // 附 managedWsId：worktree 路徑已納管者標記，供 UI「切換到此」判斷。
+        const all = workspaces.list();
+        const withManaged = list.map((w) => {
+          const norm = process.platform === 'win32' ? w.path.toLowerCase() : w.path;
+          const hit = all.find((ws) => {
+            const wp = process.platform === 'win32' ? ws.path.toLowerCase() : ws.path;
+            return wp.replace(/[\\/]+$/, '') === norm.replace(/[\\/]+$/, '');
+          });
+          return hit ? { ...w, managedWsId: hit.id } : w;
+        });
+        return { list: withManaged };
+      } catch (e) {
+        return { error: errMsg(e, 'worktree list 失敗') };
+      }
+    }),
+  );
+
+  ipc.handle('git:worktreeAdd', (_e, req: InvokeReq<'git:worktreeAdd'>) =>
+    enqueue(qkey(req.wsId), async () => {
+      const target = validateWorktreeTarget(
+        req.path,
+        workspaces.list().map((w) => w.path),
+      );
+      if (!target.ok) return { error: `目標路徑不合法（${target.reason}）`, code: 'invalid-path' as const };
+      const created = existsSync(target.abs);
+      try {
+        await svc.worktreeAdd(req.wsId, req.branch, target.abs);
+      } catch (e) {
+        // REQ-WT-010：半成品清理——僅刪「本次 git 建立的」目錄（呼叫前不存在、現在存在）。
+        if (!created && existsSync(target.abs)) {
+          try {
+            rmSync(target.abs, { recursive: true, force: true });
+          } catch {
+            /* 清理失敗：不掩蓋原始 git 錯誤 */
+          }
+        }
+        const msg = errMsg(e, 'worktree add 失敗');
+        const code = /already (checked out|used by worktree)/i.test(msg)
+          ? ('branch-taken' as const)
+          : /already exists/i.test(msg)
+            ? ('path-exists' as const)
+            : /could not (read|fetch)|couldn't find remote|network|timed out/i.test(msg)
+              ? ('net' as const)
+              : undefined;
+        return { error: msg, code };
+      }
+      // 成功：納管（主工作樹＝發起 repo；已納管→繼承信任）。
+      const res = workspaces.addWorktree({ path: target.abs, mainPath: workspaces.get(req.wsId)?.path ?? req.path });
+      if ('error' in res) return { error: `已建立 worktree 但納管失敗：${res.error}` };
+      return { wsId: res.id };
+    }),
+  );
+
+  ipc.handle('git:worktreePrune', (_e, req: InvokeReq<'git:worktreePrune'>) =>
+    enqueue(qkey(req.wsId), async () => {
+      try {
+        return await svc.worktreePrune(req.wsId);
+      } catch (e) {
+        return { error: errMsg(e, 'worktree prune 失敗') };
+      }
+    }),
+  );
+  // git:worktreeRemove 需先 teardown（走 workspaces.remove → lifecycle）：同一 svc/workspaces 即可註冊。
+  registerWorktreeRemoveHandler(ipc, workspaces, svc);
+}
+
+/**
+ * REQ-WT-006/007＋紅軍 A5：移除 worktree handler（需 lifecycle → 在 router 層註冊，拿得到 teardown）。
+ * 順序鐵則：先完整 teardown（等程序結束、handle 釋放）→ 再 git worktree remove（Windows 防 EBUSY）。
+ * deleteFolder=false → 僅移出列表（保留資料夾）；true → git remove（dirty 由前端兩段確認後帶 force）。
+ */
+export function registerWorktreeRemoveHandler(
+  ipc: IpcMain,
+  workspaces: WorkspaceManager,
+  svc: GitService,
+): void {
+  ipc.handle('git:worktreeRemove', async (_e, req: InvokeReq<'git:worktreeRemove'>) => {
+    const ws = workspaces.get(req.wsId);
+    if (!ws?.worktree) return { error: '非 worktree 工作區' };
+    const target = ws.path;
+    const mainKey = req.wsId;
+    return enqueue(workspaces.queueKeyForRepo(mainKey), async () => {
+      // 先 teardown（等程序結束、釋放檔案 handle）——不論是否刪資料夾都要收乾淨。
+      await workspaces.remove(req.wsId, false);
+      if (!req.deleteFolder) return { ok: true as const };
+      try {
+        await svc.worktreeRemoveByPath(target, ws.worktree!.mainPath, req.force);
+        return { ok: true as const };
+      } catch (e) {
+        const msg = errMsg(e, 'worktree remove 失敗');
+        const code = /is dirty|contains modified|use --force/i.test(msg)
+          ? ('dirty' as const)
+          : /unable to|EBUSY|being used|locked/i.test(msg)
+            ? ('busy' as const)
+            : undefined;
+        return { error: msg, code };
+      }
+    });
+  });
 }

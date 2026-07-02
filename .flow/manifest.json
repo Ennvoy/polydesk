@@ -469,7 +469,13 @@
         "src/main/git/gitSafeArgs.ts",
         "src/main/git/worktreePath.ts",
         "src/main/workspace/WorkspaceManager.ts",
-        "src/main/store/schema.ts"
+        "src/main/store/schema.ts",
+        "src/main/git/worktreePath.test.ts",
+        "src/main/git/GitService.worktree.test.ts",
+        "src/main/workspace/WorkspaceManager.worktree.test.ts",
+        "src/main/store/schema.worktree.test.ts",
+        "tests/security/worktreePathEscape.test.ts",
+        "tests/security/worktreeTrust.test.ts"
       ],
       "reqRefs": [
         "REQ-WT-002",

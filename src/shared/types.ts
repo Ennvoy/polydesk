@@ -47,8 +47,27 @@ export interface Workspace {
   profileDir: string;
   /** lazy 實體化狀態（執行期，不持久化）。 */
   hydrated: boolean;
+  /**
+   * worktree 標記（REQ-WT-003）：存在＝此工作區是 git worktree。只持久化主工作樹路徑
+   * （`git rev-parse --git-common-dir` 推出）；分支名顯示時即時查（git worktree list），不存死值。
+   */
+  worktree?: { mainPath: string };
 }
 export type WorkspaceInput = { path: string; name?: string };
+
+/** git worktree 清單項（REQ-WT-008；`git worktree list --porcelain -z` 解析）。 */
+export interface GitWorktree {
+  path: string;
+  /** detached HEAD → null。 */
+  branch: string | null;
+  head: string;
+  /** 主工作樹（porcelain 首筆）。 */
+  isMain: boolean;
+  /** 失效登記（資料夾已不存在，可 prune）。 */
+  prunable: boolean;
+  /** 已納管為 Polydesk 工作區時的 wsId（handler 附加）。 */
+  managedWsId?: string;
+}
 
 /** 無 remote/upstream/detached/新分支未 push → 對應欄位 null（顯示 N/A，REQ-MON-003）。 */
 export interface GitStatus {

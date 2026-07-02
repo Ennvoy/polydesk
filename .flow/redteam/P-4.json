@@ -1,0 +1,41 @@
+{
+  "attacks": [
+    {
+      "id": "A1",
+      "severity": "high",
+      "scenario": "validateWorktreeTarget 只做 lexical resolve：symlink/junction、大小寫變體、UNC/裝置前綴（\\\\?\\、\\\\.\\、\\\\server）、8.3 短名（PROGRA~1）可逃逸 system/inside-workspace 檢查 → checkout 惡意分支內容進系統/Startup 資料夾＝持久化 RCE",
+      "failSafeTest": { "file": "tests/security/worktreePathEscape.test.ts", "assert": "junction→C:\\Windows 判 system；大小寫變體判 inside-workspace；UNC/裝置前綴/8.3 全拒；Start Menu/blockedDirs 判 system" }
+    },
+    {
+      "id": "A2",
+      "severity": "high",
+      "scenario": "worktree 登記是 repo 可寫 metadata：惡意 repo 預登記 path 指向攻擊者資料夾，app 若信 git 自報隸屬即零彈窗賦 trusted → hooks RCE。防禦＝common-dir 交叉驗證（candidate 的 git-common-dir realpath 必須等於信任主工作樹的 .git）後才准繼承信任",
+      "failSafeTest": { "file": "tests/security/worktreeTrust.test.ts", "assert": "verifyWorktreeLineage 偽造 common-dir → false；相符 → true；WorkspaceManager 主工作樹未納管時不自動 trusted（main-not-managed）" }
+    },
+    {
+      "id": "A3",
+      "severity": "medium",
+      "scenario": "結尾空白/點的 slug 與 NTFS 靜默剝除造成「app 記錄路徑 ≠ 磁碟實際資料夾」→ 工作區永久 missing、remove 對不上路徑、orphan 登記污染 prune",
+      "failSafeTest": { "file": "src/main/git/worktreePath.test.ts", "assert": "branchSlug('aux ')→wt-aux（trim 先於保留名判定）；輸出不以 . 或空白結尾；resolveTargetPath basename === slug 輸出（roundtrip 不變性）" }
+    },
+    {
+      "id": "A4",
+      "severity": "medium",
+      "scenario": "normalize 只驗 Array.isArray 整包放行：竄改 state.json 可塞 trusted:true+worktree 偽標記（持久化信任繞過）；半損毀筆（worktree.mainPath 非字串）讓 list()/git 讀取 crash",
+      "failSafeTest": { "file": "src/main/store/schema.worktree.test.ts", "assert": "逐筆 sanitize：worktree 非 {mainPath:string} 即剔除該欄；trusted 只認 boolean true；非物件筆整筆剔除；未來版本仍 throw（走既有備份+預設，不清資料）" }
+    },
+    {
+      "id": "A5",
+      "severity": "medium",
+      "scenario": "add 失敗殘留半成品/幽靈工作區（順序：git 成功才納管）；佇列鍵若用發起端 wsId，同 repo 的 worktree 工作區與主工作樹會落不同佇列 → index.lock 交錯",
+      "failSafeTest": { "file": "src/main/git/GitService.worktree.test.ts", "assert": "worktreeAdd 失敗 throw 且半成品目錄被清（模擬 git 建了目錄後失敗）；queueKeyForRepo 對 worktree 工作區解回主工作樹 wsId（同 repo 單一佇列鍵）" }
+    }
+  ],
+  "coverage": [
+    { "attackId": "A1", "status": "covered", "testFile": "tests/security/worktreePathEscape.test.ts" },
+    { "attackId": "A2", "status": "covered", "testFile": "tests/security/worktreeTrust.test.ts" },
+    { "attackId": "A3", "status": "covered", "testFile": "src/main/git/worktreePath.test.ts" },
+    { "attackId": "A4", "status": "covered", "testFile": "src/main/store/schema.worktree.test.ts" },
+    { "attackId": "A5", "status": "covered", "testFile": "src/main/git/GitService.worktree.test.ts" }
+  ]
+}
