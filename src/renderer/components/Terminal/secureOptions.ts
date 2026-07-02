@@ -4,8 +4,9 @@
 // 防禦面：
 //  - F-3-A3 終端機回應回灌成輸入：關閉所有「視窗狀態/標題回報」旗標，避免惡意輸出以
 //    `\x1b]2;<payload>\x07` 設標題再 `\x1b[21t` 請求回報、把 payload 經 onData 回灌成指令。
-//  - F-3-A2 剪貼簿挾持：不啟用 clipboard addon（核心 xterm 不處理 OSC52 寫入），
-//    main 端另有 stripOsc52 雙保險。
+//  - F-3-A2 剪貼簿：renderer 不啟用 clipboard addon（核心 xterm 不處理 OSC52）——OSC52 一律由
+//    main 端 stripOsc52 單點攔截：寫入解出交系統剪貼簿（2026-07-02 拍板放寬，供 Claude Code 等
+//    TUI 選取複製）、查詢（讀取方向）照封不回應、序列本體不進 renderer。
 
 import type { ITerminalOptions, ITheme } from '@xterm/xterm';
 
@@ -59,7 +60,7 @@ export function createSecureTerminalOptions(theme: ITheme = DEFAULT_TERMINAL_THE
     lineHeight: 1.2,
     cursorBlink: true,
     scrollback: 5000,
-    // 不開 OSC52 剪貼簿寫入（不掛 clipboard addon）；視窗回報全關（防回灌注入）。
+    // renderer 不掛 clipboard addon（OSC52 由 main 端單點攔截處理）；視窗回報全關（防回灌注入）。
     // 刻意「不設 linkHandler」：OSC 8 超連結因而保持 inert（不可點擊），杜絕惡意 PTY 以
     // ESC]8;;javascript:/file: 觸發危險導覽。日後若要可點連結，linkHandler 內 SHALL 只放行 http/https。
     windowOptions: { ...SECURE_WINDOW_OPTIONS },

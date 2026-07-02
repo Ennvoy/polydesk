@@ -6,7 +6,10 @@
 // 安全硬化：
 //  - shell 嚴格查表（固定 Record<ShellKind,string>）；未知值/非法 wsId 一律 throw、絕不把
 //    caller 字串當執行檔 spawn（防 RCE，F-3-A1）。
-//  - PTY 輸出預設過濾 OSC 52（剪貼簿寫入），對齊 REQ-TERM-008（F-3-A2，best-effort，X-4 稽核）。
+//  - PTY 輸出攔截 OSC 52（REQ-TERM-008，F-3-A2，X-4 稽核；2026-07-02 使用者拍板放寬）：
+//    「寫入」解出 payload 交 main 寫系統剪貼簿（有大小上限；Claude Code 等 TUI 的選取複製靠此，
+//    對齊 Windows Terminal/VS Code 行為）；「讀取/查詢」（`?`）一律丟棄不回應（防剪貼簿外洩，
+//    這才是危險方向）；序列本體一律不進 renderer。
 //  - teardown 殺整個 process tree（Windows taskkill /T），避免殭屍子程序（REQ-WS-009、F-3-A6）。
 
 import { randomUUID } from 'node:crypto';
@@ -67,15 +70,21 @@ export function resolveShellArgs(shell: ShellKind): string[] {
   }
 }
 
-// ── OSC 52 過濾（剪貼簿寫入），REQ-TERM-008 / F-3-A2 ──
+// ── OSC 52 攔截（寫入→解出交剪貼簿；查詢→丟棄不回應），REQ-TERM-008 / F-3-A2 ──
 const ESC = 0x1b;
 const BEL = 0x07;
 const OSC = 0x5d; // ']'
 const ST_BACKSLASH = 0x5c; // '\'
-const OSC52_CARRY_CAP = 4096; // 未終止的 OSC52 carry 上限，防無界緩衝 DoS
+/** 單次 OSC52 寫入的 base64 payload 上限（約 1.5MB 純文字）；超過＝可疑灌爆，丟棄不寫。 */
+export const OSC52_WRITE_MAX_B64 = 2 * 1024 * 1024;
+/** 未終止的 OSC52 carry 上限（≥ 完整寫入序列），防無界緩衝 DoS。 */
+export const OSC52_CARRY_CAP = OSC52_WRITE_MAX_B64 + 256;
 
-/** 嘗試自 esc 起匹配 `ESC ] 5 2 ;` … 終止（BEL 或 ESC\）。 */
-function matchOsc52(buf: Buffer, esc: number): { end: number } | 'incomplete' | null {
+/** 嘗試自 esc 起匹配 `ESC ] 5 2 ;` … 終止（BEL 或 ESC\）；命中回傳序列終點與內文（`<Pc>;<Pd>`）邊界。 */
+function matchOsc52(
+  buf: Buffer,
+  esc: number,
+): { end: number; bodyStart: number; bodyEnd: number } | 'incomplete' | null {
   // 需至少 "\x1b]52;" 5 個 byte 才能確認是 OSC52
   const want = [ESC, OSC, 0x35, 0x32, 0x3b]; // ESC ] 5 2 ;
   for (let k = 0; k < want.length; k++) {
@@ -83,22 +92,41 @@ function matchOsc52(buf: Buffer, esc: number): { end: number } | 'incomplete' | 
     if (idx >= buf.length) return 'incomplete'; // 是 OSC52 前綴但被切斷
     if (buf[idx] !== want[k]) return null; // 非 OSC52
   }
+  const bodyStart = esc + want.length;
   // 找終止序列
-  for (let i = esc + want.length; i < buf.length; i++) {
-    if (buf[i] === BEL) return { end: i + 1 };
-    if (buf[i] === ESC && i + 1 < buf.length && buf[i + 1] === ST_BACKSLASH) return { end: i + 2 };
+  for (let i = bodyStart; i < buf.length; i++) {
+    if (buf[i] === BEL) return { end: i + 1, bodyStart, bodyEnd: i };
+    if (buf[i] === ESC && i + 1 < buf.length && buf[i + 1] === ST_BACKSLASH) return { end: i + 2, bodyStart, bodyEnd: i };
     if (buf[i] === ESC) return 'incomplete'; // 終止序列首字被切斷
   }
   return 'incomplete';
 }
 
 /**
- * 自 PTY 輸出移除 OSC 52（剪貼簿寫入）序列；跨 chunk 邊界以 carry 接續（有上限）。
- * 回傳乾淨輸出 + 下次需接續的 carry（不含 OSC52 以外資料）。純函式、可單測。
+ * 解析 OSC52 內文 `<selection>;<base64>` → 寫入文字。查詢（`?`＝請終端機回報剪貼簿，
+ * 剪貼簿外洩方向）、缺分號、超上限、base64 解不出東西 → 一律 null（不寫）。
  */
-export function stripOsc52(input: Buffer, carry: Buffer = Buffer.alloc(0)): { output: Buffer; carry: Buffer } {
+function parseOsc52Write(body: Buffer): string | null {
+  const sep = body.indexOf(0x3b); // ';'
+  if (sep === -1) return null;
+  const pd = body.subarray(sep + 1);
+  if (pd.length === 0 || pd.length > OSC52_WRITE_MAX_B64) return null;
+  if (pd.length === 1 && pd[0] === 0x3f) return null; // '?' 查詢：封死不回應
+  const text = Buffer.from(pd.toString('latin1'), 'base64').toString('utf8');
+  return text.length > 0 ? text : null;
+}
+
+/**
+ * 自 PTY 輸出攔下 OSC 52 序列（一律不進 renderer）；跨 chunk 邊界以 carry 接續（有上限）。
+ * 寫入型序列解出的文字收進 `writes`（呼叫端負責寫系統剪貼簿）；查詢型丟棄。純函式、可單測。
+ */
+export function stripOsc52(
+  input: Buffer,
+  carry: Buffer = Buffer.alloc(0),
+): { output: Buffer; carry: Buffer; writes: string[] } {
   const data = carry.length ? Buffer.concat([carry, input]) : input;
   const out: Buffer[] = [];
+  const writes: string[] = [];
   let i = 0;
   while (i < data.length) {
     const esc = data.indexOf(ESC, i);
@@ -117,13 +145,15 @@ export function stripOsc52(input: Buffer, carry: Buffer = Buffer.alloc(0)): { ou
       const tail = data.subarray(esc);
       if (tail.length > OSC52_CARRY_CAP) {
         out.push(tail); // 超過上限：放棄當作 OSC52，原樣輸出（防無界 carry）
-        return { output: Buffer.concat(out), carry: Buffer.alloc(0) };
+        return { output: Buffer.concat(out), carry: Buffer.alloc(0), writes };
       }
-      return { output: Buffer.concat(out), carry: Buffer.from(tail) };
+      return { output: Buffer.concat(out), carry: Buffer.from(tail), writes };
     }
-    i = m.end; // 命中完整 OSC52 → 丟棄
+    const w = parseOsc52Write(data.subarray(m.bodyStart, m.bodyEnd));
+    if (w !== null) writes.push(w);
+    i = m.end; // 完整 OSC52 → 序列本體一律丟棄（不進 renderer）
   }
-  return { output: Buffer.concat(out), carry: Buffer.alloc(0) };
+  return { output: Buffer.concat(out), carry: Buffer.alloc(0), writes };
 }
 
 // ── 抽象出 PtyManager 實際用到的 pty 介面（node-pty IPty 相容；測試可注入 fake）──
@@ -155,8 +185,10 @@ export interface PtyDeps {
   flushIntervalMs?: number;
   /** 待送 byte 超過此門檻即 pause() backpressure，預設 1MB。 */
   highWaterBytes?: number;
-  /** 是否過濾 OSC52（REQ-TERM-008），預設開。 */
+  /** 是否攔截 OSC52（REQ-TERM-008：寫入解出交剪貼簿、查詢丟棄、序列不進 renderer），預設開。 */
   stripClipboard?: boolean;
+  /** OSC52 寫入的實際落地（預設 electron clipboard；unit test 於純 node 環境注入 spy）。 */
+  writeClipboard?: (text: string) => void;
 }
 
 export class PtyError extends Error {
@@ -203,6 +235,12 @@ function toBuffer(d: Buffer | string): Buffer {
   return typeof d === 'string' ? Buffer.from(d, 'utf8') : d;
 }
 
+// 動態 import：本模組的純函式（stripOsc52 等）要能在純 node 環境單測，不可 top-level
+// 執行期 import electron；只有真的發生 OSC52 寫入時才觸碰 electron。
+const defaultWriteClipboard = (text: string): void => {
+  void import('electron').then(({ clipboard }) => clipboard.writeText(text)).catch(() => undefined);
+};
+
 export class PtyManager {
   private readonly terms = new Map<string, Term>();
   private readonly spawn: SpawnFn;
@@ -212,6 +250,7 @@ export class PtyManager {
   private readonly flushIntervalMs: number;
   private readonly highWaterBytes: number;
   private readonly stripClipboard: boolean;
+  private readonly writeClipboard: (text: string) => void;
 
   constructor(
     private readonly workspaces: WorkspaceManager,
@@ -225,6 +264,7 @@ export class PtyManager {
     this.flushIntervalMs = deps.flushIntervalMs ?? 16;
     this.highWaterBytes = deps.highWaterBytes ?? 1024 * 1024;
     this.stripClipboard = deps.stripClipboard ?? true;
+    this.writeClipboard = deps.writeClipboard ?? defaultWriteClipboard;
     // 移除工作區 / 關 app → 殺該 wsId 所有 pty（含子程序樹），避免殭屍（REQ-WS-009）。
     lifecycle.register('pty', (wsId) => this.killWorkspace(wsId));
   }
@@ -382,6 +422,8 @@ export class PtyManager {
         const r = stripOsc52(buf, t.osc52Carry);
         t.osc52Carry = r.carry;
         buf = r.output;
+        // OSC52 寫入落地系統剪貼簿（使用者拍板放寬：TUI 選取複製；查詢已在解析層丟棄）
+        for (const w of r.writes) this.writeClipboard(w);
       }
       if (buf.length > 0) this.emitData({ termId, chunk: buf });
     }

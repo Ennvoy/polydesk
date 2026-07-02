@@ -1,8 +1,11 @@
-// 終端機貼上（dogfood 回報：在終端機裡跑 Claude Code 時 Ctrl+V 貼不上、右鍵也沒用）。
-// xterm 預設把 Ctrl+V 綁成送控制字元 ^V（不貼上），右鍵原生亦無貼上；本 app 於 TerminalView
-// 自行接管（讀剪貼簿 → term.paste）。此處走真實鏈路驗證：真 electron clipboard 放入一段建檔指令，
-// 於真終端機按 Ctrl+V / 右鍵貼上 → 按 Enter 讓真 shell 執行 → 斷言「檔案真的被建出」（貼上的文字
-// 確實抵達 PTY 並被 shell 收下）。用絕對路徑、只檢查檔案存在，故與 PowerShell/cmd 無關。
+// 終端機剪貼簿雙向 e2e（dogfood 回報：Ctrl+V/右鍵貼不上；Claude Code 選取複製 copied 假成功）。
+// 貼上：xterm 預設把 Ctrl+V 綁成送 ^V（不貼上）、右鍵原生無貼上 → TerminalView 自行接管
+//   （clipboard IPC → term.paste）。走真實鏈路：真 electron clipboard 放建檔指令 → 真終端機
+//   Ctrl+V / 右鍵 → Enter 讓真 shell 執行 → 斷言檔案真的被建出。
+// 複製（OSC52）：Claude Code 等 TUI 的選取複製＝往 PTY 發 OSC52 寫入序列 → main 端 stripOsc52
+//   攔截解出寫系統剪貼簿（D-OSC52-WRITE 拍板放寬；查詢方向照封）。e2e 於真 shell echo OSC52 →
+//   斷言系統剪貼簿內容真的變成 payload。
+// 剪貼簿衛生：測試會動真系統剪貼簿——一律先快照、finally 還原（曾污染使用者剪貼簿，dogfood 回報）。
 import { test, expect } from '@playwright/test';
 import { mkdtempSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -25,10 +28,16 @@ async function openTerminal(page: Page): Promise<void> {
   await page.waitForTimeout(1500); // shell（PowerShell/cmd）初始化 prompt
 }
 
-/** 把一段「建立 markerPath 檔案」的指令放進真 electron 系統剪貼簿。 */
-async function seedClipboardCommand(app: ElectronApplication, markerPath: string): Promise<void> {
-  const cmd = `echo pdpaste > "${markerPath}"`;
-  await app.evaluate(({ clipboard }, text) => clipboard.writeText(text), cmd);
+const readClipboard = (app: ElectronApplication): Promise<string> =>
+  app.evaluate(({ clipboard }) => clipboard.readText());
+
+/** 快照現有系統剪貼簿 → 放入測試文字；回傳還原函式（finally 呼叫，不污染使用者剪貼簿）。 */
+async function seedClipboard(app: ElectronApplication, text: string): Promise<() => Promise<void>> {
+  const prev = await readClipboard(app);
+  await app.evaluate(({ clipboard }, t) => clipboard.writeText(t), text);
+  return async () => {
+    await app.evaluate(({ clipboard }, t) => clipboard.writeText(t), prev).catch(() => undefined);
+  };
 }
 
 test('Ctrl+V 把剪貼簿內容貼進終端機（真 shell 執行建檔）', async () => {
@@ -36,13 +45,14 @@ test('Ctrl+V 把剪貼簿內容貼進終端機（真 shell 執行建檔）', asy
   const markerDir = mkdtempSync(join(tmpdir(), 'pdclip-marker-'));
   const markerPath = join(markerDir, 'PDPASTE_CTRLV.txt');
   const { app, page, userData } = await launchApp();
+  let restore: (() => Promise<void>) | null = null;
   try {
     await stubFolderPicker(app, [dir]);
     await addWorkspaceViaUI(page);
     await page.locator('button[aria-label="開啟工作區 clip-ws"]').click();
     await openTerminal(page);
 
-    await seedClipboardCommand(app, markerPath);
+    restore = await seedClipboard(app, `echo pdpaste > "${markerPath}"`);
     await page.locator('.pd-term-view').first().click(); // 聚焦 xterm helper textarea
     await page.keyboard.press('Control+v'); // → attachCustomKeyEventHandler 判為 paste → term.paste
     await page.waitForTimeout(800); // 等非同步 clipboard IPC + term.paste 落地
@@ -50,6 +60,7 @@ test('Ctrl+V 把剪貼簿內容貼進終端機（真 shell 執行建檔）', asy
 
     await expect.poll(() => existsSync(markerPath), { timeout: 20000, message: 'Ctrl+V 貼上的指令未執行' }).toBe(true);
   } finally {
+    await restore?.();
     await app.close();
     rmSync(dir, { recursive: true, force: true });
     rmSync(markerDir, { recursive: true, force: true });
@@ -62,13 +73,14 @@ test('右鍵（無選取）貼上剪貼簿內容進終端機', async () => {
   const markerDir = mkdtempSync(join(tmpdir(), 'pdclip-marker-'));
   const markerPath = join(markerDir, 'PDPASTE_RCLICK.txt');
   const { app, page, userData } = await launchApp();
+  let restore: (() => Promise<void>) | null = null;
   try {
     await stubFolderPicker(app, [dir]);
     await addWorkspaceViaUI(page);
     await page.locator('button[aria-label="開啟工作區 clip-ws2"]').click();
     await openTerminal(page);
 
-    await seedClipboardCommand(app, markerPath);
+    restore = await seedClipboard(app, `echo pdpaste > "${markerPath}"`);
     const view = page.locator('.pd-term-view').first();
     await view.click(); // 先左鍵聚焦（無拖曳＝無選取）
     await view.click({ button: 'right' }); // 無選取 → contextmenu handler 執行貼上
@@ -77,9 +89,41 @@ test('右鍵（無選取）貼上剪貼簿內容進終端機', async () => {
 
     await expect.poll(() => existsSync(markerPath), { timeout: 20000, message: '右鍵貼上的指令未執行' }).toBe(true);
   } finally {
+    await restore?.();
     await app.close();
     rmSync(dir, { recursive: true, force: true });
     rmSync(markerDir, { recursive: true, force: true });
+    rmSync(userData, { recursive: true, force: true });
+  }
+});
+
+test('OSC52 寫入：真 shell 發序列 → 系統剪貼簿更新（Claude Code 選取複製鏈路）', async () => {
+  const dir = seedDir('clip-ws3');
+  const { app, page, userData } = await launchApp();
+  let restore: (() => Promise<void>) | null = null;
+  const payload = `PD-OSC52-${Date.now()}`;
+  try {
+    await stubFolderPicker(app, [dir]);
+    await addWorkspaceViaUI(page);
+    await page.locator('button[aria-label="開啟工作區 clip-ws3"]').click();
+    await openTerminal(page);
+
+    const b64 = Buffer.from(payload, 'utf8').toString('base64');
+    // 用貼上鏈路把「發 OSC52 的 PowerShell 指令」送進真 shell（同時再覆蓋一次貼上路徑）
+    restore = await seedClipboard(app, `Write-Host "$([char]27)]52;c;${b64}$([char]7)"`);
+    await page.locator('.pd-term-view').first().click();
+    await page.keyboard.press('Control+v');
+    await page.waitForTimeout(800);
+    await page.keyboard.press('Enter');
+
+    // main 端 stripOsc52 應解出 payload 寫進系統剪貼簿（＝Claude Code copied 真的落地）
+    await expect
+      .poll(() => readClipboard(app), { timeout: 20000, message: 'OSC52 寫入未抵達系統剪貼簿' })
+      .toBe(payload);
+  } finally {
+    await restore?.();
+    await app.close();
+    rmSync(dir, { recursive: true, force: true });
     rmSync(userData, { recursive: true, force: true });
   }
 });

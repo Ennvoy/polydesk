@@ -1,0 +1,8 @@
+{
+  "id": "D-OSC52-WRITE",
+  "question": "",
+  "choice": "開放 OSC52 剪貼簿寫入（大小上限 2MB base64、序列不進 renderer）、讀取查詢照封",
+  "why": "Claude Code 等 TUI 的選取複製靠 OSC52 寫入，原全封導致 copied 假成功；使用者彈窗拍板選開放寫入＋護欄，對齊 Windows Terminal 預設行為",
+  "by": "auto",
+  "at": "2026-07-02T07:55:52.399Z"
+}
