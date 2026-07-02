@@ -142,6 +142,8 @@
 - [x] **DF-4 git 線圖跨列連續 + 分支切換 dirty-tree 處理**（commit ddfbe8c；含多代理對抗式審查強化）— 列高由 GRAPH_ROW_H 單一真相驅動（消 JS/CSS 漂移）、移除 border、log `--topo-order` 杜絕 dangling 線；分支切換改用結構化 status 判斷 dirty（不靠在地化錯誤字串）+ `stash -u`（含 untracked）+ 第二次 checkout try/catch；git:stash 加 includeUntracked。e2e 3 案例 + git.spec 回歸綠。
 - [x] **DF-5 點變更檔在編輯器區開 diff 分頁 + 分支 worktree 衝突友善提示**（commit da63e65）— editorBus 加 openDiff；EditorGroup Tab 加 kind('file'|'diff')，diff 分頁渲染 DiffView（工作樹 vs HEAD），跳過 model 綁定/存檔；SourceControlPanel 點檔改 editorBus.openDiff（移除面板內 diff）。分支切換偵測 worktree 簽出衝突→友善提示。e2e diff-in-editor 綠。
 - [x] **DF-6 PE-1/PE-2 增強**（見下）— dogfood 規劃的兩組增強，已實作交付。
+- [x] **DF-7 終端機底色填滿 pane**（dogfood 回報：終端機四周留白框）— xterm 只能排整數 cols/rows，右/下剩餘空隙＋inset 邊距露出主題底色形成留白框；修法：`.pd-term-view` 容器底色漆成 xterm theme.background 同色（fit 邏輯不動、不重疊不裁列）。e2e terminal-fit-clip「容器底色＝xterm 背景色」綠。
+- [x] **DF-8 已開終端機主題即時跟隨**（dogfood 回報：開著終端機切風格、終端機顏色不變）— 主題色原本只在掛載時讀一次；修法：MutationObserver 監聽 documentElement `[data-theme]` → 重讀 CSS var → 更新 `term.options.theme`＋容器底色（先 xterm 後容器，不脫鉤）。e2e terminal-fit-clip「切主題即時跟隨」真實 UI 路徑綠。
 
 ## 規劃增強（dogfood 提出、AskUserQuestion 定版範圍、ship 後交付）
 

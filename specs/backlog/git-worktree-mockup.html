@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>Polydesk Worktree 功能 Mockup — 方案比較</title>
+<style>
+  /* ── Polydesk warm 主題實際 token（取自 src/renderer/theme/tokens.css） ── */
+  :root {
+    --bg: #f5f4ed; --surface: #faf9f5; --surface-warm: #e8e6dc;
+    --fg: #141413; --fg-2: #3d3d3a; --muted: #5e5d59; --meta: #87867f;
+    --border: #e3e0d6; --border-soft: #eceae1;
+    --accent: #c96442; --accent-on: #faf9f5; --accent-hover: #b8573a;
+    --success: #17a34a; --warn: #b8860b; --danger: #b53333;
+    --term-bg: #0a0a0a; --term-fg: #ededed;
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+    --font: "Geist","Segoe UI",-apple-system,sans-serif;
+    --mono: "Geist Mono","Cascadia Code",Consolas,monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background:#dedbd0; color:var(--fg); font-family:var(--font); font-size:14px; padding:24px; }
+  h1 { font-size:20px; margin-bottom:4px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:16px; }
+
+  /* 頁籤 */
+  .tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .tab { padding:8px 18px; border-radius:999px; border:1px solid var(--border); background:var(--surface); cursor:pointer; font-size:14px; font-family:var(--font); }
+  .tab.active { background:var(--accent); color:var(--accent-on); border-color:var(--accent); font-weight:600; }
+  .view { display:none; }
+  .view.active { display:block; }
+
+  /* 仿 app 視窗 */
+  .win { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; box-shadow:rgba(20,20,19,.12) 0 8px 32px; max-width:1080px; }
+  .titlebar { height:34px; background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:8px; color:var(--meta); font-size:12px; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--surface-warm); border:1px solid var(--border); }
+  .body { display:flex; height:560px; }
+
+  /* WorkspaceRail（左：工作區列表） */
+  .rail { width:230px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; }
+  .rail-head { padding:10px 12px; font-size:12px; color:var(--meta); display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-soft); }
+  .rail-add { cursor:pointer; font-size:16px; color:var(--fg-2); padding:0 6px; border-radius:var(--radius-sm); position:relative; }
+  .rail-add:hover { background:var(--surface-warm); }
+  .ws { padding:9px 12px; display:flex; align-items:center; gap:8px; cursor:pointer; border-left:3px solid transparent; }
+  .ws:hover { background:var(--surface-warm); }
+  .ws.active { background:var(--bg); border-left-color:var(--accent); font-weight:600; }
+  .ws .ico { width:18px; text-align:center; }
+  .ws .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ws .st { width:8px; height:8px; border-radius:50%; background:var(--success); }
+  .wt { padding-left:34px; font-size:13px; color:var(--fg-2); }
+  .wt .name { font-family:var(--mono); font-size:12.5px; }
+  .badge { font-size:10px; padding:1px 7px; border-radius:999px; background:var(--surface-warm); color:var(--muted); border:1px solid var(--border); white-space:nowrap; }
+  .badge.wt-badge { background:color-mix(in srgb, var(--accent) 12%, var(--surface)); color:var(--accent); border-color:color-mix(in srgb, var(--accent) 30%, var(--border)); }
+
+  /* ActivityBar + Sidebar */
+  .abar { width:46px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; align-items:center; padding-top:8px; gap:4px; }
+  .abtn { width:36px; height:36px; border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; font-size:17px; cursor:pointer; color:var(--muted); }
+  .abtn:hover { background:var(--surface-warm); }
+  .abtn.on { color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, transparent); }
+  .side { width:270px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; font-size:13px; }
+  .side-title { padding:10px 12px 6px; font-size:11px; letter-spacing:.08em; color:var(--meta); }
+  .scm-tabs { display:flex; border-bottom:1px solid var(--border); padding:0 8px; gap:2px; }
+  .scm-tab { padding:7px 10px; font-size:12.5px; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; }
+  .scm-tab.on { color:var(--fg); border-bottom-color:var(--accent); font-weight:600; }
+  .row { display:flex; align-items:center; gap:8px; padding:8px 12px; cursor:pointer; }
+  .row:hover { background:var(--surface-warm); }
+  .row:hover .hoverbtn { opacity:1; }
+  .row .grow { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mono { font-family:var(--mono); font-size:12.5px; }
+  .hoverbtn { opacity:0; font-size:11px; padding:2px 8px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg); color:var(--fg-2); cursor:pointer; transition:opacity .12s; white-space:nowrap; }
+  .hoverbtn:hover { border-color:var(--accent); color:var(--accent); }
+  .cur { color:var(--success); font-size:11px; }
+
+  /* 主區（編輯器+終端機） */
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .filetree-note { padding:8px 12px; font-size:12px; color:var(--meta); border-bottom:1px dashed var(--border); background:var(--surface); }
+  .editor { flex:1; background:var(--bg); padding:14px 16px; font-family:var(--mono); font-size:12.5px; color:var(--fg-2); overflow:hidden; }
+  .term { height:180px; background:var(--term-bg); color:var(--term-fg); font-family:var(--mono); font-size:12.5px; padding:10px 12px; border-top:1px solid var(--border); }
+  .term .p { color:#7fd18a; }
+  .term .path { color:#7aa5d1; }
+  .statusbar { height:24px; background:var(--surface); border-top:1px solid var(--border); font-size:11.5px; color:var(--muted); display:flex; align-items:center; gap:16px; padding:0 12px; }
+
+  /* 彈出選單 / modal mock */
+  .menu { position:absolute; top:26px; right:-6px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); box-shadow:rgba(20,20,19,.15) 0 6px 24px; min-width:220px; z-index:5; font-size:13px; font-weight:400; }
+  .menu div { padding:9px 14px; cursor:pointer; white-space:nowrap; color:var(--fg); }
+  .menu div:hover { background:var(--surface-warm); }
+  .menu .hl { color:var(--accent); font-weight:600; }
+  .modal-wrap { display:flex; gap:20px; margin-top:18px; flex-wrap:wrap; align-items:flex-start; }
+  .modal { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:rgba(20,20,19,.12) 0 8px 28px; width:400px; overflow:hidden; }
+  .modal h3 { font-size:14px; padding:14px 16px 10px; border-bottom:1px solid var(--border-soft); }
+  .modal .fld { padding:10px 16px 0; }
+  .modal label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .modal .in { border:1px solid var(--border); background:var(--bg); border-radius:var(--radius-sm); padding:7px 10px; font-size:13px; font-family:var(--mono); color:var(--fg); display:flex; justify-content:space-between; align-items:center; }
+  .modal .in .caret { color:var(--meta); }
+  .modal .acts { display:flex; justify-content:flex-end; gap:8px; padding:14px 16px; }
+  .btn { padding:7px 16px; border-radius:var(--radius-md); border:1px solid var(--border); background:var(--surface); font-size:13px; cursor:pointer; font-family:var(--font); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-on); font-weight:600; }
+  .hint { font-size:11.5px; color:var(--meta); padding:4px 16px 0; }
+
+  /* 說明卡 */
+  .notes { display:flex; gap:16px; margin-top:16px; flex-wrap:wrap; }
+  .note { flex:1; min-width:280px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px 16px; }
+  .note h4 { font-size:13px; margin-bottom:8px; }
+  .note ul { padding-left:18px; display:grid; gap:5px; font-size:12.5px; color:var(--fg-2); }
+  .good::marker { color: var(--success); }
+  .bad::marker { color: var(--danger); }
+  .callout { position:relative; }
+  .pin { position:absolute; background:var(--accent); color:var(--accent-on); font-size:10.5px; padding:2px 8px; border-radius:999px; z-index:6; box-shadow:rgba(20,20,19,.2) 0 2px 8px; white-space:nowrap; }
+  .toast { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warn); border-radius:var(--radius-md); padding:12px 14px; width:430px; box-shadow:rgba(20,20,19,.12) 0 6px 24px; font-size:13px; }
+  .toast .t-acts { margin-top:10px; display:flex; gap:8px; }
+  .tree { font-family:var(--mono); font-size:12.5px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 16px; color:var(--fg-2); line-height:1.7; }
+  .tree b { color:var(--accent); font-weight:600; }
+</style>
+</head>
+<body>
+<h1>Polydesk · git worktree 功能 mockup</h1>
+<p class="sub">情境：你在「我的終端機」repo 同時開發兩個功能——<span class="mono">feat/worktree</span> 和 <span class="mono">fix/statusline</span>，兩邊都要能各自開終端機、跑各自的 dev server、讓各自的 Claude 作業，互不打架。</p>
+
+<div class="tabs">
+  <button class="tab active" onclick="show(0,this)">方案 A：worktree ＝ 一種工作區</button>
+  <button class="tab" onclick="show(1,this)">方案 B：獨立面板管理</button>
+  <button class="tab" onclick="show(2,this)">建立流程（兩案共用）</button>
+  <button class="tab" onclick="show(3,this)">資料夾放哪（兩案共用）</button>
+</div>
+
+<!-- ════════ 方案 A ════════ -->
+<div class="view active">
+  <div class="win">
+    <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Polydesk</div>
+    <div class="body">
+      <div class="rail">
+        <div class="rail-head">工作區
+          <span class="rail-add callout">＋
+            <span class="pin" style="top:-26px; right:-10px;">入口在這</span>
+            <span class="menu">
+              <div>新增工作區…</div>
+              <div class="hl">⎇ 從 Git 分支建立 worktree…</div>
+            </span>
+          </span>
+        </div>
+        <div class="ws"><span class="ico">📁</span><span class="name">我的終端機</span><span class="st"></span></div>
+        <div class="ws wt active callout">
+          <span class="pin" style="top:-12px; left:120px;">worktree 直接出現在列表</span>
+          <span class="ico">⎇</span><span class="name">feat/worktree</span><span class="badge wt-badge">worktree</span>
+        </div>
+        <div class="ws wt"><span class="ico">⎇</span><span class="name">fix/statusline</span><span class="badge wt-badge">worktree</span></div>
+        <div class="ws" style="margin-top:8px;"><span class="ico">📁</span><span class="name">簡報工作室</span></div>
+      </div>
+      <div class="abar">
+        <div class="abtn on">🗂</div><div class="abtn">🔍</div><div class="abtn">⎇</div>
+      </div>
+      <div class="side">
+        <div class="side-title">檔案總管 — FEAT/WORKTREE</div>
+        <div class="row mono"><span class="grow">▸ src/</span></div>
+        <div class="row mono"><span class="grow">▸ e2e/</span></div>
+        <div class="row mono"><span class="grow">package.json</span></div>
+        <div class="filetree-note" style="border:none;">↑ 檔案樹自動以 worktree 資料夾為根，<b>零改動</b></div>
+      </div>
+      <div class="main">
+        <div class="editor">// 這裡改的是 feat/worktree 分支的檔案<br>// 主 repo 的 main 分支完全不受影響</div>
+        <div class="term callout">
+          <span class="pin" style="top:-12px; right:14px;">終端機 cwd 自動＝worktree 路徑</span>
+          <span class="p">PS</span> <span class="path">C:\...\我的終端機-worktrees\feat-worktree</span>&gt; npm run dev<br>
+          <span style="color:#999;">VITE ready — dev server :5174（和主 repo 的 :5173 並行不衝突）</span><br>
+          <span class="p">PS</span> <span class="path">...\feat-worktree</span>&gt; claude<br>
+          <span style="color:#999;">Claude 在這個 worktree 裡作業，狀態監控獨立顯示 ●</span>
+        </div>
+        <div class="statusbar"><span>⎇ feat/worktree</span><span>worktree of 我的終端機</span><span style="margin-left:auto;">● Claude working</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note"><h4>✅ 優點</h4><ul>
+      <li class="good">終端機、檔案樹、git 面板、Claude 監控、關閉重開記憶——<b>全部現成、零改動直接生效</b>（它們都認「工作區路徑」）</li>
+      <li class="good">兩個 worktree ＝ 兩個工作區，可以各開各的終端機同時跑，正是你「同時開發不同功能」的需求</li>
+      <li class="good">工程量最小，最快能用</li>
+    </ul></div>
+    <div class="note"><h4>⚠️ 取捨</h4><ul>
+      <li class="bad">工作區列表會變長（用 ⎇ 圖示＋縮排＋徽章區隔，如左圖）</li>
+      <li class="bad">移除 worktree 工作區時要多一個「同時刪除 worktree 資料夾？」的確認</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- ════════ 方案 B ════════ -->
+<div class="view">
+  <div class="win">
+    <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Polydesk</div>
+    <div class="body">
+      <div class="rail">
+        <div class="rail-head">工作區 <span class="rail-add">＋</span></div>
+        <div class="ws active"><span class="ico">📁</span><span class="name">我的終端機</span><span class="st"></span></div>
+        <div class="ws"><span class="ico">📁</span><span class="name">簡報工作室</span></div>
+        <div style="padding:10px 12px; font-size:11.5px; color:var(--meta);">↑ 列表保持乾淨，worktree 不出現在這</div>
+      </div>
+      <div class="abar">
+        <div class="abtn">🗂</div><div class="abtn">🔍</div><div class="abtn on">⎇</div>
+      </div>
+      <div class="side">
+        <div class="side-title">原始碼控制 — 我的終端機</div>
+        <div class="scm-tabs callout">
+          <span class="pin" style="top:-14px; right:-4px;">SCM 面板多一個分頁</span>
+          <span class="scm-tab">變更</span><span class="scm-tab">歷史</span><span class="scm-tab">分支</span><span class="scm-tab on">worktree</span>
+        </div>
+        <div class="row"><span class="mono grow">main <span style="color:var(--meta);">（主 repo）</span></span><span class="cur">✓ 目前</span></div>
+        <div class="row"><span class="mono grow">⎇ feat/worktree</span><button class="hoverbtn">切換到此</button></div>
+        <div class="row"><span class="mono grow">⎇ fix/statusline</span><button class="hoverbtn">切換到此</button></div>
+        <div style="padding:10px 12px;"><button class="btn" style="width:100%;">＋ 建立 worktree</button></div>
+        <div class="filetree-note" style="border:none;">點「切換到此」→ 檔案樹 / 終端機 / git<br>整組重新指向該 worktree 資料夾</div>
+      </div>
+      <div class="main">
+        <div class="editor">// 同一個工作區內「切換」目前作用的 worktree<br>// 一次只看得到一個 worktree 的內容</div>
+        <div class="term">
+          <span class="p">PS</span> <span class="path">C:\...\Documents\我的終端機</span>&gt; _<br>
+          <span style="color:#999;">切換 worktree 時，這裡的終端機要「重新指向」——</span><br>
+          <span style="color:#e5a662;">既有終端機 cwd 不會跟著動，得新開終端機或整組重建（體驗上的坑）</span>
+        </div>
+        <div class="statusbar"><span>⎇ main</span><span style="margin-left:auto;">Claude idle</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note"><h4>✅ 優點</h4><ul>
+      <li class="good">工作區列表保持乾淨，worktree 收在所屬 repo 的 SCM 面板下，語意清楚</li>
+      <li class="good">worktree 的管理（列表/建立/移除/prune）集中一處</li>
+    </ul></div>
+    <div class="note"><h4>⚠️ 取捨</h4><ul>
+      <li class="bad">「切換」語意跟現有架構打架：終端機 cwd、檔案樹、Claude 監控全綁在工作區路徑上，切換 worktree 要嘛整組重建、要嘛行為不一致</li>
+      <li class="bad"><b>無法同時開兩個 worktree 各自作業</b>（一次只有一個作用中）——跟你的平行開發需求正面衝突</li>
+      <li class="bad">工程量約 2–3 倍（新面板＋狀態管理＋切換邏輯）</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- ════════ 建立流程 ════════ -->
+<div class="view">
+  <p class="sub" style="margin-bottom:6px;">三個建立入口（可複選要哪幾個）＋建立對話框長相：</p>
+  <div class="modal-wrap">
+    <div>
+      <div style="font-size:12.5px; color:var(--muted); margin-bottom:8px;">入口 1｜SCM「分支」分頁——滑過分支出現按鈕（推薦）</div>
+      <div class="side" style="width:300px; border:1px solid var(--border); border-radius:var(--radius-md);">
+        <div class="scm-tabs"><span class="scm-tab">變更</span><span class="scm-tab">歷史</span><span class="scm-tab on">分支</span></div>
+        <div class="row"><span class="mono grow">main</span><span class="cur">✓</span></div>
+        <div class="row" style="background:var(--surface-warm);"><span class="mono grow">feat/worktree</span><button class="hoverbtn" style="opacity:1;">⎇ 在新 worktree 開啟</button></div>
+        <div class="row"><span class="mono grow">fix/statusline</span></div>
+      </div>
+      <div style="font-size:12.5px; color:var(--muted); margin:16px 0 8px;">入口 3｜checkout 撞 worktree 時，錯誤提示升級成動作</div>
+      <div class="toast">⚠ 分支 <span class="mono">feat/worktree</span> 已在另一個 worktree 簽出
+        <div class="t-acts"><button class="btn primary">跳到該 worktree</button><button class="btn">取消</button></div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:12.5px; color:var(--muted); margin-bottom:8px;">入口 2｜工作區「＋」選單 → 開這個對話框</div>
+      <div class="modal">
+        <h3>⎇ 從 Git 分支建立 worktree</h3>
+        <div class="fld"><label>來源 repo</label><div class="in">我的終端機 <span class="caret">▾</span></div></div>
+        <div class="fld"><label>分支</label><div class="in">feat/worktree（新分支，自 main 分出） <span class="caret">▾</span></div>
+          <div class="hint">可選現有分支，或直接輸入新名稱現場開分支</div></div>
+        <div class="fld"><label>建立位置</label><div class="in">C:\...\我的終端機-worktrees\feat-worktree ✏️</div>
+          <div class="hint">預設放 repo 旁的 sibling 資料夾，可改</div></div>
+        <div class="acts"><button class="btn">取消</button><button class="btn primary">建立並開啟工作區</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 資料夾位置 ════════ -->
+<div class="view">
+  <p class="sub" style="margin-bottom:6px;">git worktree 需要一個實體資料夾。兩種慣例：</p>
+  <div class="modal-wrap">
+    <div>
+      <div style="font-size:13px; font-weight:600; margin-bottom:8px;">選項 1｜repo 旁 sibling 資料夾（推薦）</div>
+      <div class="tree">Documents/<br>├─ <b>我的終端機/</b>　　　　　← 主 repo（main）<br>└─ <b>我的終端機-worktrees/</b><br>　　├─ feat-worktree/　 ← worktree 1<br>　　└─ fix-statusline/　← worktree 2</div>
+      <ul style="margin-top:8px; padding-left:18px; font-size:12.5px; color:var(--fg-2);">
+        <li class="good">repo 保持乾淨，不用改 .gitignore</li>
+        <li class="good">檔案樹 / 搜尋 / watcher 不會掃到彼此</li>
+      </ul>
+    </div>
+    <div>
+      <div style="font-size:13px; font-weight:600; margin-bottom:8px;">選項 2｜repo 內 .worktrees/</div>
+      <div class="tree">我的終端機/<br>├─ src/<br>├─ <b>.worktrees/</b>　　　　← 要加 .gitignore<br>│　├─ feat-worktree/<br>│　└─ fix-statusline/<br>└─ package.json</div>
+      <ul style="margin-top:8px; padding-left:18px; font-size:12.5px; color:var(--fg-2);">
+        <li class="good">全部收在一個資料夾裡，好找</li>
+        <li class="bad">主 repo 的搜尋/檔案樹/watcher 要特別排除，否則會看到重複檔案、效能變差</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(i, el) {
+  document.querySelectorAll('.view').forEach((v,k)=>v.classList.toggle('active',k===i));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+}
+</script>
+</body>
+</html>
