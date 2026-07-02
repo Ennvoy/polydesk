@@ -47,6 +47,8 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
 
   const [pathEdited, setPathEdited] = useState(false);
   const [pathValue, setPathValue] = useState('');
+  // REQ-WT-002：bare/submodule repo 不支援建 worktree，事前提示（null=檢查中/支援）。
+  const [unsupported, setUnsupported] = useState<'bare' | 'submodule' | 'not-repo' | null>(null);
   // 主工作樹路徑（sibling 基準）：從 worktree list 的 isMain 取；未載入前退回 wsPath。
   // 修：在 worktree 工作區中建立時，基準須是「主 repo」而非作用中的 worktree，否則會巢狀成
   // <main>-worktrees/<dev>-worktrees/<new>（REQ-WT-003 主工作樹收斂）。
@@ -57,6 +59,11 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
   // 載入分支/worktree 清單（互斥判斷用）。
   useEffect(() => {
     let alive = true;
+    // worktreeSupported 只 gate「送出」（canSubmit），不該 gate 整個表單載入（避免多 git 呼叫拖慢
+    // 分支下拉的 enabled）——獨立 fire、不進阻塞式 Promise.all（藍軍 R2 修正的副作用回收）。
+    void ipc.git.worktreeSupported({ wsId }).then((sup) => {
+      if (alive && 'supported' in sup && !sup.supported) setUnsupported(sup.reason ?? 'not-repo');
+    });
     void (async () => {
       const [b, wt] = await Promise.all([
         ipc.git.branch({ wsId, op: 'list' }),
@@ -147,6 +154,7 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
   const canSubmit =
     !submitting &&
     !loading &&
+    !unsupported &&
     pathValue.trim() !== '' &&
     (kind === 'existing' ? existing !== '' : kind === 'new' ? !!newName && !newNameErr : remoteRef !== '');
 
@@ -155,6 +163,16 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
       <h2 style={{ margin: '0 0 16px', fontSize: 'var(--text-lg)', fontFamily: 'var(--font-display)' }}>
         ⎇ 從 Git 分支建立 worktree
       </h2>
+
+      {unsupported && (
+        <p role="alert" style={{ margin: '0 0 14px', color: 'var(--danger)', fontSize: 'var(--text-sm)', lineHeight: 1.6 }}>
+          {unsupported === 'bare'
+            ? '此 repo 是 bare repository（無工作樹），不支援建立 worktree。'
+            : unsupported === 'submodule'
+              ? '此工作區是 git submodule，不支援在此建立 worktree。'
+              : '此工作區不是有效的 git repository。'}
+        </p>
+      )}
 
       {/* 來源 repo（唯讀顯示，來自發起工作區） */}
       <Field label="來源 repo">

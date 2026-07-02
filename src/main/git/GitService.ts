@@ -33,7 +33,7 @@ import { buildSpawnEnv } from '../security/spawnEnv';
 import { readFile, writeFile } from 'node:fs/promises';
 import { realpathSync, existsSync, rmSync } from 'node:fs';
 import { join as pathJoin, resolve as pathResolve } from 'node:path';
-import { validateWorktreeTarget } from './worktreePath';
+import { validateWorktreeTarget, resolveTargetPath } from './worktreePath';
 
 const GIT_BIN = 'git';
 const MAX_BUFFER = 64 * 1024 * 1024;
@@ -690,6 +690,25 @@ export class GitService {
     return { ok: true };
   }
 
+  /**
+   * REQ-WT-002＋藍軍 R2：判斷此 repo 是否支援建立 worktree。bare repo（無工作樹）與 submodule
+   * 工作區不支援，回 reason 供 UI 事前提示（不讓使用者填完表單才被 git 擋）。
+   */
+  async worktreeSupported(wsId: string): Promise<{ supported: boolean; reason?: 'bare' | 'submodule' | 'not-repo' }> {
+    const cwd = this.path(wsId);
+    if (!cwd) return { supported: false, reason: 'not-repo' };
+    try {
+      const bare = await this.run([...readHardeningArgs(), 'rev-parse', '--is-bare-repository'], { cwd, env: readEnv() });
+      if (bare.stdout.trim() === 'true') return { supported: false, reason: 'bare' };
+      const sup = await this.run([...readHardeningArgs(), 'rev-parse', '--show-superproject-working-tree'], { cwd, env: readEnv() });
+      if (sup.stdout.trim().length > 0) return { supported: false, reason: 'submodule' };
+      return { supported: true };
+    } catch (e) {
+      if (isNotARepo(e)) return { supported: false, reason: 'not-repo' };
+      throw e;
+    }
+  }
+
   /** REQ-WT-009：清除失效登記。 */
   async worktreePrune(wsId: string): Promise<{ pruned: number }> {
     const cwd = this.path(wsId);
@@ -726,6 +745,20 @@ export async function verifyWorktreeLineage(
   mainWsId: string,
 ): Promise<boolean> {
   const [cand, main] = await Promise.all([svc.gitCommonDir(candidateWsId), svc.gitCommonDir(mainWsId)]);
+  if (!cand || !main) return false;
+  return cand === main;
+}
+
+/**
+ * path 版 lineage 驗證（藍軍 Y1：adopt handler 的真守衛，供紅軍 A2 測試直打產線路徑）。
+ * 候選「路徑」自解的 git-common-dir 須等於主 repo 工作區的——git 登記可被惡意 repo 竄改指向外部路徑，故不可只信 list。
+ */
+export async function verifyWorktreeLineageByPath(
+  svc: GitService,
+  candidatePath: string,
+  mainWsId: string,
+): Promise<boolean> {
+  const [cand, main] = await Promise.all([svc.gitCommonDirAt(candidatePath), svc.gitCommonDir(mainWsId)]);
   if (!cand || !main) return false;
   return cand === main;
 }
@@ -852,11 +885,25 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
 
   ipc.handle('git:worktreeAdd', (_e, req: InvokeReq<'git:worktreeAdd'>) =>
     enqueue(qkey(req.wsId), async () => {
-      const target = validateWorktreeTarget(
+      const target0 = validateWorktreeTarget(
         req.path,
         workspaces.list().map((w) => w.path),
       );
-      if (!target.ok) return { error: `目標路徑不合法（${target.reason}）`, code: 'invalid-path' as const };
+      if (!target0.ok) return { error: `目標路徑不合法（${target0.reason}）`, code: 'invalid-path' as const };
+      // REQ-WT-010＋藍軍 R3：目標已存在（含 slug 碰撞）→ 自動加序號 -2/-3…（僅在使用者沒手動改路徑時；
+      // 手動指定的路徑若已存在，交由 git 回 path-exists 讓使用者自決）。以 base+leaf 重算序號候選。
+      let targetAbs = target0.abs;
+      if (existsSync(targetAbs)) {
+        const sep = targetAbs.includes('\\') ? '\\' : '/';
+        const idx = Math.max(targetAbs.lastIndexOf('/'), targetAbs.lastIndexOf('\\'));
+        const base = targetAbs.slice(0, idx);
+        const leaf = targetAbs.slice(idx + 1);
+        targetAbs = resolveTargetPath(base + sep, leaf, existsSync).replace(/\//g, sep === '\\' ? '\\' : '/');
+        const reval = validateWorktreeTarget(targetAbs, workspaces.list().map((w) => w.path));
+        if (!reval.ok) return { error: `目標路徑不合法（${reval.reason}）`, code: 'invalid-path' as const };
+        targetAbs = reval.abs;
+      }
+      const target = { ok: true as const, abs: targetAbs };
       const created = existsSync(target.abs);
       try {
         await svc.worktreeAdd(req.wsId, req.branch, target.abs);
@@ -879,8 +926,15 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
               : undefined;
         return { error: msg, code };
       }
-      // 成功：納管（主工作樹＝發起 repo；已納管→繼承信任）。
-      const res = workspaces.addWorktree({ path: target.abs, mainPath: workspaces.get(req.wsId)?.path ?? req.path });
+      // 成功：納管（藍軍 R1：mainPath 須收斂到「真主工作樹」——從 worktree 工作區發起時，
+      // req.wsId 的 path 是兄弟 worktree 而非主工作樹，寫錯會裂開併發佇列/分組/持久化 lineage）。
+      const listAfter = await svc.worktreeList(req.wsId);
+      const mainPath =
+        listAfter.find((w) => w.isMain)?.path ??
+        workspaces.get(req.wsId)?.worktree?.mainPath ??
+        workspaces.get(req.wsId)?.path ??
+        req.path;
+      const res = workspaces.addWorktree({ path: target.abs, mainPath });
       if ('error' in res) return { error: `已建立 worktree 但納管失敗：${res.error}` };
       return { wsId: res.id };
     }),
@@ -892,6 +946,16 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
         return await svc.worktreePrune(req.wsId);
       } catch (e) {
         return { error: errMsg(e, 'worktree prune 失敗') };
+      }
+    }),
+  );
+
+  ipc.handle('git:worktreeSupported', (_e, req: InvokeReq<'git:worktreeSupported'>) =>
+    enqueue(qkey(req.wsId), async () => {
+      try {
+        return await svc.worktreeSupported(req.wsId);
+      } catch (e) {
+        return { error: errMsg(e, 'worktree 支援檢查失敗') };
       }
     }),
   );
@@ -913,17 +977,15 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
       const list = await svc.worktreeList(req.wsId);
       const inList = list.find((w) => norm(w.path) === norm(req.path));
       if (!inList) return { error: '該路徑不是此 repo 的 worktree', code: 'not-found' as const };
-      const [candCommon, mainCommon] = await Promise.all([
-        svc.gitCommonDirAt(req.path),
-        svc.gitCommonDir(req.wsId),
-      ]);
-      if (!candCommon || !mainCommon || candCommon !== mainCommon) {
+      // Y1：走共用 verifyWorktreeLineageByPath（紅軍 A2 測試守此函式＝守到產線）。
+      if (!(await verifyWorktreeLineageByPath(svc, req.path, req.wsId))) {
         return { error: 'worktree 來源驗證失敗（git-common-dir 不符）', code: 'not-lineage' as const };
       }
       const mainEntry = list.find((w) => w.isMain);
       const mainPath = mainEntry?.path ?? workspaces.get(req.wsId)?.worktree?.mainPath ?? workspaces.get(req.wsId)?.path;
       if (!mainPath) return { error: '找不到主工作樹', code: 'not-found' as const };
-      const res = workspaces.addWorktree({ path: req.path, mainPath, trusted: true });
+      // Y4：真正「繼承」發起工作區的信任狀態，而非硬編 true。
+      const res = workspaces.addWorktree({ path: req.path, mainPath, trusted: workspaces.get(req.wsId)?.trusted === true });
       if ('error' in res) return { error: `納管失敗：${res.error}` };
       return { wsId: res.id };
     }),

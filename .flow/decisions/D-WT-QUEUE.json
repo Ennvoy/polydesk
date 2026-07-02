@@ -1,0 +1,8 @@
+{
+  "id": "D-WT-QUEUE",
+  "question": "",
+  "choice": "連建 4+ worktree 的 git 佇列累積列 Backlog（讀寫佇列分離/SCM 去抖）；REQ-PERF-006 單次建立 p95 達標不阻擋出貨",
+  "why": "ship 期 perf 壓測發現；真人秒級操作不受影響、單次操作延遲達標（462ms<5000）",
+  "by": "auto",
+  "at": "2026-07-02T05:38:41.573Z"
+}

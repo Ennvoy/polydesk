@@ -201,3 +201,4 @@
 - **D-WT-BRANCH-BASE**（第二迭代，AI 建議預設）：新分支預設起點＝主 repo 當前簽出分支、對話框可改（訪談時使用者離席，採建議值入 REQ-WT-002；freeze 前可改）。
 - **D-WT-DIR-CONFLICT**（第二迭代，AI 建議預設）：目標資料夾已存在之處置——有效 worktree→提示直接加入列表、否則自動加序號（入 REQ-WT-010；freeze 前可改）。
 - **D-WT-EXTERNAL-JUMP**（第二迭代，AI 建議預設）：跳轉目標為外部建立、未納管之 worktree 時→提示「加入為工作區並開啟」（入 REQ-WT-005；freeze 前可改）。
+- **D-WT-QUEUE**（第二迭代，ship 期發現，延後）：短時間連續建立 4+ 個 worktree 時，fs:change→SCM 面板 git 重整級聯會累積佔用「每 repo 共用的 git 序列佇列」（所有 worktree＋主工作樹同鍵，REQ-SCM-008），使後續建立對話框的分支載入變慢。真人操作為秒級間隔、佇列會排空，不受影響；REQ-PERF-006 單次建立延遲量測（p95≈462ms）達標。建議之後評估「讀操作（status/branch/list）與寫操作分離佇列」或「SCM 重整去抖」。不阻擋本輪出貨。

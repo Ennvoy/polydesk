@@ -93,11 +93,19 @@ test('REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅
   expect(existsSync(devPath)).toBe(true);
   expect(existsSync(featPath)).toBe(true);
 
+  // 藍軍 Y2：在 dev worktree 開一個真終端機（node-pty 持有該資料夾 handle）→ 驗證移除時
+  // teardown 先於 git remove（Windows 下未先 teardown 會 EBUSY 半殘）。切到 dev、開終端機、再切回主 repo。
+  await page.locator('.pdws-item [aria-label="worktree 工作區"]').first().click();
+  await page.locator('button[aria-label="新增終端機"]').click();
+  await expect(page.locator('.pd-term-view .xterm-screen').first()).toBeVisible({ timeout: 15000 });
+  await page.waitForTimeout(600); // 讓 PTY 真的 spawn 在 dev cwd
+  await page.locator('button[aria-label="開啟工作區 work"]').first().click();
+
   // 開 SCM worktree 分頁
   await page.locator('button[aria-label="原始碼控制"]').click();
   await page.getByRole('tab', { name: 'worktree' }).click();
 
-  // ── dirty 兩段確認 → 連同刪除 dev ──
+  // ── dirty ＋ 跑中終端機程序 → 連同刪除 dev（teardown 釋放 handle 後 git remove 成功）──
   writeFileSync(join(devPath, 'app.txt'), 'dirty-change\n'); // 造成未提交變更
   await page.locator('button[aria-label^="移除 worktree"]').first().click();
   await page.locator('button[aria-label="連同刪除資料夾"]').click();

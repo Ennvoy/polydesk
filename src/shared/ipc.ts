@@ -101,6 +101,11 @@ export interface InvokeChannels {
     res: { ok: true } | { error: string; code?: 'dirty' | 'busy' };
   };
   'git:worktreePrune': { req: { wsId: string }; res: { pruned: number } | { error: string } };
+  /** REQ-WT-002：此 repo 是否支援建 worktree（bare/submodule 不支援，供對話框事前提示）。 */
+  'git:worktreeSupported': {
+    req: { wsId: string };
+    res: { supported: boolean; reason?: 'bare' | 'submodule' | 'not-repo' } | { error: string };
+  };
   /** 納管一個「外部建立、尚未加入 Polydesk」的 worktree 路徑（F-13 跳轉用；先 lineage 驗證隸屬本 repo）。 */
   'git:worktreeAdopt': {
     req: { wsId: string; path: string };
