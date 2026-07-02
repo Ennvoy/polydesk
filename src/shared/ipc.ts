@@ -115,6 +115,8 @@ export interface InvokeChannels {
   'ai:generateCommitMessage': { req: { wsId: string }; res: { message: string } | { error: string } };
   // 總覽面板：claude/codex 的 5h/週用量額度
   'ai:usage': { req: void; res: AiUsage };
+  /** 目前所有（工作區×工具）AI 狀態快照：徽章/計數掛載先拉現況再訂閱 claude:status（重掛不丟燈）。 */
+  'claude:states': { req: void; res: { wsId: string; tool: AiTool; status: ClaudeStatus }[] };
   // 終端機（控制訊息走 invoke；資料流走 stream）
   'pty:create': { req: { wsId: string; shell: ShellKind }; res: { termId: string } };
   'pty:resize': { req: { termId: string; cols: number; rows: number }; res: { ok: true } };

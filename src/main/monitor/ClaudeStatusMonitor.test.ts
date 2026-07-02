@@ -33,8 +33,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
     const mon = new ClaudeStatusMonitor(workspaces, pty, (p) => emitted.push(p), {
       readSessions: async () => sessions,
       readCodex: async () => [],
-      scanClaude: async () => new Set([100]), // 對應 pidsOf 回的 100 → claude process 判定為在跑
-      scanCodex: async () => new Set(),
+      scanPids: async () => ({ claude: new Set([100]), codex: new Set<number>() }), // 對應 pidsOf 回的 100 → claude process 判定為在跑
       watchFactory: noWatch,
     });
     await mon.recompute();
@@ -51,8 +50,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
     const mon = new ClaudeStatusMonitor(workspaces, pty, (p) => emitted.push(p), {
       readSessions: async () => sessions,
       readCodex: async () => [],
-      scanClaude: async () => new Set([100]), // 對應 pidsOf 回的 100 → claude process 判定為在跑
-      scanCodex: async () => new Set(),
+      scanPids: async () => ({ claude: new Set([100]), codex: new Set<number>() }), // 對應 pidsOf 回的 100 → claude process 判定為在跑
       watchFactory: noWatch,
     });
     await mon.recompute();
@@ -71,8 +69,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
     const mon = new ClaudeStatusMonitor(workspaces, pty, (p) => emitted.push(p), {
       readSessions: async () => sessions,
       readCodex: async () => [],
-      scanClaude: async () => new Set([100]), // 對應 pidsOf 回的 100 → claude process 判定為在跑
-      scanCodex: async () => new Set(),
+      scanPids: async () => ({ claude: new Set([100]), codex: new Set<number>() }), // 對應 pidsOf 回的 100 → claude process 判定為在跑
       watchFactory: noWatch,
       notifyAwait: (i) => notes.push(i),
     });
@@ -88,6 +85,77 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
     expect(notes).toHaveLength(1);
   });
 
+  it('process 掃描失敗（回 null）→ 保留上次 pid 快取，不把在跑的打回 idle（防徽章閃爍）', async () => {
+    const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
+    const pty = { pidsOf: (): number[] => [100] };
+    const sessions: SessionStatus[] = [{ sessionId: 's1', cwd: 'C:/p/a', state: 'working', ts: Date.now() }];
+    let scanOk = true;
+    const emitted: StatusEvent[] = [];
+    const mon = new ClaudeStatusMonitor(workspaces, pty, (p) => emitted.push(p), {
+      readSessions: async () => sessions,
+      readCodex: async () => [],
+      scanPids: async () => (scanOk ? { claude: new Set([100]), codex: new Set<number>() } : null), // 之後掃描失敗（wmic 缺 + PowerShell 逾時）
+      processScanMs: 0, // 每次 recompute 都掃（測試用）
+      watchFactory: noWatch,
+    });
+    await mon.recompute();
+    expect(emitted.at(-1)?.status.state).toBe('running');
+    scanOk = false; // 掃描開始失敗
+    await mon.recompute();
+    await mon.recompute();
+    // fail-open：快取保留 → 仍 running，不 emit idle
+    expect(emitted.filter((e) => e.wsId === 'a' && e.status.state === 'idle')).toHaveLength(0);
+    expect(emitted.at(-1)?.status.state).toBe('running');
+  });
+
+  it('snapshot()：回目前所有已知（工作區×工具）狀態（掛載快照用）', async () => {
+    const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
+    const pty = { pidsOf: (): number[] => [100] };
+    const sessions: SessionStatus[] = [{ sessionId: 's1', cwd: 'C:/p/a', state: 'done', ts: Date.now() }];
+    const mon = new ClaudeStatusMonitor(workspaces, pty, () => undefined, {
+      readSessions: async () => sessions,
+      readCodex: async () => [],
+      scanPids: async () => ({ claude: new Set([100]), codex: new Set<number>() }),
+      watchFactory: noWatch,
+    });
+    expect(mon.snapshot()).toEqual([]); // 尚未重算 → 空
+    await mon.recompute();
+    const snap = mon.snapshot();
+    expect(snap).toContainEqual({ wsId: 'a', tool: 'claude', status: { state: 'done' } });
+  });
+
+  it('新 session 但 pid 快取沒它 → 強制補掃一次（加快剛啟動→燈亮），每 session 最多一次', async () => {
+    const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
+    const pty = { pidsOf: (): number[] => [100] };
+    let sessions: SessionStatus[] = [];
+    let scanPids = new Set<number>(); // 一開始掃不到 claude
+    let scanCount = 0;
+    const emitted: StatusEvent[] = [];
+    const mon = new ClaudeStatusMonitor(workspaces, pty, (p) => emitted.push(p), {
+      readSessions: async () => sessions,
+      readCodex: async () => [],
+      scanPids: async () => {
+        scanCount += 1;
+        return { claude: new Set(scanPids), codex: new Set<number>() };
+      },
+      processScanMs: 1e9, // 一般節流關死 → 只有冷啟動第一掃 + 強制補掃會跑
+      forceScanMinMs: 0,
+      watchFactory: noWatch,
+    });
+    await mon.recompute(); // 冷啟動掃 #1（無 session、無 pid）
+    expect(scanCount).toBe(1);
+    // claude 剛啟動：hook 寫了新 session，但 pid 快取還沒它
+    scanPids = new Set([100]);
+    sessions = [{ sessionId: 's-new', cwd: 'C:/p/a', state: 'working', ts: Date.now() }];
+    await mon.recompute(); // 觸發強制補掃 #2
+    expect(scanCount).toBe(2);
+    await new Promise((r) => setTimeout(r, 0)); // 等背景掃描結果觸發的重算
+    expect(emitted.at(-1)?.status.state).toBe('running');
+    const after = scanCount;
+    await mon.recompute(); // 同 session 不再重複強制掃
+    expect(scanCount).toBe(after);
+  });
+
   it('讀 session 失敗 → 視為無 session（有 PTY 的工作區 idle，不崩潰）', async () => {
     const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
     const pty = { pidsOf: (): number[] => [100] };
@@ -97,8 +165,7 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
         throw new Error('讀檔失敗');
       },
       readCodex: async () => [],
-      scanClaude: async () => new Set([100]), // 對應 pidsOf 回的 100 → claude process 判定為在跑
-      scanCodex: async () => new Set(),
+      scanPids: async () => ({ claude: new Set([100]), codex: new Set<number>() }), // 對應 pidsOf 回的 100 → claude process 判定為在跑
       watchFactory: noWatch,
     });
     await expect(mon.recompute()).resolves.toBeUndefined();

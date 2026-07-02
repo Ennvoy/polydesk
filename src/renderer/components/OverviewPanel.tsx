@@ -77,11 +77,24 @@ export function OverviewPanel(): React.JSX.Element | null {
 
   useEffect(() => overviewBus.subscribe(setOpen), []);
 
-  // 常駐訂閱狀態（不論開關；開啟時才顯示）。
-  useEffect(
-    () => ipc.events.claude.status((p) => setStates((prev) => ({ ...prev, [`${p.wsId}::${p.tool}`]: p.status?.state ?? 'idle' }))),
-    [],
-  );
+  // 常駐訂閱狀態（不論開關；開啟時才顯示）。掛載先拉 claude:states 快照補現況（事件優先）。
+  useEffect(() => {
+    let alive = true;
+    const unsub = ipc.events.claude.status((p) => setStates((prev) => ({ ...prev, [`${p.wsId}::${p.tool}`]: p.status?.state ?? 'idle' })));
+    void ipc.claude
+      .states()
+      .then((snap) => {
+        if (!alive) return;
+        const seed: Record<string, ClaudeState> = {};
+        for (const s of snap) seed[`${s.wsId}::${s.tool}`] = s.status?.state ?? 'idle';
+        setStates((prev) => ({ ...seed, ...prev }));
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+      unsub();
+    };
+  }, []);
 
   // 開啟時查用量並每 20 秒自動更新 + Esc 關閉。
   useEffect(() => {

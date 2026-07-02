@@ -5,7 +5,8 @@
 // 紅軍對應（F-1-A6）：
 //   - 只認 props.wsId 的事件（防別的工作區狀態污染本徽章 → 對錯工作區誤接手/誤中斷）。
 //   - useEffect 回傳 unsubscribe（防卸載後 ipcRenderer listener 累積洩漏）。
-//   - 初值預設 'idle'（事件僅變更時推，首次掛載無狀態 → 灰，不崩潰）。
+//   - 初值預設 'idle'；掛載先拉 claude:states 快照補現況（main 只在變更時推事件，
+//     重掛（如切側欄）後沒有快照就會永遠空白），事件比快照新 → 合併時事件優先。
 //   - 脈動動畫尊重 prefers-reduced-motion。
 
 import React, { useEffect, useState } from 'react';
@@ -41,11 +42,25 @@ export function ClaudeStatusBadge({ wsId }: { wsId: string }): React.JSX.Element
 
   useEffect(() => {
     ensureStyle();
+    let alive = true;
     const unsub = ipc.events.claude.status((p) => {
       if (p.wsId !== wsId) return; // 只認本工作區的事件
       setStates((prev) => ({ ...prev, [p.tool]: p.status?.state ?? 'idle' }));
     });
-    return unsub; // 卸載退訂，防 listener 洩漏
+    // 掛載補快照：main 只在變更時推事件，重掛後沒這步會一直空白到下次狀態變化。
+    void ipc.claude
+      .states()
+      .then((snap) => {
+        if (!alive) return;
+        const seed: Partial<Record<AiTool, ClaudeState>> = {};
+        for (const s of snap) if (s.wsId === wsId) seed[s.tool] = s.status?.state ?? 'idle';
+        setStates((prev) => ({ ...seed, ...prev })); // 已到的事件比快照新 → prev 優先
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+      unsub(); // 卸載退訂，防 listener 洩漏
+    };
   }, [wsId]);
 
   // 每工具一個 chip（dot 顏色/脈動＝狀態、文字＝工具名）分開顯示；只顯示非 idle 的工具，都 idle → 不顯示。

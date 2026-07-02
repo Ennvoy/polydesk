@@ -50,6 +50,7 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
   // Claude 狀態監控（讀 Claude Code hooks 狀態檔；emit claude:status；F-1 徽章訂閱）
   const monitor = new ClaudeStatusMonitor(workspaces, pty, undefined, { lifecycle });
   monitor.start();
+  ipcMain.handle('claude:states', () => monitor.snapshot()); // 掛載快照（徽章/計數重掛不丟燈）
 
   registerUpdateHandlers(ipcMain); // update:*（electron-updater）
   registerWindowControls(ipcMain); // window:*（自訂無框標題列 min/max/close）

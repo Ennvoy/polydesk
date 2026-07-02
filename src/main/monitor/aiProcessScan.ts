@@ -6,10 +6,19 @@
 //   - codex TUI：node 跑 codex.js，其 parent 也是 shell（powershell）。codex app-server 也是 node codex.js，
 //     但它的 parent 是 sh/bash（非 Polydesk PTY），比對 pidsOf 時自然被排除，不會誤算。
 //
-// 效能：wmic 查詢 claude(name)~40ms、codex(cmdline like)~120ms（powershell 因啟動開銷 ~1s，故 wmic 為主、fallback）。
-// fail-open：查詢失敗回空集合（呼叫端據此退回舊行為，不會誤把在跑的判成沒跑）。
+// 效能：wmic 查詢 claude(name)~40ms、codex(cmdline like)~120ms；但 Win11 24H2+ 預設已移除 wmic，
+// 屆時走 powershell fallback——單一 spawn＋單次 Win32_Process 列舉同時餵兩個工具（忙碌機器上此列舉
+// 可達 5s+，合併查詢把 WMI 負載砍半），timeout 放寬到 15s。
+// fail-open：查詢失敗/逾時該工具回 null（呼叫端保留上次成功的快取，不把在跑的誤判成沒跑）。
+// 非 Windows 回空集合（平台不支援此偵測）。
 
 import { execFile } from 'node:child_process';
+
+/** 兩工具各自的 parent shell pid 集合；null＝該工具本輪掃描失敗（呼叫端保留舊快取）。 */
+export interface AiShellPids {
+  claude: Set<number> | null;
+  codex: Set<number> | null;
+}
 
 export function parsePids(stdout: string): Set<number> {
   const pids = new Set<number>();
@@ -18,6 +27,20 @@ export function parsePids(stdout: string): Set<number> {
     if (Number.isFinite(n) && n > 0) pids.add(n);
   }
   return pids;
+}
+
+/** 解析合併掃描輸出（每行 `C:<pid>` 或 `X:<pid>`）→ 兩工具 pid 集合。 */
+export function parseTaggedPids(stdout: string): { claude: Set<number>; codex: Set<number> } {
+  const claude = new Set<number>();
+  const codex = new Set<number>();
+  for (const line of stdout.split(/\r?\n/)) {
+    const t = line.trim();
+    const n = Number.parseInt(t.slice(2), 10);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    if (t.startsWith('C:')) claude.add(n);
+    else if (t.startsWith('X:')) codex.add(n);
+  }
+  return { claude, codex };
 }
 
 /** wmic 查符合 where 的 process 的 ParentProcessId 集合；wmic 不存在/失敗回 null 交 fallback。 */
@@ -32,29 +55,39 @@ function viaWmic(where: string): Promise<Set<number> | null> {
   });
 }
 
-/** powershell fallback（~1s，wmic 未來被移除時的後路）。失敗回空集合。 */
-function viaPowershell(cimFilter: string): Promise<Set<number>> {
+/**
+ * powershell fallback（wmic 被移除的機器）：單一 spawn＋單次 Win32_Process 列舉，本地過濾同時得出
+ * claude 與 codex 的 parent pid（輸出 `C:<pid>` / `X:<pid>`）。失敗/逾時回 null（fail-open）。
+ */
+function viaPowershellBoth(): Promise<{ claude: Set<number>; codex: Set<number> } | null> {
   return new Promise((resolve) => {
-    const ps = `Get-CimInstance Win32_Process -Filter "${cimFilter}" -Property ParentProcessId | ForEach-Object { $_.ParentProcessId }`;
+    const ps = [
+      "$all = Get-CimInstance Win32_Process -Property Name,ParentProcessId,CommandLine;",
+      'foreach ($p in $all) {',
+      "  if ($p.Name -eq 'claude.exe') { 'C:' + $p.ParentProcessId }",
+      "  elseif ($p.Name -eq 'node.exe' -and $p.CommandLine -like '*codex.js*') { 'X:' + $p.ParentProcessId }",
+      '}',
+    ].join(' ');
     execFile(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-Command', ps],
-      { timeout: 6000, windowsHide: true },
-      (err, stdout) => resolve(err ? new Set<number>() : parsePids(stdout)),
+      { timeout: 15000, windowsHide: true },
+      (err, stdout) => resolve(err ? null : parseTaggedPids(stdout)),
     );
   });
 }
 
-/** 目前所有 claude.exe 的 parent shell pid 集合（非 Windows 回空＝不 gate、退回舊行為）。 */
-export async function scanClaudeShellPids(): Promise<Set<number>> {
-  if (process.platform !== 'win32') return new Set();
-  const w = await viaWmic("name='claude.exe'");
-  return w ?? viaPowershell("Name='claude.exe'");
-}
-
-/** 目前所有 codex（node 跑 codex.js）的 parent shell pid 集合。app-server 也會被抓但其 parent 非 Polydesk PTY、比對時排除。 */
-export async function scanCodexShellPids(): Promise<Set<number>> {
-  if (process.platform !== 'win32') return new Set();
-  const w = await viaWmic("name='node.exe' and commandline like '%codex.js%'");
-  return w ?? viaPowershell("Name='node.exe' AND CommandLine LIKE '%codex.js%'");
+/**
+ * 一趟掃出 claude + codex 的 parent shell pid 集合：wmic 都成功即用（快路徑，~160ms）；
+ * 否則單一 powershell 合併查詢；再失敗回個別 wmic 成功的部分、失敗的工具為 null。
+ */
+export async function scanAiShellPids(): Promise<AiShellPids> {
+  if (process.platform !== 'win32') return { claude: new Set(), codex: new Set() };
+  const [wc, wx] = await Promise.all([
+    viaWmic("name='claude.exe'"),
+    viaWmic("name='node.exe' and commandline like '%codex.js%'"),
+  ]);
+  if (wc && wx) return { claude: wc, codex: wx };
+  const both = await viaPowershellBoth();
+  return both ?? { claude: wc, codex: wx };
 }
