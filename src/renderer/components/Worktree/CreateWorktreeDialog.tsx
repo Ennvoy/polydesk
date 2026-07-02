@@ -14,6 +14,7 @@ import {
   type BranchSourceKind,
 } from './worktreeModel';
 import { makeCreateAction, friendlyCreateError } from './worktreeSubmit';
+import { mark, measure } from '../../../shared/perf';
 import type { GitWorktree } from '../../../shared/types';
 
 interface Props {
@@ -112,11 +113,17 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
       return;
     }
     setSubmitting(true);
+    mark('worktreeCreate:start'); // REQ-PERF-006：建立（本地分支）< 5s
     try {
       const r = await createRef.current({ wsId, branch: spec.branch, path: pathValue });
       if (r.kind === 'ignored') return; // 併發重複點擊：忽略
       if (r.kind === 'ok') {
         await appStore.loadWorkspaces();
+        try {
+          measure('worktreeCreate', 'worktreeCreate:start');
+        } catch {
+          /* 缺 mark：略過 */
+        }
         appStore.setActiveWorkspace(r.wsId);
         onResult(r.wsId);
         return;

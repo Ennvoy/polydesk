@@ -201,7 +201,7 @@
       conflictZone：src/renderer/components/SourceControl/SourceControlPanel.tsx
       verify：Playwright 兩案例綠——分支分頁入口建立成功；衝突分支點擊→跳到對應 worktree 工作區。
 
-- [ ] **X-5 worktree 效能 budget＋整合回歸**
+- [x] **X-5 worktree 效能 budget＋整合回歸**
       story：REQ-PERF-005（`git worktree list`→分頁渲染 <300ms p95）、REQ-PERF-006（基準 fixture ≤1000 檔建立 <5s p95；不凍結謂詞獨立驗）程式埋點連續 30 次取 p95；全套 vitest＋worktree e2e 回歸。
       reqRefs：REQ-PERF-005/006
       blockedBy：F-11、F-12、F-13

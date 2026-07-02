@@ -586,8 +586,9 @@
         "F-13"
       ],
       "conflictZone": [
-        "e2e/",
-        "tests/perf/"
+        "e2e/worktree-perf.spec.ts",
+        "src/renderer/components/Worktree/WorktreePanel.tsx",
+        "src/renderer/components/Worktree/CreateWorktreeDialog.tsx"
       ],
       "reqRefs": [
         "REQ-PERF-005",

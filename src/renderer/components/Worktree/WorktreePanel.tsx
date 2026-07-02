@@ -10,6 +10,7 @@ import { neutralizeBidi } from '../Dialogs/TrustConfirm';
 import { CreateWorktreeDialog } from './CreateWorktreeDialog';
 import { worktreeBranchDisplay, worktreePathDisplay, canSwitchWorktree } from './worktreeModel';
 import { planRemoval, confirmedDirtyRemoval } from './worktreeRemoveModel';
+import { mark, measure } from '../../../shared/perf';
 import type { GitWorktree } from '../../../shared/types';
 
 export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }): React.JSX.Element {
@@ -19,9 +20,16 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
 
   const reload = useCallback(async () => {
     setError(null);
+    mark('worktreeListLoad:start'); // REQ-PERF-005：worktree list→渲染 < 300ms
     const r = await ipc.git.worktreeList({ wsId });
-    if ('list' in r) setList(r.list);
-    else {
+    if ('list' in r) {
+      setList(r.list);
+      try {
+        measure('worktreeListLoad', 'worktreeListLoad:start');
+      } catch {
+        /* 缺 mark：略過 */
+      }
+    } else {
       setList([]);
       setError(r.error);
     }
