@@ -52,9 +52,12 @@ describe('fileService 編輯操作', () => {
 
   it('deleteEntry：刪檔；不可刪工作區根', async () => {
     writeFileSync(join(ctx.dir, 'del.txt'), 'x');
-    expect(await deleteEntry(ctx.mgr, ctx.wsId, 'del.txt')).toEqual({ ok: true });
+    // 注入真 fs 刪除當 trash：node 測試環境無 Electron shell（預設參數 shell.trashItem 會炸）；
+    // deleteEntry 簽名本就為此留注入點，真回收桶鏈路由 e2e delete-trash.spec 以真 Electron 蓋。
+    const trash = async (abs: string): Promise<void> => rmSync(abs, { recursive: true, force: true });
+    expect(await deleteEntry(ctx.mgr, ctx.wsId, 'del.txt', trash)).toEqual({ ok: true });
     expect(existsSync(join(ctx.dir, 'del.txt'))).toBe(false);
-    expect('error' in (await deleteEntry(ctx.mgr, ctx.wsId, '.'))).toBe(true); // 根不可刪
+    expect('error' in (await deleteEntry(ctx.mgr, ctx.wsId, '.', trash))).toBe(true); // 根不可刪
   });
 
   it('copyEntry：複製（來源保留）；目標已存在則拒', async () => {
