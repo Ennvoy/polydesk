@@ -102,6 +102,41 @@ export function worktreeBranchDisplay(branch: string | null | undefined): string
   return neutralizeBidi(branch);
 }
 
+/**
+ * F-13：解析 git checkout 衝突錯誤，判斷是否「分支已在其他 worktree 簽出」並抽出該 worktree 路徑。
+ * 用於把 DF-5 的純文字提示升級成「跳到該 worktree」動作。錯誤字串可能在地化，故只認關鍵樣式。
+ */
+export function parseWorktreeConflict(errMsg: string): { isConflict: boolean; path?: string } {
+  if (!/already used by worktree|already checked out/i.test(errMsg)) return { isConflict: false };
+  // 抓 at ' 之後到「該行結尾的單引號」——用行尾錨定而非 [^']+，否則路徑含 ' 的使用者名（O'Brien）會被截斷（A2）。
+  const line = errMsg.split(/\r?\n/).find((l) => /at '/.test(l)) ?? errMsg;
+  const path = line.match(/at '(.+)'\s*$/)?.[1] ?? line.match(/at '(.+)'/)?.[1];
+  return { isConflict: true, path };
+}
+
+export type JumpTarget =
+  | { action: 'switch'; wsId: string }
+  | { action: 'adopt' }
+  | { action: 'prune-or-warn' }
+  | { action: 'not-found' };
+
+/**
+ * F-13＋紅軍 A3：依 worktree 清單解出「跳轉」動作。已納管且可切→switch；已納管但 prunable/isMain→
+ * prune-or-warn（不切到已刪/失效目錄）；未納管→adopt（後端再 lineage 驗證）；找不到→not-found。
+ */
+export function resolveJumpTarget(
+  list: { path: string; managedWsId?: string; isMain: boolean; prunable: boolean }[],
+  path: string,
+): JumpTarget {
+  const canon = (p: string): string => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
+  const hit = list.find((w) => canon(w.path) === canon(path));
+  if (!hit) return { action: 'not-found' };
+  if (hit.managedWsId) {
+    return canSwitchWorktree(hit) ? { action: 'switch', wsId: hit.managedWsId } : { action: 'prune-or-warn' };
+  }
+  return hit.prunable ? { action: 'prune-or-warn' } : { action: 'adopt' };
+}
+
 /** 紅軍 A5：worktree 路徑顯示同樣經 neutralizeBidi（RLO 可把 exe.taeic 偽裝成 taeic.exe 誘導誤刪）。 */
 export function worktreePathDisplay(path: string): string {
   return neutralizeBidi(path ?? '');

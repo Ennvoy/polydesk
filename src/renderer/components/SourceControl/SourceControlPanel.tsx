@@ -8,7 +8,11 @@ import { ipc } from '../../ipc/client';
 import { useAppState } from '../../state/appStore';
 import { dialog } from '../Dialogs/host';
 import { editorBus } from '../../state/editorBus';
+import { appStore } from '../../state/appStore';
 import { WorktreePanel } from '../Worktree/WorktreePanel';
+import { CreateWorktreeDialog } from '../Worktree/CreateWorktreeDialog';
+import { parseWorktreeConflict, resolveJumpTarget } from '../Worktree/worktreeModel';
+import { neutralizeBidi } from '../Dialogs/TrustConfirm';
 import type { GitStatus, GitChange, GitLogEntry, AiEngine } from '../../../shared/types';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
 
@@ -296,12 +300,21 @@ export function SourceControlPanel(): React.JSX.Element {
         await ipc.git.branch({ wsId, op: 'checkout', name });
       } catch (e) {
         const emsg = errText(e);
-        // 該分支已在其他 git worktree 簽出：git 禁止同一分支兩處同時簽出（stash 無濟於事）→ 友善告知。
-        if (/already used by worktree|already checked out/i.test(emsg)) {
-          const wt = emsg.match(/worktree at '([^']+)'/)?.[1];
-          setError(
-            `分支「${name}」已在其他 git worktree 簽出${wt ? `（${wt}）` : ''}，無法在此同時簽出。請改到該 worktree 操作，或先在那裡切走此分支。`,
-          );
+        // 該分支已在其他 git worktree 簽出：git 禁止同一分支兩處同時簽出（stash 無濟於事）→
+        // 升級成「跳到該 worktree」動作（F-13/REQ-WT-005；DF-5 純文字提示的後繼）。
+        const conflict = parseWorktreeConflict(emsg);
+        if (conflict.isConflict) {
+          if (conflict.path && wsId) {
+            const jump = await dialog.confirm({
+              title: '分支已在其他 worktree 簽出',
+              body: `分支「${neutralizeBidi(name)}」已在另一個 git worktree（${neutralizeBidi(conflict.path)}）簽出，無法在此同時簽出。要跳到該 worktree 嗎？`,
+              confirmText: '跳到該 worktree',
+              cancelText: '取消',
+            });
+            if (jump) await jumpToWorktree(conflict.path);
+          } else {
+            setError(`分支「${name}」已在其他 git worktree 簽出，無法在此同時簽出。`);
+          }
           return;
         }
         // checkout 失敗：以「結構化 status」判斷是否因工作區有未提交變更被擋——不靠 git 錯誤字串
@@ -327,6 +340,52 @@ export function SourceControlPanel(): React.JSX.Element {
       const r = await ipc.git.branch({ wsId, op: 'list' });
       if ('branches' in r) setBranches({ list: r.branches, current: r.current });
     });
+
+  /**
+   * F-13/REQ-WT-005：跳到某 worktree 路徑。已納管→切換；未納管→lineage 驗證後納管並開啟。
+   */
+  const jumpToWorktree = async (path: string): Promise<void> => {
+    if (!wsId) return;
+    const listRes = await ipc.git.worktreeList({ wsId });
+    const target = 'list' in listRes ? resolveJumpTarget(listRes.list, path) : { action: 'not-found' as const };
+    if (target.action === 'switch') {
+      appStore.setActiveWorkspace(target.wsId); // 已套 canSwitchWorktree（prunable/isMain 不走此路，A3）
+      return;
+    }
+    if (target.action === 'prune-or-warn') {
+      setError('該 worktree 已失效或不可切換（資料夾可能已刪除）。請到 worktree 分頁清理失效登記。');
+      return;
+    }
+    if (target.action === 'not-found') {
+      setError('找不到對應的 worktree。可能已被移除。');
+      return;
+    }
+    // adopt：未納管 → 確認後納管（後端做 lineage 交叉驗證＋路徑圍堵，驗不過回錯）。路徑經 neutralizeBidi 防偽裝（A5）。
+    const ok = await dialog.confirm({
+      title: '加入為工作區並開啟',
+      body: `該 worktree（${neutralizeBidi(path)}）尚未加入 Polydesk。要驗證來源並加入為工作區後開啟嗎？`,
+      confirmText: '加入並開啟',
+      cancelText: '取消',
+    });
+    if (!ok) return;
+    const r = await ipc.git.worktreeAdopt({ wsId, path });
+    if ('wsId' in r) {
+      await appStore.loadWorkspaces();
+      appStore.setActiveWorkspace(r.wsId);
+    } else {
+      setError(
+        r.code === 'not-lineage'
+          ? '無法加入：該 worktree 來源驗證失敗，可能不屬於此 repo。'
+          : neutralizeBidi(r.error),
+      );
+    }
+  };
+
+  /** F-13/入口③：對某分支「在新 worktree 開啟」（預填分支開建立對話框）。 */
+  const openWorktreeForBranch = async (branch: string): Promise<void> => {
+    if (!wsId) return;
+    await dialog.open((close) => <CreateWorktreeDialog wsId={wsId} wsPath={wsPath} presetBranch={branch} onResult={(v) => close(v)} />);
+  };
 
   const onCreateBranch = async (): Promise<void> => {
     if (!wsId) return;
@@ -753,19 +812,30 @@ export function SourceControlPanel(): React.JSX.Element {
             <div className="pd-scm-empty">尚無分支。</div>
           ) : (
             branches.list.map((b) => (
-              <button
-                key={b}
-                className={`pd-row pd-scm-branchrow${b === branches.current ? ' is-active' : ''}`}
-                aria-label={b === branches.current ? `目前分支 ${b}` : `切換到分支 ${b}`}
-                aria-current={b === branches.current}
-                onClick={() => b !== branches.current && void onCheckout(b)}
-                disabled={busy || b === branches.current}
-              >
-                <span className="pd-scm-branchdot" aria-hidden="true">
-                  {b === branches.current ? '●' : '○'}
-                </span>
-                <span className="pd-scm-branchname">{b}</span>
-              </button>
+              <div key={b} className="pd-row pd-scm-branchrow pdwt-branchrow" style={{ alignItems: 'center' }}>
+                <button
+                  className={`pdwt-branch-switch${b === branches.current ? ' is-active' : ''}`}
+                  style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 'var(--space-1)', background: 'transparent', border: 'none', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: b === branches.current ? 'default' : 'pointer', padding: 0 }}
+                  aria-label={b === branches.current ? `目前分支 ${b}` : `切換到分支 ${b}`}
+                  aria-current={b === branches.current}
+                  onClick={() => b !== branches.current && void onCheckout(b)}
+                  disabled={busy || b === branches.current}
+                >
+                  <span className="pd-scm-branchdot" aria-hidden="true">
+                    {b === branches.current ? '●' : '○'}
+                  </span>
+                  <span className="pd-scm-branchname">{b}</span>
+                </button>
+                <button
+                  className="pdws-actbtn"
+                  aria-label={`在新 worktree 開啟 ${b}`}
+                  title="在新 worktree 開啟"
+                  onClick={() => void openWorktreeForBranch(b)}
+                  disabled={busy}
+                >
+                  ⎇＋
+                </button>
+              </div>
             ))
           )}
         </div>

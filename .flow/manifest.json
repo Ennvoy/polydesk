@@ -561,7 +561,14 @@
         "F-12"
       ],
       "conflictZone": [
-        "src/renderer/components/SourceControl/SourceControlPanel.tsx"
+        "src/renderer/components/SourceControl/SourceControlPanel.tsx",
+        "src/renderer/components/Worktree/worktreeModel.ts",
+        "src/renderer/components/Worktree/worktreeConflict.test.ts",
+        "src/renderer/components/Worktree/worktreeJump.test.ts",
+        "src/main/git/GitService.ts",
+        "src/shared/ipc.ts",
+        "src/shared/channels.ts",
+        "e2e/worktree.spec.ts"
       ],
       "reqRefs": [
         "REQ-WT-001",

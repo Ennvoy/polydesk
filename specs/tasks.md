@@ -194,7 +194,7 @@
       conflictZone：src/renderer/components/Worktree/WorktreePanel.tsx、src/renderer/components/SourceControl/SourceControlPanel.tsx、src/main/workspace/workspaceLifecycle.ts
       verify：Playwright REQ-E2E-013 全旅程綠（dirty＋跑中程序→兩段確認→teardown→資料夾成功刪、無 EBUSY 殘留、worktree list 無殘留；另驗僅移出保留資料夾）。
 
-- [ ] **F-13 分支分頁整合（入口①③：「在新 worktree 開啟」＋checkout 衝突跳轉）**
+- [x] **F-13 分支分頁整合（入口①③：「在新 worktree 開啟」＋checkout 衝突跳轉）**
       story：分支分頁每分支 hover「⎇ 在新 worktree 開啟」（預填分支開對話框）；checkout 撞「已被其他 worktree 簽出」→ 錯誤提示升級為「跳到該 worktree」動作（已納管→切換；未納管→lineage 驗證→提示加入並開啟）。
       reqRefs：REQ-WT-001③/005、REQ-E2E-012（入口變體）
       blockedBy：F-11、F-12

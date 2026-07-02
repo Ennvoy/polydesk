@@ -133,3 +133,35 @@ test('REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅
   rmSync(root, { recursive: true, force: true });
   rmSync(userData, { recursive: true, force: true });
 });
+
+test('F-13：分支分頁「在新 worktree 開啟」建立；checkout 衝突→跳到該 worktree', async () => {
+  const { root, repo } = seedRepo();
+  const { app, page, userData } = await launchApp();
+  await stubFolderPicker(app, [repo]);
+  await addWorkspaceViaUI(page);
+  await page.locator('button[aria-label="開啟工作區 work"]').click();
+
+  // 入口③：分支分頁對 dev 點「在新 worktree 開啟」→ 對話框（預填 dev）→ 建立
+  await page.locator('button[aria-label="原始碼控制"]').click();
+  await page.getByRole('tab', { name: '分支' }).click();
+  await page.locator('button[aria-label="在新 worktree 開啟 dev"]').click();
+  await expect(page.locator('input[aria-label="worktree 建立位置"]')).toBeVisible({ timeout: 12000 });
+  await page.locator('button[aria-label="建立並開啟工作區"]').click();
+  await expect(page.locator('.pdws-item [aria-label="worktree 工作區"]')).toBeVisible({ timeout: 15000 });
+  await expect.poll(() => git(repo, 'worktree', 'list').includes('dev'), { timeout: 8000 }).toBe(true);
+
+  // checkout 衝突→跳轉：切回主 repo，於分支分頁點已被 worktree 簽出的 dev
+  await page.locator('button[aria-label="開啟工作區 work"]').first().click();
+  await page.locator('button[aria-label="原始碼控制"]').click();
+  await page.getByRole('tab', { name: '分支' }).click();
+  await page.getByRole('button', { name: '切換到分支 dev' }).click();
+  const jumpBtn = page.locator('button[aria-label="跳到該 worktree"]');
+  await expect(jumpBtn).toBeVisible({ timeout: 8000 });
+  await jumpBtn.click();
+  // 作用工作區切到 dev worktree（rail 上該 worktree 項為 active）
+  await expect(page.locator('.pdws-item.is-active [aria-label="worktree 工作區"]')).toBeVisible({ timeout: 8000 });
+
+  await app.close();
+  rmSync(root, { recursive: true, force: true });
+  rmSync(userData, { recursive: true, force: true });
+});

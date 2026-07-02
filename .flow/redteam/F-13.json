@@ -1,0 +1,16 @@
+{
+  "attacks": [
+    { "id": "A1", "severity": "high", "scenario": "worktreeAdopt lineage 通過即 trusted:true 納管、繞過 TrustConfirm、無路徑圍堵→惡意 repo 竄改 worktree 登記指向外部路徑竊信任升 code execution", "failSafeTest": { "file": "tests/security/worktreeTrust.test.ts", "assert": "verifyWorktreeLineage：候選 git-common-dir≠主工作樹→false（不納管）。adopt handler 另加 validateWorktreeTarget 路徑圍堵（拒工作區內部/系統目錄，見 worktreePathEscape.test.ts）。信任繼承限於 lineage 驗證通過者＝REQ-WT-003 使用者拍板設計" } },
+    { "id": "A2", "severity": "medium", "scenario": "衝突路徑含單引號（O'Brien）被 [^']+ 截斷 → 跳轉錯誤路徑", "failSafeTest": { "file": "src/renderer/components/Worktree/worktreeConflict.test.ts", "assert": "parseWorktreeConflict 行尾錨定：O'Brien 路徑不截斷" } },
+    { "id": "A3", "severity": "medium", "scenario": "跳到已刪/失效(prunable)或主工作樹 worktree→死 cwd 破碎", "failSafeTest": { "file": "src/renderer/components/Worktree/worktreeJump.test.ts", "assert": "resolveJumpTarget：prunable/isMain 不回 switch（回 prune-or-warn）；只有 canSwitchWorktree 真才 switch" } },
+    { "id": "A4", "severity": "medium", "scenario": "openWorktreeForBranch 無 in-flight 鎖雙發 + normKey 不 realpath 讓 8.3/junction 重複納管", "failSafeTest": { "file": "src/main/workspace/WorkspaceManager.worktree.test.ts", "assert": "addWorktree 同路徑 duplicate 已測；8.3/junction realpath 去重＝normKey 全域限制（非 F-13 專屬），列 accepted 待通盤處理；dialog 為 modal，第二次點擊被遮罩擋" } },
+    { "id": "A5", "severity": "medium", "scenario": "跳轉/adopt 確認窗 body 內插 raw path/branch 未中和 bidi→RLO 視覺偽裝誘導誤按", "failSafeTest": { "file": "src/renderer/components/Worktree/worktreeDisplay.test.ts", "assert": "confirm body 全套 neutralizeBidi（path/branch/error）；neutralizeBidi 剝 RLO 已測（worktreePathDisplay）" } }
+  ],
+  "coverage": [
+    { "attackId": "A1", "status": "covered", "testFile": "tests/security/worktreeTrust.test.ts" },
+    { "attackId": "A2", "status": "covered", "testFile": "src/renderer/components/Worktree/worktreeConflict.test.ts" },
+    { "attackId": "A3", "status": "covered", "testFile": "src/renderer/components/Worktree/worktreeJump.test.ts" },
+    { "attackId": "A4", "status": "accepted", "testFile": "src/main/workspace/WorkspaceManager.worktree.test.ts" },
+    { "attackId": "A5", "status": "covered", "testFile": "src/renderer/components/Worktree/worktreeDisplay.test.ts" }
+  ]
+}

@@ -101,6 +101,11 @@ export interface InvokeChannels {
     res: { ok: true } | { error: string; code?: 'dirty' | 'busy' };
   };
   'git:worktreePrune': { req: { wsId: string }; res: { pruned: number } | { error: string } };
+  /** 納管一個「外部建立、尚未加入 Polydesk」的 worktree 路徑（F-13 跳轉用；先 lineage 驗證隸屬本 repo）。 */
+  'git:worktreeAdopt': {
+    req: { wsId: string; path: string };
+    res: { wsId: string } | { error: string; code?: 'not-lineage' | 'not-found' };
+  };
   // AI 智慧 commit message（取 staged diff → 選定引擎產生；只回填訊息框、不自動 commit）
   'ai:generateCommitMessage': { req: { wsId: string }; res: { message: string } | { error: string } };
   // 總覽面板：claude/codex 的 5h/週用量額度

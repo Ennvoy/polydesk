@@ -626,6 +626,11 @@ export class GitService {
   async gitCommonDir(wsId: string): Promise<string | null> {
     const cwd = this.path(wsId);
     if (!cwd) return null;
+    return this.gitCommonDirAt(cwd);
+  }
+
+  /** path 版：直接以任意目錄為 cwd 解 git-common-dir（納管外部 worktree 的 lineage 驗證用）。 */
+  async gitCommonDirAt(cwd: string): Promise<string | null> {
     try {
       const { stdout } = await this.run(
         [...readHardeningArgs(), 'rev-parse', '--path-format=absolute', '--git-common-dir'],
@@ -888,6 +893,39 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
       } catch (e) {
         return { error: errMsg(e, 'worktree prune 失敗') };
       }
+    }),
+  );
+
+  ipc.handle('git:worktreeAdopt', (_e, req: InvokeReq<'git:worktreeAdopt'>) =>
+    enqueue(qkey(req.wsId), async () => {
+      // F-13＋紅軍 A3：納管外部 worktree 前，lineage 交叉驗證——
+      // ① 該 path 須出現在本 repo 的 worktree list（git 認得）
+      // ② 該 path 自解的 git-common-dir 須等於本 repo 的（防惡意 repo 竄改登記指向外部路徑竊信任）。
+      const csource = process.platform === 'win32';
+      const norm = (p: string): string => {
+        const s = p.replace(/[\\/]+/g, '/').replace(/\/+$/, '');
+        return csource ? s.toLowerCase() : s;
+      };
+      // 路徑圍堵（A1 defense-in-depth）：即使 git 認得，也不納管指向既有工作區內部/系統目錄的路徑。
+      const otherPaths = workspaces.list().filter((w) => w.id !== req.wsId).map((w) => w.path);
+      const targetOk = validateWorktreeTarget(req.path, otherPaths);
+      if (!targetOk.ok) return { error: `路徑不合法（${targetOk.reason}）`, code: 'not-found' as const };
+      const list = await svc.worktreeList(req.wsId);
+      const inList = list.find((w) => norm(w.path) === norm(req.path));
+      if (!inList) return { error: '該路徑不是此 repo 的 worktree', code: 'not-found' as const };
+      const [candCommon, mainCommon] = await Promise.all([
+        svc.gitCommonDirAt(req.path),
+        svc.gitCommonDir(req.wsId),
+      ]);
+      if (!candCommon || !mainCommon || candCommon !== mainCommon) {
+        return { error: 'worktree 來源驗證失敗（git-common-dir 不符）', code: 'not-lineage' as const };
+      }
+      const mainEntry = list.find((w) => w.isMain);
+      const mainPath = mainEntry?.path ?? workspaces.get(req.wsId)?.worktree?.mainPath ?? workspaces.get(req.wsId)?.path;
+      if (!mainPath) return { error: '找不到主工作樹', code: 'not-found' as const };
+      const res = workspaces.addWorktree({ path: req.path, mainPath, trusted: true });
+      if ('error' in res) return { error: `納管失敗：${res.error}` };
+      return { wsId: res.id };
     }),
   );
   // git:worktreeRemove 需先 teardown（走 workspaces.remove → lifecycle）：同一 svc/workspaces 即可註冊。
