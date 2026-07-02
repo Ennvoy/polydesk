@@ -1,6 +1,6 @@
 // Polydesk main 入口：單一實例 + 安全基線 BrowserWindow + CSP + 狀態持久化 + perf 埋點。
 
-import { app, BrowserWindow, Menu, session, shell } from 'electron';
+import { app, BrowserWindow, Menu, screen, session, shell } from 'electron';
 import { join } from 'node:path';
 import { StateStore } from './store/StateStore';
 import { registerIpcHandlers, type MainServices } from './ipc/router';
@@ -10,6 +10,7 @@ import { installStatuslineUsage } from './claude/statuslineUsage';
 import { setMainWindow, emit } from './ipc/broadcast';
 import { mark, measure, getMeasures } from '../shared/perf';
 import { APP_NAME, STATE_FILE_NAME } from '../shared/constants';
+import type { WindowBounds } from '../shared/types';
 
 mark('main:start'); // 冷啟動量測起點（REQ-PERF-001）
 // 診斷 seam（X-1 perf harness 經 electronApp.evaluate 讀 main 埋點；非 IPC、不影響執行期）。
@@ -46,8 +47,21 @@ function applyContentSecurityPolicy(): void {
   session.defaultSession.setPermissionCheckHandler(() => false);
 }
 
+/** 上次存的位置若已不在任何螢幕工作區內（外接螢幕拔除/解析度改變），丟掉 x/y 讓 Electron 置中，避免視窗開在螢幕外。 */
+function ensureVisibleBounds(bounds: WindowBounds | undefined): WindowBounds | undefined {
+  if (!bounds || bounds.x === undefined || bounds.y === undefined) return bounds;
+  const { x, y, width, height } = bounds;
+  const visible = screen.getAllDisplays().some((d) => {
+    const a = d.workArea;
+    const ix = Math.min(x + width, a.x + a.width) - Math.max(x, a.x);
+    const iy = Math.min(y + height, a.y + a.height) - Math.max(y, a.y);
+    return ix >= 100 && iy >= 40; // 至少露出一塊抓得到標題列的角落才算「看得見」
+  });
+  return visible ? bounds : { width, height };
+}
+
 function createWindow(): void {
-  const bounds = store.get('windowBounds');
+  const bounds = ensureVisibleBounds(store.get('windowBounds'));
   mainWindow = new BrowserWindow({
     width: bounds?.width ?? 1280,
     height: bounds?.height ?? 800,
