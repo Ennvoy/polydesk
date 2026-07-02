@@ -15,6 +15,7 @@ import { registerCommitMessageHandler } from '../ai/CommitMessageService';
 import { registerUsageHandler } from '../ai/usageService';
 import { registerSearchHandlers } from '../search/SearchService';
 import { registerLspHandlers } from '../lsp/LspManager';
+import { registerClipboardHandlers } from '../clipboard/clipboardHandlers';
 import { ClaudeStatusMonitor } from '../monitor/ClaudeStatusMonitor';
 import { registerUpdateHandlers } from '../update/AutoUpdater';
 import { registerWindowControls } from '../window/windowControls';
@@ -39,6 +40,7 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
   const fileWatcher = registerFsTreeAndWatch(ipcMain, workspaces, lifecycle); // fs:tree + 監看
   registerFileService(ipcMain, workspaces); // fs:read / fs:write
   const pty = registerPtyHandlers(ipcMain, workspaces, lifecycle); // pty:*
+  registerClipboardHandlers(ipcMain); // clipboard:*（終端機貼上/複製，繞過 renderer 剪貼簿權限封鎖）
   registerGitHandlers(ipcMain, workspaces); // git:*
   registerCommitMessageHandler(ipcMain, workspaces, store); // ai:generateCommitMessage（智慧 commit message）
   registerUsageHandler(ipcMain); // ai:usage（總覽用量）

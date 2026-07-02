@@ -24,6 +24,7 @@ import '@xterm/xterm/css/xterm.css';
 import { ipc } from '../../ipc/client';
 import { record } from '../../../shared/perf';
 import { createSecureTerminalOptions, DEFAULT_TERMINAL_THEME } from './secureOptions';
+import { classifyClipboardKey } from './clipboardKeys';
 import type { ITheme } from '@xterm/xterm';
 
 interface Props {
@@ -184,6 +185,55 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
       }
     });
 
+    // 剪貼簿：Ctrl+V / Ctrl+Shift+V / Shift+Insert 貼上、Ctrl+Shift+C 複製選取、右鍵貼上（有選取則複製）。
+    // 讀寫走 clipboard IPC（main 端 electron clipboard）——renderer 的 navigator.clipboard 讀權限被
+    // REQ-SEC-001 封鎖；此為使用者手勢觸發、與 REQ-TERM-008 正交（不掛 clipboard addon、不改 secureOptions）。
+    const pasteFromClipboard = (): void => {
+      void ipc.clipboard
+        .readText()
+        .then(({ text }) => {
+          if (text) term.paste(text); // term.paste 走 bracketed paste，TUI（如 Claude Code）能正確辨識為貼上
+        })
+        .catch(() => undefined);
+    };
+    const copySelection = (): void => {
+      const sel = term.getSelection();
+      if (sel) void ipc.clipboard.writeText({ text: sel }).catch(() => undefined);
+    };
+
+    // 阻斷 xterm 原生 paste 事件：所有貼上一律走下方 IPC 單一路徑，避免「瀏覽器原生 paste + 我們的 IPC」
+    // 各貼一次＝重複貼上（Ctrl+V 於 Electron 即使在 keydown preventDefault，瀏覽器仍可能觸發原生 paste
+    // event）。用 capture 階段掛在 host（xterm 的 paste 監聽在其內的 textarea＝target 階段）→ stopPropagation
+    // 使該事件到不了 xterm，preventDefault 也擋掉「把文字灌進 textarea」的預設行為。
+    const onNativePaste = (e: ClipboardEvent): void => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    host.addEventListener('paste', onNativePaste, true);
+
+    // xterm 預設 Ctrl+V→送控制字元 ^V（不貼上）。攔截判定為貼上/複製的鍵：return false 讓 xterm 不送 ^V，
+    // 改由我們讀剪貼簿後 term.paste（原生 paste 已被上方阻斷，故此處是唯一貼上來源、不重複）。
+    term.attachCustomKeyEventHandler((e) => {
+      const action = classifyClipboardKey(e);
+      if (!action) return true; // 其餘鍵（含純 Ctrl+C＝SIGINT）交還 xterm 原生處理
+      e.preventDefault();
+      if (action === 'paste') pasteFromClipboard();
+      else copySelection();
+      return false;
+    });
+
+    // 右鍵：有選取＝複製並清選取；無選取＝貼上（Windows Terminal 慣例；xterm 原生無右鍵貼上）。
+    const onContextMenu = (e: MouseEvent): void => {
+      e.preventDefault();
+      if (term.hasSelection()) {
+        copySelection();
+        term.clearSelection();
+      } else {
+        pasteFromClipboard();
+      }
+    };
+    host.addEventListener('contextmenu', onContextMenu);
+
     const ro = new ResizeObserver(() => scheduleFit());
     ro.observe(host);
     // 初次 fit（下一幀，確保 DOM 已量得尺寸）。
@@ -195,6 +245,8 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
       if (fitTimer) clearTimeout(fitTimer);
       themeObserver.disconnect();
       ro.disconnect();
+      host.removeEventListener('contextmenu', onContextMenu);
+      host.removeEventListener('paste', onNativePaste, true);
       onDataDisp.dispose();
       offData();
       fitNowRef.current = () => {};

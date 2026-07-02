@@ -49,6 +49,8 @@ export const INVOKE_CHANNELS = [
   'pty:resize',
   'pty:close',
   'pty:list',
+  'clipboard:readText',
+  'clipboard:writeText',
   'search:run',
   'search:cancel',
   'lsp:probe',

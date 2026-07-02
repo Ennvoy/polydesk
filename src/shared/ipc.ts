@@ -120,6 +120,11 @@ export interface InvokeChannels {
   'pty:resize': { req: { termId: string; cols: number; rows: number }; res: { ok: true } };
   'pty:close': { req: { termId: string }; res: { ok: true } };
   'pty:list': { req: { wsId: string }; res: TermState[] };
+  // 剪貼簿（終端機貼上/複製）：讀取走 main 端 electron clipboard——renderer 的 navigator.clipboard
+  // 讀權限被 REQ-SEC-001 封鎖（setPermissionCheckHandler→false）。屬使用者手勢觸發的一次性讀取，
+  // 與 REQ-TERM-008（防 PTY 輸出經 OSC52 挾持剪貼簿）正交、不掛 clipboard addon。
+  'clipboard:readText': { req: void; res: { text: string } };
+  'clipboard:writeText': { req: { text: string }; res: { ok: true } };
   // 搜尋（結果走 event 串流）
   'search:run': {
     req: { wsId: string; query: string; opts: { regex?: boolean; caseSensitive?: boolean; replace?: string } };
