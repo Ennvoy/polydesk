@@ -7,8 +7,9 @@
 // reflow 防禦（修「關編輯器/多終端機並排→窄欄橫幅瀑布 + 反覆重繪閃爍」與所有版面變動來源）：
 //  - ResizeObserver 去抖：吞掉 re-parent/拖曳分隔條/最大化等 reflow 過程的多次中間尺寸，穩定後 fit 一次。
 //  - 反震盪：fit 改變內容會讓捲軸出現/消失、host 量測尺寸回彈 ~17px；ResizeObserver 觸發時若與「上次 fit
-//    的 host 尺寸」差距在捲軸容差內，判定為 fit 自身造成的回彈、不再 fit → 斷開 ResizeObserver↔fit 迴圈
-//    （多終端機並排關編輯器時最明顯，實測一次關閉觸發上百次 fit 在兩尺寸間震盪 = 閃爍）。
+//    的 host 尺寸」差距在捲軸容差內「且提議格數未變」，判定為 fit 自身造成的回彈、不再 fit → 斷開
+//    ResizeObserver↔fit 迴圈（多終端機並排關編輯器時最明顯，實測一次關閉觸發上百次 fit 在兩尺寸間震盪 =
+//    閃爍）。格數變了則照 fit——否則 <24px 的真實拖曳被吞掉、最後一列永遠裁在 status bar 下。
 //  - 極窄寬守衛：reflow 瞬間 cols≈1 一律略過，避免 ConPTY 以 1 欄重繪整個畫面（窄欄橫幅瀑布）。
 //  - skip-unchanged：cols/rows 未變不重複 resize。
 //  - host/view overflow:hidden：裁掉 xterm 任何溢出，不把捲軸傳導到祖先容器（從源頭少一個震盪因子）。
@@ -60,6 +61,7 @@ function readTerminalTheme(el: HTMLElement): ITheme {
 }
 
 export function TerminalView({ termId, visible, exitCode, onRestart }: Props): React.JSX.Element {
+  const viewRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -78,7 +80,11 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
     lastSentRef.current = null; // 新 termId：重置「上次送出尺寸」
     lastFitBoxRef.current = { w: -1, h: -1 }; // 與反震盪基準
 
-    const term = new Terminal(createSecureTerminalOptions(readTerminalTheme(host)));
+    const theme = readTerminalTheme(host);
+    const term = new Terminal(createSecureTerminalOptions(theme));
+    // 容器底色 = xterm 實際背景色：inset 邊距與整數格 fit 的右/下剩餘空間才不會露出
+    // 主題底色形成「留白框」（xterm 只能排整數 cols/rows，剩餘空隙無法靠 fit 消除）。
+    if (viewRef.current && theme.background) viewRef.current.style.background = theme.background;
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
@@ -130,7 +136,15 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
       if (h) {
         const base = lastFitBoxRef.current;
         if (base.w >= 0 && Math.abs(h.offsetWidth - base.w) < RESIZE_TOLERANCE_PX && Math.abs(h.offsetHeight - base.h) < RESIZE_TOLERANCE_PX) {
-          return; // 回彈在容差內 → 視為震盪，忽略
+          // 容差內：僅當「提議格數也沒變」才視為 fit 回彈吞掉。容差(24px) > 一列字高(~16px)，
+          // 一律吞會把 <24px 的真實拖曳也吞掉 → 永不重 fit → 最後一列被裁在 status bar 下。
+          // 格數沒變＝內容不會動＝安全收斂（斷迴圈）；格數變了＝真實變化，照常排程 fit。
+          try {
+            const dims = fitRef.current?.proposeDimensions();
+            if (!dims || (dims.cols === term.cols && dims.rows === term.rows)) return;
+          } catch {
+            return;
+          }
         }
       }
       if (fitTimer) clearTimeout(fitTimer);
@@ -139,6 +153,20 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
         safeFit();
       }, FIT_DEBOUNCE_MS);
     };
+
+    // 主題即時跟隨（dogfood 回報：開著終端機切主題、終端機顏色不變）：ThemeProvider 切
+    // documentElement 的 [data-theme] 時重讀 CSS var → 更新 xterm theme 與容器底色。
+    // 順序刻意「先 xterm 後容器」：容器有跟上＝xterm setter 沒拋錯，兩者不會脫鉤成
+    // 「容器新色、字面舊色」的半套狀態。
+    const applyTheme = (): void => {
+      const h = hostRef.current;
+      if (!h) return;
+      const t = readTerminalTheme(h);
+      term.options.theme = t;
+      if (viewRef.current && t.background) viewRef.current.style.background = t.background;
+    };
+    const themeObserver = new MutationObserver(applyTheme);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
     // 輸入：term → main（高頻；標記時間戳供延遲量測）。
     const onDataDisp = term.onData((d) => {
@@ -165,6 +193,7 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
       disposed = true;
       cancelAnimationFrame(raf);
       if (fitTimer) clearTimeout(fitTimer);
+      themeObserver.disconnect();
       ro.disconnect();
       onDataDisp.dispose();
       offData();
@@ -187,13 +216,16 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
 
   return (
     <div
+      ref={viewRef}
       className="pd-term-view"
       style={{ position: 'absolute', inset: 0, overflow: 'hidden', display: visible ? 'block' : 'none' }}
       role="group"
       aria-label="終端機輸出"
       aria-hidden={!visible}
     >
-      <div ref={hostRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden', padding: 'var(--space-2)' }} />
+      {/* 邊距用 inset 而非 padding：Chromium 在 border-box 下 getComputedStyle().height 回傳含 padding
+          的值，FitAddon 以此量可用高度會把 padding 也算進去 → 多排一列、最後一列被裁掉。 */}
+      <div ref={hostRef} style={{ position: 'absolute', inset: 'var(--space-2)', overflow: 'hidden' }} />
       {exitCode !== null && (
         <div
           className="pd-term-exit"
