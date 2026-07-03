@@ -1,10 +1,20 @@
 // 終端機面板（REQ-TERM-001~006、REQ-WS-005）：每工作區多終端機，多開時「同時並排/上下顯示、可拖曳調整」
-// （react-resizable-panels），取代分頁切換。背景續跑：所有終端機實例保持掛載（display 切換），切換工作區
-// 不 dispose，故 pty 程序與 scrollback 皆保留。
+// （react-resizable-panels），取代分頁切換。背景續跑：所有終端機實例保持掛載，切換工作區不 dispose，故 pty
+// 程序與 scrollback 皆保留。
+//
+// 三項互動（本次新增）：
+//  1) 拖曳排序：迷你標頭 draggable，drop 到另一標頭＝插到它前面（只在同工作區內重排）。
+//  2) 顯示/隱藏：工具列複選清單勾選要顯示哪些終端機；未勾＝隱藏但「不關閉」。實作關鍵——隱藏的終端機
+//     其 TerminalView 仍留在背景「掛載」（用 portal 掛到穩定 host 節點、host 移進背景 stash），故 pty 輸出
+//     照樣被接住寫進 xterm buffer（main 端是 live 廣播、無重播緩衝，一旦卸載該段輸出即永久掉失，見 PtyManager）。
+//     顯示時把同一個 host 節點「原地搬回」對應的並排 slot（appendChild 搬 DOM 節點不觸發 React 重掛載＝
+//     xterm/PTY 原封存活）。
+//  3) 自訂命名：迷你標頭雙擊改名；未命名＝自動編號（同 shell ≥2 才附序號，如「PowerShell 1／2」）。
 //
 // 註冊：模組頂層 registerPanel(SLOT.terminal, TerminalPanel)（features.ts side-effect import）。
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { ipc } from '../../ipc/client';
 import { useAppState } from '../../state/appStore';
@@ -20,6 +30,10 @@ interface TermEntry {
   shell: ShellKind;
   alive: boolean;
   exitCode: number | null;
+  /** 自訂名稱（undefined／空＝改用自動編號）。 */
+  name?: string;
+  /** 隱藏但不關閉（背景續跑、輸出續接）。 */
+  hidden?: boolean;
 }
 
 const SHELL_LABEL: Record<ShellKind, string> = {
@@ -33,6 +47,25 @@ const SHELLS: ShellKind[] = ['powershell', 'cmd', 'pwsh', 'gitbash', 'wsl'];
 
 type SplitDir = 'horizontal' | 'vertical';
 
+/**
+ * 計算某工作區內每個終端機的顯示名稱：自訂名優先，否則 shell 名；同 shell 有 ≥2 個時附 1-based 序號
+ * （依當前順序，故拖曳排序後序號跟著視覺順序走）。
+ */
+function computeLabels(list: TermEntry[]): Map<string, string> {
+  const total = new Map<ShellKind, number>();
+  for (const t of list) total.set(t.shell, (total.get(t.shell) ?? 0) + 1);
+  const seen = new Map<ShellKind, number>();
+  const out = new Map<string, string>();
+  for (const t of list) {
+    const n = (seen.get(t.shell) ?? 0) + 1;
+    seen.set(t.shell, n);
+    const custom = t.name?.trim();
+    if (custom) out.set(t.termId, custom);
+    else out.set(t.termId, (total.get(t.shell) ?? 0) > 1 ? `${SHELL_LABEL[t.shell]} ${n}` : SHELL_LABEL[t.shell]);
+  }
+  return out;
+}
+
 export function TerminalPanel(): React.JSX.Element {
   const { activeWorkspaceId, workspaces } = useAppState();
   const activeWs = workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
@@ -43,6 +76,31 @@ export function TerminalPanel(): React.JSX.Element {
   const listedWs = useRef<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
 
+  // 互動暫態
+  const [showHideOpen, setShowHideOpen] = useState(false); // 顯示/隱藏複選清單開合
+  const [editingId, setEditingId] = useState<string | null>(null); // 正在改名的 termId
+  const [dragId, setDragId] = useState<string | null>(null); // 拖曳中的 termId
+  const [dropId, setDropId] = useState<string | null>(null); // 目前 hover 的 drop 目標 termId
+
+  // portal 穩定 host 節點（每 termId 一個；xterm 掛在此，搬 DOM 位置不重掛載）。
+  const hostRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  // 各可見終端機的並排 slot（pane-body）DOM，host 顯示時搬進去。
+  const slotRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  // 背景 stash：隱藏 / 非 active 工作區的 host 停在此（display:none，仍掛載＝輸出續接）。
+  const stashRef = useRef<HTMLDivElement | null>(null);
+  // 顯示/隱藏 popover 容器（點外面關閉用）。
+  const showHideRef = useRef<HTMLDivElement | null>(null);
+
+  const getHost = useCallback((termId: string): HTMLDivElement => {
+    let h = hostRefs.current.get(termId);
+    if (!h) {
+      h = document.createElement('div');
+      h.className = 'pd-term-host';
+      hostRefs.current.set(termId, h);
+    }
+    return h;
+  }, []);
+
   // 訂閱 pty:exit（一次）：標記結束 + exitCode，供 TerminalView 顯示重啟。
   useEffect(() => {
     const off = ipc.events.pty.exit(({ termId, exitCode }) => {
@@ -52,9 +110,7 @@ export function TerminalPanel(): React.JSX.Element {
   }, []);
 
   // 切到某工作區：首次載入其既有終端機（背景續跑時切回可見既有 pty）。
-  // 冪等防 StrictMode（dev 對 effect setup→cleanup→setup 雙呼）：listedWs.add 移到列舉「成功後」才記
-  // （否則首呼被 cleanup「取消」、第二呼又因 has(wsId) 早退而永遠不 list → 分頁接不回）；merge 以 termId
-  // 去重，雙呼重複套用安全。setVisible 顯隱方案下本面板不再因 toggle 卸載，此 race 僅見於 app 首掛載/切工作區。
+  // 冪等防 StrictMode（listedWs.add 移到列舉成功後才記；merge 以 termId 去重）。
   useEffect(() => {
     const wsId = activeWorkspaceId;
     if (!wsId || listedWs.current.has(wsId)) return;
@@ -84,6 +140,16 @@ export function TerminalPanel(): React.JSX.Element {
     if (activeWs) setNewShell(activeWs.defaultShell);
   }, [activeWs?.id, activeWs?.defaultShell]);
 
+  // 顯示/隱藏 popover：點外面關閉。
+  useEffect(() => {
+    if (!showHideOpen) return;
+    const onDown = (e: MouseEvent): void => {
+      if (showHideRef.current && !showHideRef.current.contains(e.target as Node)) setShowHideOpen(false);
+    };
+    document.addEventListener('mousedown', onDown, true);
+    return () => document.removeEventListener('mousedown', onDown, true);
+  }, [showHideOpen]);
+
   const createTerm = useCallback(async (wsId: string, shell: ShellKind): Promise<void> => {
     setBusy(true);
     try {
@@ -101,15 +167,67 @@ export function TerminalPanel(): React.JSX.Element {
     setTerms((prev) => prev.filter((t) => t.termId !== entry.termId));
   }, []);
 
-  // 崩潰重啟（REQ-TERM-006）：以同 shell 同工作區重建，取代該分頁的 termId。
+  // 崩潰重啟（REQ-TERM-006）：以同 shell 同工作區重建，取代該分頁的 termId（沿用名稱/隱藏狀態）。
   const restartTerm = useCallback(async (entry: TermEntry): Promise<void> => {
     try {
       const { termId } = await ipc.pty.create({ wsId: entry.wsId, shell: entry.shell });
-      setTerms((prev) => prev.map((t) => (t.termId === entry.termId ? { ...t, termId, alive: true, exitCode: null } : t)));
+      setTerms((prev) =>
+        prev.map((t) => (t.termId === entry.termId ? { ...t, termId, alive: true, exitCode: null } : t)),
+      );
     } catch {
       /* 重啟失敗：維持結束狀態 */
     }
   }, []);
+
+  const commitRename = useCallback((termId: string, raw: string): void => {
+    const name = raw.trim();
+    setTerms((prev) => prev.map((t) => (t.termId === termId ? { ...t, name: name || undefined } : t)));
+    setEditingId(null);
+  }, []);
+
+  const toggleHidden = useCallback((termId: string): void => {
+    setTerms((prev) => prev.map((t) => (t.termId === termId ? { ...t, hidden: !t.hidden } : t)));
+  }, []);
+
+  const showAll = useCallback((wsId: string): void => {
+    setTerms((prev) => prev.map((t) => (t.wsId === wsId ? { ...t, hidden: false } : t)));
+  }, []);
+
+  // 拖曳排序：把 fromId 移到 toId 前面（限同工作區）。
+  const moveTerm = useCallback((fromId: string, toId: string): void => {
+    if (fromId === toId) return;
+    setTerms((prev) => {
+      const arr = [...prev];
+      const from = arr.findIndex((t) => t.termId === fromId);
+      const to = arr.findIndex((t) => t.termId === toId);
+      if (from < 0 || to < 0 || arr[from].wsId !== arr[to].wsId) return prev;
+      const [moved] = arr.splice(from, 1);
+      const insertAt = arr.findIndex((t) => t.termId === toId);
+      arr.splice(insertAt, 0, moved);
+      return arr;
+    });
+  }, []);
+
+  const activeWsId = activeWs?.id ?? null;
+
+  // 依 active 工作區把 host 節點放進「對應 slot（可見）」或「stash（隱藏／非 active）」；並回收已關閉終端機的 host。
+  // 搬 DOM 節點（appendChild）不會讓 portal 內容重掛載（container 身分不變）＝xterm/PTY 原地存活。
+  useLayoutEffect(() => {
+    const stash = stashRef.current;
+    const liveIds = new Set(terms.map((t) => t.termId));
+    for (const t of terms) {
+      const host = getHost(t.termId);
+      const visible = t.wsId === activeWsId && !t.hidden;
+      const target = visible ? slotRefs.current.get(t.termId) ?? stash : stash;
+      if (target && host.parentNode !== target) target.appendChild(host);
+    }
+    for (const [id, host] of hostRefs.current) {
+      if (!liveIds.has(id)) {
+        host.parentNode?.removeChild(host);
+        hostRefs.current.delete(id);
+      }
+    }
+  });
 
   if (!activeWs) {
     return (
@@ -119,25 +237,22 @@ export function TerminalPanel(): React.JSX.Element {
     );
   }
 
-  // 以 wsId 分組（所有工作區的終端機皆保持掛載；只顯示 active 工作區那組 → 背景續跑 + 保留 scrollback）。
-  const byWs = new Map<string, TermEntry[]>();
-  for (const t of terms) {
-    const arr = byWs.get(t.wsId);
-    if (arr) arr.push(t);
-    else byWs.set(t.wsId, [t]);
-  }
-  const activeCount = (byWs.get(activeWs.id) ?? []).length;
+  const activeTerms = terms.filter((t) => t.wsId === activeWs.id);
+  const visibleTerms = activeTerms.filter((t) => !t.hidden);
+  const labels = computeLabels(activeTerms);
+  const hiddenCount = activeTerms.length - visibleTerms.length;
+  const canSplitToggle = visibleTerms.length >= 2;
 
   return (
     <div className="pd-term-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      {/* 工具列：新增 / shell 切換 / 並排⇄上下 方向切換 */}
+      {/* 工具列：N 個並排 / 並排⇄上下 / 顯示-隱藏 / shell 切換 / 新增 / 隱藏面板 */}
       <div
         className="pd-panel-header"
         style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', textTransform: 'none' }}
       >
         {/* dockview group 標頭已顯示「終端機」分頁 → 自帶標頭只在多開時補「N 個並排」，避免重複標題。 */}
         <span style={{ color: 'var(--meta)', fontSize: 'var(--text-xs)' }}>
-          {activeCount > 1 ? `${activeCount} 個並排` : ''}
+          {visibleTerms.length > 1 ? `${visibleTerms.length} 個並排` : ''}
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-1)', flexShrink: 0 }}>
           <button
@@ -145,12 +260,57 @@ export function TerminalPanel(): React.JSX.Element {
             aria-label={dir === 'horizontal' ? '切換為上下排列' : '切換為並排排列'}
             title={dir === 'horizontal' ? '目前並排（左右）— 點切上下' : '目前上下 — 點切並排'}
             aria-pressed={dir === 'vertical'}
-            disabled={activeCount < 2}
+            disabled={!canSplitToggle}
             onClick={() => setDir((d) => (d === 'horizontal' ? 'vertical' : 'horizontal'))}
             style={{ padding: '2px 8px' }}
           >
             {dir === 'horizontal' ? '⇄ 並排' : '⇅ 上下'}
           </button>
+
+          {/* 顯示/隱藏：勾選要顯示哪些終端機（未勾＝隱藏但不關閉、背景續跑）。 */}
+          <div ref={showHideRef} className="pd-term-showhide">
+            <button
+              className={`pd-btn${hiddenCount > 0 ? ' pd-btn-primary' : ''}`}
+              aria-label="顯示或隱藏終端機"
+              aria-haspopup="true"
+              aria-expanded={showHideOpen}
+              title="選擇要顯示哪些終端機（未勾選＝隱藏但不關閉，背景續跑）"
+              disabled={activeTerms.length < 1}
+              onClick={() => setShowHideOpen((o) => !o)}
+              style={{ padding: '2px 8px' }}
+            >
+              ▤ 顯示/隱藏{hiddenCount > 0 ? ` · ${hiddenCount} 隱藏` : ''}
+            </button>
+            {showHideOpen && (
+              <div className="pd-term-showhide-menu">
+                {activeTerms.length === 0 ? (
+                  <div className="pd-term-showhide-empty">尚無終端機</div>
+                ) : (
+                  <>
+                    {activeTerms.map((t) => (
+                      <label key={t.termId} className="pd-term-showhide-item">
+                        <input type="checkbox" checked={!t.hidden} onChange={() => toggleHidden(t.termId)} />
+                        <span
+                          aria-hidden
+                          className="pd-term-dot"
+                          style={{ background: t.alive ? 'var(--success)' : 'var(--meta)' }}
+                        />
+                        <span className="pd-term-showhide-label">{labels.get(t.termId)}</span>
+                      </label>
+                    ))}
+                    {hiddenCount > 0 && (
+                      <div className="pd-term-showhide-actions">
+                        <button className="pd-btn" onClick={() => showAll(activeWs.id)} style={{ padding: '2px 8px' }}>
+                          全部顯示
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           <select
             className="pd-input"
             aria-label="新終端機 shell 類型"
@@ -187,38 +347,90 @@ export function TerminalPanel(): React.JSX.Element {
         </div>
       </div>
 
-      {/* 各工作區一個 PanelGroup（皆掛載、僅 active 那組可見）；多開＝同時並排/上下、可拖曳調整。 */}
+      {/* 並排本體：只放 active 工作區的「可見」終端機為 Panel（各 pane-body 是 host 的 slot）。 */}
       <div className="pd-term-body" style={{ position: 'relative', flex: 1, minHeight: 0 }}>
-        {[...byWs.entries()].map(([wsId, list]) => {
-          const isActive = wsId === activeWs.id;
-          return (
-            <div
-              key={wsId}
-              style={{ position: 'absolute', inset: 0, display: isActive ? 'block' : 'none' }}
-              aria-hidden={!isActive}
-            >
-              <Group orientation={dir} style={{ width: '100%', height: '100%' }}>
-                {list.map((t, i) => (
-                  <React.Fragment key={t.termId}>
-                    {i > 0 && (
-                      <Separator
-                        className={dir === 'horizontal' ? 'pd-term-handle-h' : 'pd-term-handle-v'}
-                        aria-label="拖曳調整終端機大小"
-                      />
-                    )}
-                    <Panel id={t.termId} minSize="8%" className="pd-term-pane">
-                      <div className="pd-term-pane-head">
+        {visibleTerms.length > 0 ? (
+          <div style={{ position: 'absolute', inset: 0 }}>
+            <Group orientation={dir} style={{ width: '100%', height: '100%' }}>
+              {visibleTerms.map((t, i) => (
+                <React.Fragment key={t.termId}>
+                  {i > 0 && (
+                    <Separator
+                      className={dir === 'horizontal' ? 'pd-term-handle-h' : 'pd-term-handle-v'}
+                      aria-label="拖曳調整終端機大小"
+                    />
+                  )}
+                  <Panel id={t.termId} minSize="8%" style={{ height: '100%' }}>
+                    <div className="pd-term-pane">
+                      <div
+                        className={`pd-term-pane-head${dropId === t.termId && dragId ? ' pd-term-pane-head--drop' : ''}`}
+                        draggable={editingId !== t.termId}
+                        onDragStart={(e) => {
+                          setDragId(t.termId);
+                          e.dataTransfer.effectAllowed = 'move';
+                          try {
+                            e.dataTransfer.setData('text/plain', t.termId);
+                          } catch {
+                            /* 某些環境 setData 受限：dragId state 已足夠 */
+                          }
+                        }}
+                        onDragOver={(e) => {
+                          if (dragId && dragId !== t.termId) {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                            if (dropId !== t.termId) setDropId(t.termId);
+                          }
+                        }}
+                        onDragLeave={() => {
+                          if (dropId === t.termId) setDropId(null);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          // 來源優先取 React state；state 尚未 flush 時退回 dataTransfer（更穩、e2e 派發也吃得到）。
+                          const from = dragId ?? e.dataTransfer.getData('text/plain');
+                          if (from) moveTerm(from, t.termId);
+                          setDragId(null);
+                          setDropId(null);
+                        }}
+                        onDragEnd={() => {
+                          setDragId(null);
+                          setDropId(null);
+                        }}
+                        title="拖曳可調整順序；雙擊名稱可重新命名"
+                      >
                         <span
                           aria-hidden
                           className="pd-term-dot"
                           style={{ background: t.alive ? 'var(--success)' : 'var(--meta)' }}
                         />
-                        <span className="pd-term-pane-label">{SHELL_LABEL[t.shell]}</span>
+                        {editingId === t.termId ? (
+                          <input
+                            className="pd-term-pane-rename"
+                            defaultValue={t.name ?? labels.get(t.termId) ?? SHELL_LABEL[t.shell]}
+                            autoFocus
+                            aria-label="重新命名終端機"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitRename(t.termId, (e.target as HTMLInputElement).value);
+                              else if (e.key === 'Escape') setEditingId(null);
+                            }}
+                            onBlur={(e) => commitRename(t.termId, e.target.value)}
+                          />
+                        ) : (
+                          <span
+                            className="pd-term-pane-label"
+                            title={`${labels.get(t.termId)}（雙擊改名）`}
+                            onDoubleClick={() => setEditingId(t.termId)}
+                          >
+                            {labels.get(t.termId)}
+                          </span>
+                        )}
                         <span
                           className="pd-term-tab-close"
                           role="presentation"
                           aria-hidden="true"
                           title="關閉終端機"
+                          draggable={false}
                           onMouseDown={(e) => {
                             e.stopPropagation();
                             e.preventDefault();
@@ -228,22 +440,45 @@ export function TerminalPanel(): React.JSX.Element {
                           ×
                         </span>
                       </div>
-                      <div className="pd-term-pane-body">
-                        <TerminalView termId={t.termId} visible={isActive} exitCode={t.exitCode} onRestart={() => void restartTerm(t)} />
-                      </div>
-                    </Panel>
-                  </React.Fragment>
-                ))}
-              </Group>
-            </div>
-          );
-        })}
-        {activeCount === 0 && (
+                      {/* pane-body＝host 的 slot（host 由 useLayoutEffect 搬入；本身留空）。 */}
+                      <div
+                        className="pd-term-pane-body"
+                        ref={(el) => {
+                          if (el) slotRefs.current.set(t.termId, el);
+                          else slotRefs.current.delete(t.termId);
+                        }}
+                      />
+                    </div>
+                  </Panel>
+                </React.Fragment>
+              ))}
+            </Group>
+          </div>
+        ) : (
           <div style={emptyStyle} role="status">
-            尚無終端機 — 按右上「＋」開啟（{SHELL_LABEL[newShell]}）
+            {activeTerms.length === 0
+              ? `尚無終端機 — 按右上「＋」開啟（${SHELL_LABEL[newShell]}）`
+              : '全部終端機已隱藏（仍在背景執行）— 從「顯示/隱藏」勾選以顯示'}
           </div>
         )}
       </div>
+
+      {/* 背景 stash：隱藏／非 active 工作區的 host 停在此（display:none，仍掛載＝輸出續接）。 */}
+      <div className="pd-term-stash" ref={stashRef} aria-hidden />
+
+      {/* 每個終端機一個 portal → 掛到其穩定 host 節點（host 之後由 useLayoutEffect 搬進 slot 或 stash）。 */}
+      {terms.map((t) =>
+        createPortal(
+          <TerminalView
+            termId={t.termId}
+            visible={t.wsId === activeWs.id && !t.hidden}
+            exitCode={t.exitCode}
+            onRestart={() => void restartTerm(t)}
+          />,
+          getHost(t.termId),
+          t.termId,
+        ),
+      )}
     </div>
   );
 }
