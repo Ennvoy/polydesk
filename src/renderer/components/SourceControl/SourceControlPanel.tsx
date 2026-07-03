@@ -121,7 +121,12 @@ export function SourceControlPanel(): React.JSX.Element {
   const [cFiles, setCFiles] = useState<Record<string, { path: string; status: string }[]>>({}); // commit→檔案清單快取
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null); // hover 延遲關閉計時器（滑入卡片可取消）
 
+  // 世代號取消 stale 載入：大 repo 的 git status/changes 各要 ~1.5-2s 且 git 走 serial queue。快速連切
+  // 工作區時，若不取消，切到最新工作區還得等前面每個 stale 載入跑完、且 stale 結果會回頭覆蓋當前 →
+  // 面板卡在 loading。每次 refresh 遞增 gen，await 回來後 gen 不是最新就丟棄（不 setState、不搶 loading）。
+  const loadGen = useRef(0);
   const refresh = useCallback(async (): Promise<void> => {
+    const gen = ++loadGen.current;
     if (!wsId) {
       setStatus(null);
       setChanges([]);
@@ -131,19 +136,24 @@ export function SourceControlPanel(): React.JSX.Element {
     setError(null);
     try {
       const st = await ipc.git.status({ wsId });
+      if (gen !== loadGen.current) return; // 期間又切了工作區：丟棄 stale
       setStatus(st);
-      setChanges(st.isRepo ? await ipc.git.changes({ wsId }) : []);
+      const ch = st.isRepo ? await ipc.git.changes({ wsId }) : [];
+      if (gen !== loadGen.current) return;
+      setChanges(ch);
     } catch (e) {
-      setError(errText(e));
+      if (gen === loadGen.current) setError(errText(e));
     } finally {
-      setLoading(false);
+      if (gen === loadGen.current) setLoading(false);
     }
   }, [wsId]);
 
-  // 工作區切換 → 回變更分頁並刷新。
+  // 工作區切換 → 回變更分頁並刷新。防抖 120ms：快速連切只載入「最終停留」的工作區，中間掠過的
+  // 不發 git 載入 → 不堆積 serial queue（實測連切 5 個大 repo 的 git status 會累積到 ~10s）。
   useEffect(() => {
     setTab('changes');
-    void refresh();
+    const t = setTimeout(() => void refresh(), 120);
+    return () => clearTimeout(t);
   }, [refresh]);
 
   // 掛載時讀回持久化的「智慧產生引擎」設定。

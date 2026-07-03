@@ -177,6 +177,9 @@ export function Explorer(): React.JSX.Element {
   dirsRef.current = dirs;
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  // 追最新 wsId：loadDir 完成後比對，切走工作區就丟棄 stale tree（防舊 ws 的樹回頭覆蓋新 ws → 顯示錯 repo）。
+  const wsIdRef = useRef(wsId);
+  wsIdRef.current = wsId;
   const catcherRef = useRef<HTMLDivElement>(null);
 
   const loadDir = useCallback(
@@ -185,9 +188,10 @@ export function Explorer(): React.JSX.Element {
       setDirs((p) => ({ ...p, [rel]: { status: 'loading', entries: p[rel]?.entries } }));
       try {
         const res = await ipc.fs.tree({ wsId, dir: rel === '' ? '.' : rel });
+        if (wsIdRef.current !== wsId) return; // 切走了工作區：丟棄 stale tree
         setDirs((p) => ({ ...p, [rel]: { status: 'loaded', entries: res.entries } }));
       } catch {
-        setDirs((p) => ({ ...p, [rel]: { status: 'error', entries: p[rel]?.entries } }));
+        if (wsIdRef.current === wsId) setDirs((p) => ({ ...p, [rel]: { status: 'error', entries: p[rel]?.entries } }));
       }
     },
     [wsId],
