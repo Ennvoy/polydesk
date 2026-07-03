@@ -68,6 +68,7 @@
 - **REQ-TERM-006**（Unwanted｜shell 崩潰）：若 shell 程序異常結束，系統應顯示 exit code、提供一鍵重啟，且不影響其他終端機與工作區。
 - **REQ-TERM-007**（Unwanted｜關閉時有跑中程序）：若關閉某工作區或整個 app 時該工作區仍有執行中程序，系統應彈窗警告、列出執行中程序、要求確認才關閉；無則靜默關閉。
 - **REQ-TERM-008**（終端機安全硬化）：系統應對終端機輸出做 escape 硬化——OSC 52 剪貼簿「寫入」開放但設大小上限且序列不進 renderer（2026-07-02 使用者拍板放寬 D-OSC52-WRITE，供 Claude Code 等 TUI 選取複製，對齊 Windows Terminal 行為）、「讀取/查詢」一律封鎖不回應（防剪貼簿外洩）、淨化 OSC 8 連結、限制視窗標題 escape、終端機回應不得回灌成輸入。
+- **REQ-TERM-009**（keycap 編號顯示正規化）：系統應在終端機顯示層移除 keycap 組合序列的 combining enclosing keycap（U+20E3，含其前導 U+FE0F），使項目編號 `1️⃣2️⃣…`（基底＋U+FE0F＋U+20E3 三個 code point）在等寬字型鏈（無 emoji 合成、Consolas 自帶 U+20E3 圍框 glyph）下不再顯示成「數字旁多一空框、疊到相鄰字」，退化為純數字（`1 2 …`）呈現；不得誤傷其他含 U+FE0F 的 emoji（如 ❤️），且處理不得受 PTY 資料塊切斷影響。
 
 ### 4.4 編輯器（REQ-EDIT）
 - **REQ-EDIT-001**：系統應內嵌 Monaco，支援開檔、編輯、存檔、**其支援語言集的語法高亮（未支援者回退純文字）**、多游標、檔內找/取代、minimap、括號配對。

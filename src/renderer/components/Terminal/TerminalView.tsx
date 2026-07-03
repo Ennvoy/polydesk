@@ -32,6 +32,7 @@ import {
 } from './secureOptions';
 import { useTerminalFont } from '../../theme/TerminalFontProvider';
 import { classifyClipboardKey } from './clipboardKeys';
+import { stripEnclosingKeycap } from './displayNormalize';
 import type { ITheme } from '@xterm/xterm';
 
 interface Props {
@@ -104,6 +105,9 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
     }
     // 診斷 seam（比照 __pdPerf 慣例）：e2e 確定性斷言生效中的寬度表版本，不影響執行期。
     host.dataset.termUnicode = term.unicode.activeVersion;
+    // 診斷 seam（同上慣例）：暴露 term 供 e2e 直接讀 buffer 內容做確定性斷言（REQ-TERM-009 keycap
+    // 正規化真實鏈路驗證）。term 本就存在於 renderer 記憶體，掛到 element property 不增攻擊面。
+    (host as unknown as { __pdTerm?: Terminal }).__pdTerm = term;
     // 容器底色 = xterm 實際背景色：inset 邊距與整數格 fit 的右/下剩餘空間才不會露出
     // 主題底色形成「留白框」（xterm 只能排整數 cols/rows，剩餘空隙無法靠 fit 消除）。
     if (viewRef.current && theme.background) viewRef.current.style.background = theme.background;
@@ -199,7 +203,11 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
     // 輸出：main → term（依 termId 過濾；回流即記一次往返延遲近似值）。
     const offData = ipc.pty.onData(({ termId: t, chunk }) => {
       if (t !== termId) return;
-      term.write(chunk);
+      // 顯示層 keycap 正規化（REQ-TERM-009）：在 PTY bytes 上「無狀態」剔除 U+20E3 圍框（含前導 FE0F），
+      // 讓 1️⃣2️⃣… 退化成純數字，免得 Consolas 的 U+20E3 圍框 glyph 漏出疊到相鄰字。刻意留在 bytes 層：
+      // 維持 xterm 原生 Uint8Array 解碼路徑不變，不在 PTY→xterm 間插 stateful 緩衝（那會扣住輸出尾端、
+      // 卡死 PSReadLine 貼上/OSC52 鏈路）。fast path 保純 ASCII 高頻路徑零拷貝。
+      term.write(stripEnclosingKeycap(chunk));
       if (keyTsRef.current !== null) {
         record('keyLatency', performance.now() - keyTsRef.current);
         keyTsRef.current = null;
