@@ -51,8 +51,8 @@ test('commit hover 卡片 + 右鍵選單（開啟此 commit 變更 / 從此 comm
   await page.locator('.pd-scm-ctxitem', { hasText: '從此 commit 建立分支' }).click();
   await page.locator('input[aria-label="新分支名稱"]').fill('from-commit');
   await page.locator('button[aria-label="建立分支"]').click();
-  // 切到分支分頁、新分支為 active
-  await expect(page.locator('.pd-scm-branchrow.is-active', { hasText: 'from-commit' })).toBeVisible({ timeout: 12000 });
+  // 切到分支分頁、新分支為 active（is-active class 在內層 .pdwt-branch-switch，改用 current 分支的 aria-label 斷言）
+  await expect(page.locator('button[aria-label="目前分支 from-commit"]')).toBeVisible({ timeout: 12000 });
   expect(git(dir, 'rev-parse', '--abbrev-ref', 'HEAD').trim()).toBe('from-commit');
 
   await app.close();
