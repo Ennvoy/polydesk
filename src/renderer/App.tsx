@@ -10,7 +10,7 @@ import { WorkspaceRail } from './components/WorkspaceRail';
 import { RailResizer } from './components/RailResizer';
 import { OverviewPanel } from './components/OverviewPanel';
 import { railBus } from './state/railBus';
-import { useAppState } from './state/appStore';
+import { appStore, useAppState } from './state/appStore';
 import { useClaudeCounts } from './state/claudeCounts';
 import { ipc } from './ipc/client';
 import type { GitStatus } from '../shared/types';
@@ -91,6 +91,8 @@ function StatusBar(): React.JSX.Element {
 export function App(): React.JSX.Element {
   const [railVisible, setRailVisible] = React.useState(railBus.isVisible());
   React.useEffect(() => railBus.subscribe(setRailVisible), []);
+  // 桌面通知點擊 → 切到該工作區（main 端已聚焦/還原視窗，見 ClaudeStatusMonitor.defaultNotifyAwait）。
+  React.useEffect(() => ipc.events.workspace.activate(({ wsId }) => appStore.setActiveWorkspace(wsId)), []);
   return (
     <div className="pd-root">
       <TitleBar />

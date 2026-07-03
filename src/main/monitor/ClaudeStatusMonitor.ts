@@ -12,7 +12,7 @@ import type { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
 import type { EventChannels } from '../../shared/ipc';
 import type { AiTool, ClaudeState } from '../../shared/types';
 import { emit } from '../ipc/broadcast';
-import { Notification } from 'electron';
+import { Notification, BrowserWindow } from 'electron';
 import { readdir, readFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
@@ -43,9 +43,21 @@ type EmitFn = (payload: EventChannels['claude:status']) => void;
 type AwaitNotifier = (info: { wsId: string; name: string }) => void;
 function defaultNotifyAwait(info: { wsId: string; name: string }): void {
   try {
-    if (Notification.isSupported()) {
-      new Notification({ title: 'Claude 待確認', body: `工作區「${info.name}」的 Claude 需要你確認。` }).show();
-    }
+    if (!Notification.isSupported()) return;
+    const n = new Notification({
+      title: 'Claude 待確認',
+      body: `工作區「${info.name}」的 Claude 需要你確認（點此回到 Polydesk）。`,
+    });
+    // 點通知 → 聚焦 Polydesk 視窗並切到該工作區（PE-2：通知可回跳）。
+    n.on('click', () => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (!win) return;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+      win.webContents.send('workspace:activate', { wsId: info.wsId });
+    });
+    n.show();
   } catch {
     /* 通知失敗不致命 */
   }

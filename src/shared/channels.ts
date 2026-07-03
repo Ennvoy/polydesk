@@ -77,6 +77,7 @@ export const INVOKE_CHANNELS = [
 ] as const satisfies readonly InvokeChannel[];
 
 export const EVENT_CHANNELS = [
+  'workspace:activate',
   'claude:status',
   'fs:change',
   'pty:exit',

@@ -174,6 +174,8 @@ export interface StreamChannels {
 
 /** event 通道：main 主動 `webContents.send` 推播；payload 一律帶 wsId 以路由面板。 */
 export interface EventChannels {
+  /** 桌面通知點擊 → main 聚焦視窗後叫 renderer 切到該工作區（PE-2：通知可回跳）。 */
+  'workspace:activate': { wsId: string };
   'claude:status': { wsId: string; tool: AiTool; status: ClaudeStatus };
   'fs:change': { wsId: string; path: string; kind: 'add' | 'change' | 'unlink' };
   'pty:exit': { termId: string; exitCode: number };
