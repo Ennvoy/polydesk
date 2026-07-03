@@ -407,10 +407,17 @@ export function WorkspaceRail(): React.JSX.Element {
                 key={w.id}
                 role="listitem"
                 aria-current={isActive ? 'true' : undefined}
-                style={isWorktree ? { paddingLeft: 'var(--space-4)' } : undefined}
+                style={{
+                  ...(isWorktree ? { paddingLeft: 'var(--space-4)' } : {}),
+                  ...(!isMissing && !isEditing ? { cursor: 'pointer' } : {}),
+                }}
                 className={`pdws-item pd-row${isActive ? ' is-active' : ''}${isMissing ? ' is-missing' : ''}${
                   overId === w.id ? ' is-dragover' : ''
                 }`}
+                // 整列可點切換（bug 修復）：切換 handler 原本只綁在名字按鈕，點到左側 Claude/Codex 徽章或
+                // 空白格會落空、無法切換工作區。改為整列可點（missing/編輯中除外）＝對齊 VS Code 側欄慣例；
+                // 列內子按鈕（名字/改名/移除）各自 stopPropagation 避免誤觸切換。名字仍是 <button>＝保留鍵盤路徑。
+                onClick={isMissing || isEditing ? undefined : () => selectWorkspace(w)}
                 draggable={!isEditing}
                 onDragStart={(e) => {
                   setDragId(w.id);
@@ -467,8 +474,8 @@ export function WorkspaceRail(): React.JSX.Element {
                     type="button"
                     className="pdws-name-btn"
                     disabled={isMissing}
-                    onClick={isMissing ? undefined : () => selectWorkspace(w)}
-                    onDoubleClick={isMissing ? undefined : () => startRename(w)}
+                    onClick={isMissing ? undefined : (e) => { e.stopPropagation(); selectWorkspace(w); }}
+                    onDoubleClick={isMissing ? undefined : (e) => { e.stopPropagation(); startRename(w); }}
                     title={w.path}
                     aria-label={
                       isMissing
@@ -489,7 +496,7 @@ export function WorkspaceRail(): React.JSX.Element {
                         className="pdws-actbtn"
                         aria-label={`重新命名 ${neutralizeBidi(w.name)}`}
                         title="重新命名"
-                        onClick={() => startRename(w)}
+                        onClick={(e) => { e.stopPropagation(); startRename(w); }}
                       >
                         ✎
                       </button>
@@ -498,7 +505,7 @@ export function WorkspaceRail(): React.JSX.Element {
                       className="pdws-actbtn is-danger"
                       aria-label={`移除 ${neutralizeBidi(w.name)}`}
                       title="移除"
-                      onClick={() => void removeFlow(w)}
+                      onClick={(e) => { e.stopPropagation(); void removeFlow(w); }}
                     >
                       ✕
                     </button>
