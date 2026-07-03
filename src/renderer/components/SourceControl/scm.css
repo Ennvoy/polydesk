@@ -28,6 +28,7 @@
 
 /* 小圖示鈕（重整 / push / pull / back） */
 .pd-scm-icon {
+  position: relative; /* 供 push 鈕右上角未推送數字角標定位 */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -67,6 +68,26 @@
   text-overflow: ellipsis;
 }
 .pd-scm-ab { color: var(--meta); white-space: nowrap; }
+/* 未推送強調（方案 B）：ahead>0 染 accent＋「未推送」字樣、push 鈕右上角標數字（對齊 VSCode 的未同步提示）。 */
+.pd-scm-ahead { color: var(--accent); font-weight: 600; white-space: nowrap; }
+.pd-scm-behind { color: var(--fg-2); }
+.pd-scm-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-on);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .pd-scm-syncbtns { margin-left: auto; display: flex; gap: 2px; }
 
 /* 分頁 */

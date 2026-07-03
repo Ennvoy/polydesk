@@ -580,14 +580,25 @@ export function SourceControlPanel(): React.JSX.Element {
           ⎇ {status?.detached ? '（分離 HEAD）' : (status?.branch ?? 'N/A')}
         </span>
         <span className="pd-scm-ab" aria-label={`領先 ${nOrNA(status?.ahead ?? null)}、落後 ${nOrNA(status?.behind ?? null)}`}>
-          ↑{nOrNA(status?.ahead ?? null)} ↓{nOrNA(status?.behind ?? null)}
+          {(status?.ahead ?? 0) > 0 ? (
+            <span className="pd-scm-ahead">↑{status?.ahead} 未推送</span>
+          ) : (
+            <>↑{nOrNA(status?.ahead ?? null)}</>
+          )}{' '}
+          <span className={(status?.behind ?? 0) > 0 ? 'pd-scm-behind' : undefined}>↓{nOrNA(status?.behind ?? null)}</span>
         </span>
         <span className="pd-scm-syncbtns">
           <button className="pd-scm-icon" aria-label="拉取（pull）" title="拉取" onClick={() => void onPull()} disabled={busy}>
             ↓
           </button>
-          <button className="pd-scm-icon" aria-label="推送（push）" title="推送" onClick={() => void onPush()} disabled={busy}>
-            ↑
+          <button
+            className="pd-scm-icon"
+            aria-label={(status?.ahead ?? 0) > 0 ? `推送（push）：${status?.ahead} 個 commit 未推送` : '推送（push）'}
+            title={(status?.ahead ?? 0) > 0 ? `推送 ${status?.ahead} 個未推送的 commit` : '推送'}
+            onClick={() => void onPush()}
+            disabled={busy}
+          >
+            ↑{(status?.ahead ?? 0) > 0 && <span className="pd-scm-count" aria-hidden="true">{status?.ahead}</span>}
           </button>
         </span>
       </div>
