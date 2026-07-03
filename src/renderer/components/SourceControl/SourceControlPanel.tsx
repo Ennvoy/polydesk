@@ -522,10 +522,28 @@ export function SourceControlPanel(): React.JSX.Element {
   if (loading && !status) {
     return (
       <section className="pd-scm">
-        <div className="pd-panel-header">原始碼控制</div>
-        <div className="pd-scm-empty" aria-busy="true">
-          載入中…
+        <div className="pd-panel-header">
+          <span>原始碼控制</span>
+          <span className="pd-scm-hdr-actions">
+            <span className="pd-scm-icon is-loading" aria-hidden="true">
+              ⟳
+            </span>
+          </span>
         </div>
+        <div className="pd-scm-loadbar" role="progressbar" aria-label="讀取中" aria-busy="true">
+          <span />
+        </div>
+        {/* 讀取中骨架（shimmer）＝動態回饋，取代靜態「載入中…」的呆滯感。 */}
+        <div className="pd-scm-skeleton" aria-hidden="true">
+          <div className="pd-scm-skel-line pd-scm-skel-head" />
+          <div className="pd-scm-skel-row" />
+          <div className="pd-scm-skel-row" />
+          <div className="pd-scm-skel-row" />
+          <div className="pd-scm-skel-row short" />
+        </div>
+        <span role="status" aria-live="polite" className="pd-scm-sr">
+          讀取中…
+        </span>
       </section>
     );
   }
@@ -563,9 +581,9 @@ export function SourceControlPanel(): React.JSX.Element {
             </span>
           )}
           <button
-            className="pd-scm-icon"
-            aria-label="重新整理"
-            title="重新整理"
+            className={`pd-scm-icon${loading ? ' is-loading' : ''}`}
+            aria-label={loading ? '讀取中' : '重新整理'}
+            title={loading ? '讀取中…' : '重新整理'}
             onClick={() => void refresh()}
             disabled={busy}
           >
@@ -573,6 +591,13 @@ export function SourceControlPanel(): React.JSX.Element {
           </button>
         </span>
       </div>
+
+      {/* 讀取／操作進行中：頂部不定量進度條（sweep）＝清楚的「還在讀取」動態回饋。 */}
+      {(loading || busy) && (
+        <div className="pd-scm-loadbar" role="progressbar" aria-label={loading ? '讀取中' : '進行中'} aria-busy="true">
+          <span />
+        </div>
+      )}
 
       {/* 分支 / 同步列 */}
       <div className="pd-scm-syncbar">

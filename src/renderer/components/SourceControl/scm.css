@@ -26,6 +26,89 @@
   50% { opacity: 1; }
 }
 
+/* 讀取中：頂部不定量進度條（一道高亮由左往右掃）＝清楚的「還在讀取」動態回饋。 */
+.pd-scm-loadbar {
+  position: relative;
+  flex-shrink: 0;
+  height: 2px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--accent), transparent 86%);
+}
+.pd-scm-loadbar > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: pd-scm-sweep 1.1s var(--ease-standard) infinite;
+}
+@keyframes pd-scm-sweep {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+
+/* 重整圖示：讀取中旋轉。 */
+@keyframes pd-scm-spin {
+  to { transform: rotate(360deg); }
+}
+.pd-scm-icon.is-loading {
+  color: var(--accent);
+  animation: pd-scm-spin 0.9s linear infinite;
+}
+
+/* 首次載入骨架（shimmer）：模擬變更清單版型，取代靜態「載入中…」。 */
+.pd-scm-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+.pd-scm-skel-line,
+.pd-scm-skel-row {
+  height: 12px;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--surface-2, rgba(127, 127, 127, 0.08)) 25%,
+    color-mix(in oklab, var(--fg), transparent 82%) 37%,
+    var(--surface-2, rgba(127, 127, 127, 0.08)) 63%
+  );
+  background-size: 400% 100%;
+  animation: pd-scm-shimmer 1.4s ease-in-out infinite;
+}
+.pd-scm-skel-head { width: 55%; height: 14px; margin-bottom: var(--space-1); }
+.pd-scm-skel-row.short { width: 62%; }
+@keyframes pd-scm-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+/* 只給輔助技術朗讀、視覺隱藏（不用 display:none，才會被 aria-live 播報）。 */
+.pd-scm-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 尊重「減少動態」偏好：關掉所有 SCM 讀取動畫（改靜態，不閃）。 */
+@media (prefers-reduced-motion: reduce) {
+  .pd-scm-loadbar > span,
+  .pd-scm-icon.is-loading,
+  .pd-scm-skel-line,
+  .pd-scm-skel-row,
+  .pd-scm-busy {
+    animation: none;
+  }
+}
+
 /* 小圖示鈕（重整 / push / pull / back） */
 .pd-scm-icon {
   position: relative; /* 供 push 鈕右上角未推送數字角標定位 */
