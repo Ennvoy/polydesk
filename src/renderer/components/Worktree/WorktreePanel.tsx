@@ -51,13 +51,32 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
       appStore.setActiveWorkspace(wt.managedWsId);
       return;
     }
-    // 未納管（外部建立）：完整 lineage 驗證納管走 F-13；此處提示。
-    await dialog.confirm({
-      title: '此 worktree 尚未加入 Polydesk',
-      body: '請於「分支」分頁對該分支使用「跳到該 worktree」以驗證來源並加入工作區。',
-      confirmText: '知道了',
-      cancelText: '關閉',
+    // 未納管（外部建立）：就地詢問後 lineage 驗證納管並切換（複用 F-13 adopt，取代原「請去分支分頁」死路）。
+    // 後端 worktreeAdopt 做 lineage 交叉驗證＋路徑圍堵，驗不過回錯——不因就地入口而放寬安全。
+    const ok = await dialog.confirm({
+      title: '加入為工作區並開啟',
+      body: `此 worktree（${neutralizeBidi(worktreePathDisplay(wt.path))}）尚未加入 Polydesk。要驗證來源並加入為工作區後開啟嗎？`,
+      confirmText: '加入並開啟',
+      cancelText: '取消',
     });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const r = await ipc.git.worktreeAdopt({ wsId, path: wt.path });
+      if ('wsId' in r) {
+        await appStore.loadWorkspaces();
+        appStore.setActiveWorkspace(r.wsId);
+        await reload();
+      } else {
+        setError(
+          r.code === 'not-lineage'
+            ? '無法加入：該 worktree 來源驗證失敗，可能不屬於此 repo。'
+            : neutralizeBidi(r.error),
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
   const onPrune = async (): Promise<void> => {
