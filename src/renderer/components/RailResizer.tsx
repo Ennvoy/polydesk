@@ -3,7 +3,7 @@
 // （沿用 windowBounds 範式，重啟還原）。鍵盤 ArrowLeft/Right ±16px 可調（a11y）。
 // 拖曳期間鋪全螢幕 overlay 吃住所有 pointer 事件，避免游標移到 xterm/monaco canvas 上漏接 pointermove。
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ipc } from '../ipc/client';
 
 const RAIL_MIN = 180; // 再窄會擠壞 EmptyWelcome（段落 maxWidth ~200）
@@ -44,6 +44,16 @@ function applyRailWidth(px: number): void {
 export function RailResizer(): React.JSX.Element {
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const selfRef = useRef<HTMLDivElement | null>(null);
+  // aria-valuenow 單一真相：追蹤目前 rail 寬度，讓 splitter 的無障礙數值隨拖曳/鍵盤即時反映
+  // （role=separator + 可聚焦＝window splitter，ARIA 要求須有 aria-valuenow）。
+  const [width, setWidth] = useState<number>(DEFAULT_W);
+
+  // 同步設寬度：套 CSS var（畫面即時）+ 更新 state（aria-valuenow 跟上）。
+  const setRailWidth = (px: number): void => {
+    const w = clampWidth(px);
+    applyRailWidth(w);
+    setWidth(w);
+  };
 
   // 掛載時還原持久化寬度（若有）。
   useEffect(() => {
@@ -53,7 +63,7 @@ export function RailResizer(): React.JSX.Element {
       .getState()
       .then((s) => {
         if (cancelled) return;
-        if (typeof s.railWidth === 'number') applyRailWidth(clampWidth(s.railWidth));
+        if (typeof s.railWidth === 'number') setRailWidth(s.railWidth);
       })
       .catch(() => undefined);
     return () => {
@@ -80,7 +90,7 @@ export function RailResizer(): React.JSX.Element {
     const startW = currentRailWidth();
 
     const onMove = (ev: PointerEvent): void => {
-      applyRailWidth(clampWidth(startW + (ev.clientX - startX)));
+      setRailWidth(startW + (ev.clientX - startX));
     };
     const onUp = (): void => {
       window.removeEventListener('pointermove', onMove);
@@ -104,7 +114,7 @@ export function RailResizer(): React.JSX.Element {
     else if (e.key === 'ArrowRight') delta = KEY_STEP;
     else return;
     e.preventDefault();
-    applyRailWidth(clampWidth(currentRailWidth() + delta));
+    setRailWidth(currentRailWidth() + delta);
     persist();
   };
 
@@ -115,6 +125,9 @@ export function RailResizer(): React.JSX.Element {
       role="separator"
       aria-orientation="vertical"
       aria-label="調整工作區欄寬度"
+      aria-valuemin={RAIL_MIN}
+      aria-valuemax={RAIL_MAX}
+      aria-valuenow={width}
       tabIndex={0}
       onPointerDown={onPointerDown}
       onKeyDown={onKeyDown}
