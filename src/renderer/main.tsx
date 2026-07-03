@@ -1,5 +1,14 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+// 打包的開源等寬字型（免安裝即選，SettingsPanel 提供切換）。400 regular + 700 bold（終端機粗體）。
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/700.css';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/700.css';
+import '@fontsource/space-mono/400.css';
+import '@fontsource/space-mono/700.css';
+import '@fontsource/source-code-pro/400.css';
+import '@fontsource/source-code-pro/700.css';
 import { App } from './App';
 import { ThemeProvider } from './theme/ThemeProvider';
 import { TerminalFontProvider } from './theme/TerminalFontProvider';

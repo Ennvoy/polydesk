@@ -16,11 +16,14 @@ const THEMES: { id: ThemeId; label: string; desc: string }[] = [
   { id: 'warm', label: '暖色', desc: 'parchment · terracotta' },
 ];
 
-/** 內建三選（機器都有裝）；其他字型走自訂輸入。 */
+/** 內建（機器都有）＋打包的開源等寬字型（免安裝即選、風格各異，切換才有意義）。自訂輸入留給進階。 */
 const TERMINAL_FONTS: { family: string; desc: string }[] = [
   { family: 'Consolas', desc: 'VS Code 同款' },
   { family: 'Cascadia Code', desc: '有連字' },
-  { family: 'Cascadia Mono', desc: 'Windows Terminal 風' },
+  { family: 'JetBrains Mono', desc: '圓潤現代' },
+  { family: 'IBM Plex Mono', desc: '人文微襯線' },
+  { family: 'Space Mono', desc: '復古幾何' },
+  { family: 'Source Code Pro', desc: '中性乾淨' },
 ];
 
 export function SettingsPanel({ onClose }: { onClose: () => void }): React.JSX.Element {
@@ -119,7 +122,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }): React.JSX.E
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
           <input
             className="pd-input"
-            placeholder="自訂字型名（需已安裝）"
+            placeholder="進階：自訂字型名（需系統已安裝）"
             aria-label="自訂終端機字型名稱"
             value={customFamily}
             onChange={(e) => setCustomFamily(e.target.value)}

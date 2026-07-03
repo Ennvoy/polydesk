@@ -51,18 +51,32 @@ const FIT_DEBOUNCE_MS = 60;
 // 反震盪容差（px）：> 捲軸寬（~17）。ResizeObserver 回彈在此範圍內視為 fit 自身造成、不再 fit（斷迴圈）。
 const RESIZE_TOLERANCE_PX = 24;
 
-/** 從 CSS var 讀目前主題色，建構 xterm ITheme（取不到則用暗色缺省）。 */
+// 淺色/暖色主題的終端機 ANSI 16 色（深色系，淺背景可讀）。xterm 內建 ANSI 是為深背景設計的「亮色」，
+// 在淺/暖背景（--bg 淺）上對比極差 → Claude Code 等 TUI 的彩色輸出（含它畫的選項/標題）難瀏覽。
+// 深色主題沿用 xterm 內建亮色 ANSI（現況本就可讀，不覆蓋）。色階對齊 GitHub Light 系、與 Polydesk 暖調協調。
+const LIGHT_ANSI: Partial<ITheme> = {
+  black: '#24292e', red: '#b53333', green: '#116329', yellow: '#8a6d00',
+  blue: '#0550ae', magenta: '#8250df', cyan: '#0e7490', white: '#57606a',
+  brightBlack: '#6e7781', brightRed: '#a40e26', brightGreen: '#0a5228', brightYellow: '#6b5500',
+  brightBlue: '#0343a4', brightMagenta: '#6639ba', brightCyan: '#0c6188', brightWhite: '#141413',
+};
+
+/** 從 CSS var 讀目前主題色，建構 xterm ITheme（取不到則用暗色缺省）；淺/暖主題另補深色系 ANSI 調色盤。 */
 function readTerminalTheme(el: HTMLElement): ITheme {
   try {
     const cs = getComputedStyle(el);
     const v = (name: string): string => cs.getPropertyValue(name).trim();
     const bg = v('--bg') || DEFAULT_TERMINAL_THEME.background;
     const fg = v('--fg') || DEFAULT_TERMINAL_THEME.foreground;
+    // 淺色/暖色主題：換深色系 ANSI（否則 xterm 內建亮色 ANSI 在淺背景幾乎看不清）。
+    const themeName = typeof document !== 'undefined' ? document.documentElement.dataset.theme : undefined;
+    const isLight = themeName === 'light' || themeName === 'warm';
     return {
       background: bg,
       foreground: fg,
       cursor: fg,
-      selectionBackground: 'rgba(127,127,127,0.35)',
+      selectionBackground: isLight ? 'rgba(0,0,0,0.13)' : 'rgba(127,127,127,0.35)',
+      ...(isLight ? LIGHT_ANSI : {}),
     };
   } catch {
     return DEFAULT_TERMINAL_THEME;
@@ -290,9 +304,18 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    term.options.fontFamily = buildTerminalFontFamily(font.family);
-    term.options.fontSize = clampTerminalFontSize(font.size);
-    fitNowRef.current(); // 走同一條 safeFit（含極窄寬守衛 + skip-unchanged）
+    const apply = (): void => {
+      term.options.fontFamily = buildTerminalFontFamily(font.family);
+      term.options.fontSize = clampTerminalFontSize(font.size);
+      fitNowRef.current(); // 走同一條 safeFit（含極窄寬守衛 + skip-unchanged）
+    };
+    // 打包字型（JetBrains Mono 等）是 @font-face lazy load：webgl renderer 首次量測需字型 ready，否則
+    // 用 fallback 量測且不會自動重繪 → 先確保載入再套用（載入失敗也 fallback 套用，不卡）。
+    if (typeof document !== 'undefined' && document.fonts?.load) {
+      void document.fonts.load(`${clampTerminalFontSize(font.size)}px "${font.family}"`).then(apply).catch(apply);
+    } else {
+      apply();
+    }
   }, [font]);
 
   // 由隱藏切回顯示時重新 fit + 聚焦（display:none 時容器尺寸為 0，無法 fit）。

@@ -6,7 +6,7 @@ import { rmSync } from 'node:fs';
 import { launchApp, stubFolderPicker, addWorkspaceViaUI, makeTempDir, makeSubDir } from './electronApp';
 import type { PersistState } from '../src/shared/types';
 
-test('終端機字型：預設 Consolas 14 → 面板切 Cascadia Mono 即時套用並持久化；unicode11 生效', async () => {
+test('終端機字型：預設 Consolas 14 → 面板切 JetBrains Mono 即時套用並持久化；unicode11 生效', async () => {
   const root = makeTempDir('pdfont-');
   const dir = makeSubDir(root, 'font-ws');
   const { app, page, userData } = await launchApp();
@@ -22,15 +22,15 @@ test('終端機字型：預設 Consolas 14 → 面板切 Cascadia Mono 即時套
   await page.locator('button[aria-label="設定"]').first().click();
   await expect(page.getByText('目前：Consolas 14px', { exact: false })).toBeVisible();
 
-  // 切 Cascadia Mono → 即時反映
-  await page.locator('button[aria-label="終端機字型改用 Cascadia Mono"]').click();
-  await expect(page.getByText('目前：Cascadia Mono 14px', { exact: false })).toBeVisible();
+  // 切 JetBrains Mono → 即時反映
+  await page.locator('button[aria-label="終端機字型改用 JetBrains Mono"]').click();
+  await expect(page.getByText('目前：JetBrains Mono 14px', { exact: false })).toBeVisible();
 
   // 持久化 round-trip：經真 preload IPC 讀回 store（main 端已 sanitize 落檔）
   const state = await page.evaluate<PersistState>(() =>
     (window as unknown as { polydesk: { store: { getState(): Promise<PersistState> } } }).polydesk.store.getState(),
   );
-  expect(state.terminalFont).toEqual({ family: 'Cascadia Mono', size: 14 });
+  expect(state.terminalFont).toEqual({ family: 'JetBrains Mono', size: 14 });
 
   await app.close();
   rmSync(root, { recursive: true, force: true });
