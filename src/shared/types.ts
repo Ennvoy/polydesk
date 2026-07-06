@@ -83,6 +83,14 @@ export interface GitChange {
   status: 'M' | 'A' | 'D' | 'R' | 'U' | '?';
   staged: boolean;
 }
+/** commit 上的 ref 裝飾（線圖徽章：本地/遠端分支位置、tag、分離 HEAD，like VSCode Graph）。 */
+export interface GitLogRef {
+  /** 顯示名：main、origin/main、v1.0、HEAD（detached）。 */
+  name: string;
+  kind: 'local' | 'remote' | 'tag' | 'detached';
+  /** HEAD 目前指著這個 ref（＝簽出中的本地分支）。 */
+  head: boolean;
+}
 export interface GitLogEntry {
   hash: string;
   author: string;
@@ -92,6 +100,8 @@ export interface GitLogEntry {
   parents: string[];
   /** commit 訊息 body（標題以外的內文；hover 卡片顯示完整訊息用，PE-1）。 */
   body: string;
+  /** 指著此 commit 的 refs（%D 解析；無＝[]）。 */
+  refs: GitLogRef[];
 }
 
 export interface TermState {

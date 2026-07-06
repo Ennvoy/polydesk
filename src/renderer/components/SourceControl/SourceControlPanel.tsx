@@ -13,7 +13,7 @@ import { WorktreePanel } from '../Worktree/WorktreePanel';
 import { CreateWorktreeDialog } from '../Worktree/CreateWorktreeDialog';
 import { parseWorktreeConflict, resolveJumpTarget } from '../Worktree/worktreeModel';
 import { neutralizeBidi } from '../Dialogs/TrustConfirm';
-import type { GitStatus, GitChange, GitLogEntry, AiEngine } from '../../../shared/types';
+import type { GitStatus, GitChange, GitLogEntry, GitLogRef, AiEngine } from '../../../shared/types';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
 
 type Tab = 'changes' | 'history' | 'branches' | 'worktree';
@@ -69,6 +69,30 @@ function GitGraphCell({ row, width }: { row: GitGraphRow; width: number }): Reac
         strokeWidth={2}
       />
     </svg>
+  );
+}
+
+// ── commit ref 徽章（本地/遠端分支位置、tag，like VSCode Graph）──
+const REF_GLYPH: Record<GitLogRef['kind'], string> = { local: '⎇', remote: '☁', tag: '◈', detached: '⌖' };
+const REF_KIND_LABEL: Record<GitLogRef['kind'], string> = { local: '本地分支', remote: '遠端分支', tag: '標籤', detached: '分離 HEAD' };
+const refLabel = (r: GitLogRef): string => `${REF_KIND_LABEL[r.kind]} ${r.name}${r.head && r.kind === 'local' ? '（HEAD）' : ''}`;
+
+/** commit 列尾端的 ref 徽章列：HEAD 所在分支 accent 實底、遠端虛線框、tag/分離 HEAD 各有記號。 */
+function RefBadges({ refs }: { refs: GitLogRef[] }): React.JSX.Element {
+  return (
+    <span className="pd-scm-refs">
+      {refs.map((r) => (
+        <span
+          key={`${r.kind}:${r.name}`}
+          className={`pd-scm-ref is-${r.kind}${r.head ? ' is-head' : ''}`}
+          title={refLabel(r)}
+          aria-label={refLabel(r)}
+        >
+          <span aria-hidden="true">{REF_GLYPH[r.kind]}</span>
+          {r.name}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -772,7 +796,7 @@ export function SourceControlPanel(): React.JSX.Element {
                       role="button"
                       tabIndex={0}
                       aria-expanded={expanded === c.hash}
-                      aria-label={`commit：${c.subject}（點擊展開變更檔案）`}
+                      aria-label={`commit：${c.subject}${c.refs.length > 0 ? `，${c.refs.map(refLabel).join('、')}` : ''}（點擊展開變更檔案）`}
                       onMouseEnter={(e) => {
                         cancelHoverClose();
                         const r = e.currentTarget.getBoundingClientRect();
@@ -795,7 +819,10 @@ export function SourceControlPanel(): React.JSX.Element {
                     >
                       <GitGraphCell row={graph.rows[i]} width={graphW} />
                       <div className="pd-scm-logtext">
-                        <span className="pd-scm-logsubject">{c.subject}</span>
+                        <span className="pd-scm-logline1">
+                          <span className="pd-scm-logsubject">{c.subject}</span>
+                          {c.refs.length > 0 && <RefBadges refs={c.refs} />}
+                        </span>
                         <span className="pd-scm-logmeta">
                           {c.author} · {new Date(c.date).toLocaleString()} · {c.hash.slice(0, 7)}
                         </span>

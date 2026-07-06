@@ -9,7 +9,7 @@ import { join, isAbsolute } from 'node:path';
 import { StateStore } from '../store/StateStore';
 import { WorkspaceManager } from '../workspace/WorkspaceManager';
 import { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
-import { GitService, type GitExecFn } from './GitService';
+import { GitService, parseLogRefs, type GitExecFn } from './GitService';
 
 function initRepo(dir: string): void {
   const run = (args: string[]): void => {
@@ -100,8 +100,9 @@ describe('GitService（真 git）', () => {
     expect(log[0].hash).toMatch(/^[0-9a-f]{40}$/);
     expect(log[0].date).toBeGreaterThan(0);
     expect(log[0].parents).toEqual([]); // root commit 無 parent（線圖用）
+    expect(log[0].refs).toEqual([{ name: 'main', kind: 'local', head: true }]); // HEAD 所在分支徽章
 
-    // 第二個 commit → parents 指向第一個（%P 解析驗證）
+    // 第二個 commit → parents 指向第一個（%P 解析驗證）；refs 跟著 HEAD 走、舊 commit 歸空
     writeFileSync(join(ctx.repo, 'b.txt'), 'y');
     await svc.stage(ctx.wsId, ['b.txt'], true);
     await svc.commit(ctx.wsId, 'second');
@@ -109,6 +110,29 @@ describe('GitService（真 git）', () => {
     expect(log2.length).toBe(2);
     expect(log2[0].subject).toBe('second');
     expect(log2[0].parents).toEqual([log[0].hash]);
+    expect(log2[0].refs).toEqual([{ name: 'main', kind: 'local', head: true }]);
+    expect(log2[1].refs).toEqual([]);
+  });
+
+  it('log refs 標出本地/遠端分支與 tag 位置（%D --decorate=full 解析）', async () => {
+    initRepo(ctx.repo);
+    const svc = new GitService(ctx.mgr);
+    writeFileSync(join(ctx.repo, 'a.txt'), 'x');
+    await svc.stage(ctx.wsId, ['a.txt'], true);
+    await svc.commit(ctx.wsId, 'first');
+    // 遠端 ref 不需真網路：update-ref 直接建 refs/remotes/origin/main（真 ref、非 mock）
+    execFileSync('git', ['update-ref', 'refs/remotes/origin/main', 'HEAD'], { cwd: ctx.repo, stdio: 'pipe' });
+    execFileSync('git', ['tag', 'v1.0'], { cwd: ctx.repo, stdio: 'pipe' });
+
+    // 第二個 commit：本地 main 前進、origin/main 與 tag 留在第一個 → 一眼看出領先遠端
+    writeFileSync(join(ctx.repo, 'b.txt'), 'y');
+    await svc.stage(ctx.wsId, ['b.txt'], true);
+    await svc.commit(ctx.wsId, 'second');
+
+    const log = await svc.log(ctx.wsId, 10);
+    expect(log[0].refs).toEqual([{ name: 'main', kind: 'local', head: true }]);
+    expect(log[1].refs).toContainEqual({ name: 'origin/main', kind: 'remote', head: false });
+    expect(log[1].refs).toContainEqual({ name: 'v1.0', kind: 'tag', head: false });
   });
 
   it('合法分支名可建立並出現在 list', async () => {
@@ -175,5 +199,35 @@ describe('GitService（真 git）', () => {
     expect(isAbsolute(trashed[0])).toBe(true);
     // 注入的 trash 沒真的刪 → 檔仍在（反證走的不是 clean -fd）
     expect(existsSync(join(ctx.repo, 'newfile.txt'))).toBe(true);
+  });
+});
+
+describe('parseLogRefs（%D --decorate=full 純函式解析）', () => {
+  it('HEAD 所在本地分支 + 遠端 + tag', () => {
+    expect(parseLogRefs('HEAD -> refs/heads/main, refs/remotes/origin/main, tag: refs/tags/v1.0')).toEqual([
+      { name: 'main', kind: 'local', head: true },
+      { name: 'origin/main', kind: 'remote', head: false },
+      { name: 'v1.0', kind: 'tag', head: false },
+    ]);
+  });
+
+  it('分離 HEAD → detached 徽章', () => {
+    expect(parseLogRefs('HEAD')).toEqual([{ name: 'HEAD', kind: 'detached', head: true }]);
+    expect(parseLogRefs('HEAD, refs/heads/main')).toEqual([
+      { name: 'HEAD', kind: 'detached', head: true },
+      { name: 'main', kind: 'local', head: false },
+    ]);
+  });
+
+  it('空字串 → []；未知 ref（refs/stash 等）略過', () => {
+    expect(parseLogRefs('')).toEqual([]);
+    expect(parseLogRefs('refs/stash')).toEqual([]);
+  });
+
+  it('本地 feature/x 與遠端 origin/feature/x 分得開（全名 prefix，短名會混淆）', () => {
+    expect(parseLogRefs('refs/heads/feature/x, refs/remotes/origin/feature/x')).toEqual([
+      { name: 'feature/x', kind: 'local', head: false },
+      { name: 'origin/feature/x', kind: 'remote', head: false },
+    ]);
   });
 });

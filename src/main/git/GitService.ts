@@ -17,7 +17,7 @@ import {
 } from 'node:child_process';
 import { shell, type IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
-import type { GitStatus, GitChange, GitLogEntry, GitWorktree } from '../../shared/types';
+import type { GitStatus, GitChange, GitLogEntry, GitLogRef, GitWorktree } from '../../shared/types';
 import type { InvokeReq } from '../../shared/ipc';
 import { GIT_LOCAL_TIMEOUT_MS, GIT_NETWORK_TIMEOUT_MS } from '../../shared/constants';
 import {
@@ -142,6 +142,37 @@ function pushXY(changes: GitChange[], xy: string, path: string): void {
   const y = xy[1];
   if (x && x !== '.') changes.push({ path, status: mapCode(x), staged: true });
   if (y && y !== '.') changes.push({ path, status: mapCode(y), staged: false });
+}
+
+/**
+ * 解析 `git log --decorate=full` 的 %D 欄（", " 分隔；refname 不含空白故分隔無歧義）。
+ * 例：`HEAD -> refs/heads/main, refs/remotes/origin/main, tag: refs/tags/v1.0`。
+ * 分離 HEAD 時 %D 只有 `HEAD`；refs/stash 等其他 ref 略過。
+ */
+export function parseLogRefs(d: string): GitLogRef[] {
+  const out: GitLogRef[] = [];
+  for (const raw of d.split(', ')) {
+    let part = raw.trim();
+    if (!part) continue;
+    if (part === 'HEAD') {
+      out.push({ name: 'HEAD', kind: 'detached', head: true });
+      continue;
+    }
+    let head = false;
+    if (part.startsWith('HEAD -> ')) {
+      head = true;
+      part = part.slice('HEAD -> '.length);
+    }
+    if (part.startsWith('tag: ')) part = part.slice('tag: '.length);
+    if (part.startsWith('refs/heads/')) {
+      out.push({ name: part.slice('refs/heads/'.length), kind: 'local', head });
+    } else if (part.startsWith('refs/remotes/')) {
+      out.push({ name: part.slice('refs/remotes/'.length), kind: 'remote', head: false });
+    } else if (part.startsWith('refs/tags/')) {
+      out.push({ name: part.slice('refs/tags/'.length), kind: 'tag', head: false });
+    }
+  }
+  return out;
 }
 
 /**
@@ -547,20 +578,22 @@ export class GitService {
     const cwd = this.path(wsId);
     if (!cwd) return [];
     const n = Math.max(1, Math.min(1000, Math.floor(limit) || 50));
-    // 欄位以 unit-separator(\x1f) 分隔；%P=parents（空白分隔）；%s=subject、%b=body（hover 完整訊息用）放最後。
-    const fmt = '%H%x1f%an%x1f%at%x1f%P%x1f%s%x1f%b';
+    // 欄位以 unit-separator(\x1f) 分隔；%P=parents（空白分隔）；%D=refs（本地/遠端分支位置徽章用）；
+    // %s=subject、%b=body（hover 完整訊息用）放最後。
+    const fmt = '%H%x1f%an%x1f%at%x1f%P%x1f%D%x1f%s%x1f%b';
     try {
       const { stdout } = await this.run(
         // --topo-order：保證任何父都不早於其子出現（rebase/cherry-pick/時鐘偏移下，預設 date order 會讓
         // 父排在子前，破壞線圖 swimlane「子先於父」前提 → 畫出 dangling 錯誤線）。
-        [...readHardeningArgs(), 'log', '--topo-order', '-n', String(n), `--pretty=format:${fmt}`, '-z'],
+        // --decorate=full：%D 輸出全名（refs/heads/、refs/remotes/），短名分不出本地 foo/bar 與遠端 origin/bar。
+        [...readHardeningArgs(), 'log', '--topo-order', '--decorate=full', '-n', String(n), `--pretty=format:${fmt}`, '-z'],
         { cwd, env: readEnv() },
       );
       return stdout
         .split('\0')
         .filter((r) => r.length > 0)
         .map((rec) => {
-          const [hash, author, at, parents, subject, body] = rec.split('\x1f');
+          const [hash, author, at, parents, refs, subject, body] = rec.split('\x1f');
           return {
             hash: hash ?? '',
             author: author ?? '',
@@ -568,6 +601,7 @@ export class GitService {
             subject: subject ?? '',
             parents: (parents ?? '').trim().split(/\s+/).filter((p) => p.length > 0),
             body: (body ?? '').trim(),
+            refs: parseLogRefs(refs ?? ''),
           };
         });
     } catch (e) {
