@@ -17,7 +17,10 @@ function seedRepo(): { dir: string; file: string } {
 
 test('REQ-E2E-002 後半：開 .py（無 LSP）→ 缺件提示 + 仍可編輯存檔', async () => {
   const { dir, file } = seedRepo();
-  const { app, page, userData } = await launchApp();
+  // 最小 PATH：構造性保證找不到 pyright-langserver（機器裝了 LSP 也不影響降級路徑的決定性）
+  const { app, page, userData } = await launchApp({
+    env: { PATH: 'C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0' },
+  });
   await stubFolderPicker(app, [dir]);
   await addWorkspaceViaUI(page);
   await page.locator('button[aria-label="開啟工作區 lspws"]').click();

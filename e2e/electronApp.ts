@@ -14,12 +14,12 @@ export interface LaunchedApp {
 
 const mainEntry = (): string => join(process.cwd(), 'out', 'main', 'index.js');
 
-export async function launchApp(opts?: { userData?: string }): Promise<LaunchedApp> {
+export async function launchApp(opts?: { userData?: string; env?: Record<string, string> }): Promise<LaunchedApp> {
   const userData = opts?.userData ?? mkdtempSync(join(tmpdir(), 'polydesk-e2e-'));
   const app = await electron.launch({
     args: [mainEntry()],
     cwd: process.cwd(),
-    env: { ...process.env, POLYDESK_USER_DATA: userData } as Record<string, string>,
+    env: { ...process.env, POLYDESK_USER_DATA: userData, ...opts?.env } as Record<string, string>,
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
@@ -50,8 +50,15 @@ export async function stubFolderPicker(app: ElectronApplication, paths: string[]
   }, paths);
 }
 
-/** 透過真實 UI 流程新增一個工作區（stub picker 已 seed 路徑）：點「新增工作區」→ TrustConfirm 信任確認。 */
+/**
+ * 透過真實 UI 流程新增一個工作區（stub picker 已 seed 路徑）→ TrustConfirm 信任確認。
+ * 無工作區時走歡迎頁「新增工作區」CTA；已有工作區時 rail 只剩「＋」選單 → 「新增工作區…」項目。
+ */
 export async function addWorkspaceViaUI(page: Page): Promise<void> {
+  const direct = page.locator('button[aria-label="新增工作區"]').first();
+  if (!(await direct.isVisible().catch(() => false))) {
+    await page.locator('button[aria-label="新增"]').first().click(); // 開 rail「＋」選單
+  }
   await page.locator('button[aria-label="新增工作區"]').first().click();
   await page.locator('button[aria-label="信任並新增工作區"]').click();
 }
