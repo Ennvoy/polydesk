@@ -31,6 +31,7 @@ import {
   collectReplacements,
   applyReplacements,
   applyReplacement,
+  toUnpackedPath,
   type SearchDeps,
   type SearchSpawnFn,
   type SearchChild,
@@ -461,5 +462,22 @@ describe('SearchService', () => {
     expect((await waitDone(r1.searchId)).done).toBe(true);
     expect((await waitDone(r2.searchId)).done).toBe(true);
     expect(children.length).toBe(0); // 完全沒 spawn
+  });
+});
+
+describe('toUnpackedPath（打包 asar 虛擬路徑 → 實體 unpacked 路徑）', () => {
+  it('app.asar 內的 rgPath 轉為 app.asar.unpacked（win 分隔符）', () => {
+    expect(
+      toUnpackedPath('C:\\P\\resources\\app.asar\\node_modules\\@vscode\\ripgrep-win32-x64\\bin\\rg.exe'),
+    ).toBe('C:\\P\\resources\\app.asar.unpacked\\node_modules\\@vscode\\ripgrep-win32-x64\\bin\\rg.exe');
+  });
+  it('posix 分隔符同樣轉換', () => {
+    expect(toUnpackedPath('/o/resources/app.asar/node_modules/x/bin/rg')).toBe(
+      '/o/resources/app.asar.unpacked/node_modules/x/bin/rg',
+    );
+  });
+  it('開發模式（無 app.asar）路徑原樣不動', () => {
+    const dev = 'C:\\proj\\node_modules\\@vscode\\ripgrep-win32-x64\\bin\\rg.exe';
+    expect(toUnpackedPath(dev)).toBe(dev);
   });
 });

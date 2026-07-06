@@ -21,10 +21,18 @@ import { randomUUID } from 'node:crypto';
 // @vscode/ripgrep 為 ESM-only：CJS main 不可 static import（require ESM → ERR_REQUIRE_ESM），
 // 也不可 bundle（rgPath 靠自身位置解析平台 optional dep）。改 dynamic import() 延遲解析並快取。
 let rgPathCache: string | null = null;
+/**
+ * asar 虛擬路徑 → 實體 unpacked 路徑。@vscode/ripgrep 1.18 的 rgPath 是 require.resolve 原樣回傳，
+ * 打包後落在 app.asar 虛擬路徑；Electron 只攔 fs 讀取、不攔 spawn，spawn 該路徑必 ENOENT
+ * （實體 rg.exe 由 electron-builder asarUnpack 解在 app.asar.unpacked）。
+ */
+export function toUnpackedPath(p: string): string {
+  return p.replace(/\bapp\.asar([\\/])/, 'app.asar.unpacked$1');
+}
 async function resolveRgPath(): Promise<string> {
   if (rgPathCache) return rgPathCache;
   const mod = (await import('@vscode/ripgrep')) as { rgPath: string };
-  rgPathCache = mod.rgPath;
+  rgPathCache = toUnpackedPath(mod.rgPath);
   return rgPathCache;
 }
 import type { IpcMain, WebContents } from 'electron';
