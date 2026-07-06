@@ -121,3 +121,68 @@ test('拖曳迷你標頭 → 調整並排順序', async () => {
   rmSync(root, { recursive: true, force: true });
   rmSync(userData, { recursive: true, force: true });
 });
+
+test('拖曳排序（往後拖）：把前面的 pane 拖到後面也要能動', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pd-dnd2-'));
+  const dir = join(root, 'dnd2-ws');
+  mkdirSync(dir, { recursive: true });
+  const { app, page, userData } = await launchApp();
+  await stubFolderPicker(app, [dir]);
+  await addWorkspaceViaUI(page);
+  await page.locator('button[aria-label="開啟工作區 dnd2-ws"]').click();
+
+  await page.locator('button[aria-label="新增終端機"]').click();
+  await page.locator('button[aria-label="新增終端機"]').click();
+  await expect(page.locator('.pd-term-pane')).toHaveCount(2, { timeout: 15000 });
+  await page.locator('.pd-term-pane-label').nth(0).dblclick();
+  await page.locator('.pd-term-pane-rename').fill('AAA');
+  await page.locator('.pd-term-pane-rename').press('Enter');
+  await page.locator('.pd-term-pane-label').nth(1).dblclick();
+  await page.locator('.pd-term-pane-rename').fill('BBB');
+  await page.locator('.pd-term-pane-rename').press('Enter');
+  expect(await paneLabels(page)).toEqual(['AAA', 'BBB']);
+
+  // 往後拖：把前面的 AAA 拖到後面的 BBB 上 → 應變成 [BBB, AAA]（回歸 moveTerm 單向 bug）。
+  const srcHead = page.locator('.pd-term-pane', { hasText: 'AAA' }).locator('.pd-term-pane-head');
+  const tgtHead = page.locator('.pd-term-pane', { hasText: 'BBB' }).locator('.pd-term-pane-head');
+  const dt = await page.evaluateHandle(() => new DataTransfer());
+  await srcHead.dispatchEvent('dragstart', { dataTransfer: dt });
+  await page.waitForTimeout(60);
+  await tgtHead.dispatchEvent('dragover', { dataTransfer: dt });
+  await tgtHead.dispatchEvent('drop', { dataTransfer: dt });
+  await srcHead.dispatchEvent('dragend', { dataTransfer: dt });
+
+  await expect.poll(async () => paneLabels(page), { timeout: 8000 }).toEqual(['BBB', 'AAA']);
+
+  await app.close();
+  rmSync(root, { recursive: true, force: true });
+  rmSync(userData, { recursive: true, force: true });
+});
+
+test('改名按 Escape 取消 → 不保存（沿用原名）', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pd-esc-'));
+  const dir = join(root, 'esc-ws');
+  mkdirSync(dir, { recursive: true });
+  const { app, page, userData } = await launchApp();
+  await stubFolderPicker(app, [dir]);
+  await addWorkspaceViaUI(page);
+  await page.locator('button[aria-label="開啟工作區 esc-ws"]').click();
+
+  await page.locator('button[aria-label="新增終端機"]').click();
+  await expect(page.locator('.pd-term-pane')).toHaveCount(1, { timeout: 15000 });
+  await expect(page.locator('.pd-term-pane-label').first()).toHaveText('PowerShell');
+
+  // 雙擊改名、打字、按 Escape 取消 → 名稱不變。
+  await page.locator('.pd-term-pane-label').first().dblclick();
+  const input = page.locator('.pd-term-pane-rename');
+  await expect(input).toBeVisible({ timeout: 5000 });
+  await input.fill('不該保存');
+  await input.press('Escape');
+
+  await expect(page.locator('.pd-term-pane-rename')).toHaveCount(0, { timeout: 5000 });
+  await expect(page.locator('.pd-term-pane-label').first()).toHaveText('PowerShell');
+
+  await app.close();
+  rmSync(root, { recursive: true, force: true });
+  rmSync(userData, { recursive: true, force: true });
+});

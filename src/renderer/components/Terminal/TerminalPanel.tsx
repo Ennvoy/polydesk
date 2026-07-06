@@ -79,8 +79,13 @@ export function TerminalPanel(): React.JSX.Element {
   // 互動暫態
   const [showHideOpen, setShowHideOpen] = useState(false); // 顯示/隱藏複選清單開合
   const [editingId, setEditingId] = useState<string | null>(null); // 正在改名的 termId
-  const [dragId, setDragId] = useState<string | null>(null); // 拖曳中的 termId
+  const [dragId, setDragId] = useState<string | null>(null); // 拖曳中的 termId（僅供視覺高亮；功能判定走 dragIdRef）
   const [dropId, setDropId] = useState<string | null>(null); // 目前 hover 的 drop 目標 termId
+  // 拖曳來源同步真相：onDragStart 當下就寫入（不等 React flush），onDragOver/onDrop 一律讀它——
+  // 避免「state 尚未 flush → onDragOver 不 preventDefault → 瀏覽器根本不觸發 drop」的時序漏洞。
+  const dragIdRef = useRef<string | null>(null);
+  // 改名取消旗標：Escape 取消時設 true，讓隨後的 onBlur 不 commit（區分「取消」與「點開/Enter 提交」）。
+  const renameCancelRef = useRef(false);
 
   // portal 穩定 host 節點（每 termId 一個；xterm 掛在此，搬 DOM 位置不重掛載）。
   const hostRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -193,7 +198,9 @@ export function TerminalPanel(): React.JSX.Element {
     setTerms((prev) => prev.map((t) => (t.wsId === wsId ? { ...t, hidden: false } : t)));
   }, []);
 
-  // 拖曳排序：把 fromId 移到 toId 前面（限同工作區）。
+  // 拖曳排序：把 fromId 移到 toId 旁邊（限同工作區）。方向感：拖向後方（from<to）落在目標之後、
+  // 拖向前方（from>to）落在目標之前——否則「插到目標前面」會讓往後拖（移除後目標左移一格、又插回其前）
+  // 原地不動＝只能往前拖、往後拖沒反應。
   const moveTerm = useCallback((fromId: string, toId: string): void => {
     if (fromId === toId) return;
     setTerms((prev) => {
@@ -202,7 +209,8 @@ export function TerminalPanel(): React.JSX.Element {
       const to = arr.findIndex((t) => t.termId === toId);
       if (from < 0 || to < 0 || arr[from].wsId !== arr[to].wsId) return prev;
       const [moved] = arr.splice(from, 1);
-      const insertAt = arr.findIndex((t) => t.termId === toId);
+      const target = arr.findIndex((t) => t.termId === toId); // 目標在移除 from 後的新索引
+      const insertAt = from < to ? target + 1 : target;
       arr.splice(insertAt, 0, moved);
       return arr;
     });
@@ -366,16 +374,19 @@ export function TerminalPanel(): React.JSX.Element {
                         className={`pd-term-pane-head${dropId === t.termId && dragId ? ' pd-term-pane-head--drop' : ''}`}
                         draggable={editingId !== t.termId}
                         onDragStart={(e) => {
-                          setDragId(t.termId);
+                          dragIdRef.current = t.termId; // 同步真相：不等 React flush
+                          setDragId(t.termId); // 僅供視覺高亮
                           e.dataTransfer.effectAllowed = 'move';
                           try {
                             e.dataTransfer.setData('text/plain', t.termId);
                           } catch {
-                            /* 某些環境 setData 受限：dragId state 已足夠 */
+                            /* 某些環境 setData 受限：dragIdRef 已足夠 */
                           }
                         }}
                         onDragOver={(e) => {
-                          if (dragId && dragId !== t.termId) {
+                          // 讀 ref（同步）：確保 flush 前也 preventDefault → 瀏覽器才會觸發 drop。
+                          const src = dragIdRef.current ?? e.dataTransfer.getData('text/plain');
+                          if (src && src !== t.termId) {
                             e.preventDefault();
                             e.dataTransfer.dropEffect = 'move';
                             if (dropId !== t.termId) setDropId(t.termId);
@@ -386,13 +397,14 @@ export function TerminalPanel(): React.JSX.Element {
                         }}
                         onDrop={(e) => {
                           e.preventDefault();
-                          // 來源優先取 React state；state 尚未 flush 時退回 dataTransfer（更穩、e2e 派發也吃得到）。
-                          const from = dragId ?? e.dataTransfer.getData('text/plain');
+                          const from = dragIdRef.current ?? e.dataTransfer.getData('text/plain');
                           if (from) moveTerm(from, t.termId);
+                          dragIdRef.current = null;
                           setDragId(null);
                           setDropId(null);
                         }}
                         onDragEnd={() => {
+                          dragIdRef.current = null;
                           setDragId(null);
                           setDropId(null);
                         }}
@@ -411,10 +423,21 @@ export function TerminalPanel(): React.JSX.Element {
                             aria-label="重新命名終端機"
                             onMouseDown={(e) => e.stopPropagation()}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') commitRename(t.termId, (e.target as HTMLInputElement).value);
-                              else if (e.key === 'Escape') setEditingId(null);
+                              // 一律經 blur 提交（單一路徑）；Escape 先設取消旗標 → onBlur 不 commit。
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                              else if (e.key === 'Escape') {
+                                renameCancelRef.current = true;
+                                (e.target as HTMLInputElement).blur();
+                              }
                             }}
-                            onBlur={(e) => commitRename(t.termId, e.target.value)}
+                            onBlur={(e) => {
+                              if (renameCancelRef.current) {
+                                renameCancelRef.current = false;
+                                setEditingId(null); // 取消：不保存，退出編輯
+                                return;
+                              }
+                              commitRename(t.termId, e.target.value);
+                            }}
                           />
                         ) : (
                           <span
