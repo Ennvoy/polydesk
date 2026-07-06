@@ -210,3 +210,22 @@
 .pd-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
 .pd-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--radius-pill); }
 .pd-scroll::-webkit-scrollbar-thumb:hover { background: var(--meta); }
+
+/* ── Word 文件唯讀預覽（DocView：mammoth HTML 消毒後渲染） ── */
+.pd-doc-prose {
+  max-width: 860px; margin: 0 auto; padding: var(--space-6) var(--space-6) var(--space-8);
+  color: var(--fg); font-size: var(--text-md, 14px); line-height: 1.75;
+}
+.pd-doc-prose h1, .pd-doc-prose h2, .pd-doc-prose h3,
+.pd-doc-prose h4, .pd-doc-prose h5, .pd-doc-prose h6 {
+  color: var(--fg); line-height: 1.35; margin: 1.2em 0 0.5em;
+}
+.pd-doc-prose h1 { font-size: 1.6em; } .pd-doc-prose h2 { font-size: 1.35em; } .pd-doc-prose h3 { font-size: 1.15em; }
+.pd-doc-prose p { margin: 0.55em 0; }
+.pd-doc-prose ul, .pd-doc-prose ol { padding-left: 1.6em; margin: 0.55em 0; }
+.pd-doc-prose img { max-width: 100%; height: auto; border-radius: var(--radius-sm); }
+.pd-doc-prose table { border-collapse: collapse; margin: 0.8em 0; max-width: 100%; }
+.pd-doc-prose th, .pd-doc-prose td { border: 1px solid var(--border); padding: 4px 10px; }
+.pd-doc-prose a { color: var(--accent); }
+.pd-doc-prose blockquote { border-left: 3px solid var(--border); margin: 0.8em 0; padding: 0.1em 0 0.1em 1em; color: var(--fg-2); }
+.pd-doc-prose pre { background: var(--surface); padding: var(--space-3); border-radius: var(--radius-sm); overflow-x: auto; }

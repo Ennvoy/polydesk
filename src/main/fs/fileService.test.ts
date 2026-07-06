@@ -15,6 +15,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import iconv from 'iconv-lite';
 import * as XLSX from 'xlsx';
 import { StateStore } from '../store/StateStore';
@@ -28,8 +29,11 @@ import {
   importFiles,
   deleteEntry,
   readSheet,
+  readDoc,
   __resetFileServiceState,
 } from './fileService';
+
+const FIXTURES = fileURLToPath(new URL('../../../tests/fixtures/', import.meta.url));
 
 function setup() {
   const root = mkdtempSync(join(tmpdir(), 'polydesk-fs-'));
@@ -472,5 +476,47 @@ describe('fileService readSheet（xlsx 表格預覽）', () => {
     writeFileSync(join(dir, 'bad.xlsx'), 'not a real xlsx', 'utf8');
     const bad = await readSheet(ctx.mgr, wsId, 'bad.xlsx'); // 不應 throw
     expect(bad).toBeDefined();
+  });
+});
+
+// ── readDoc：Word 文件唯讀預覽（docx→HTML＋內嵌圖；doc→純文字） ────────────
+describe('fileService readDoc（Word 文件預覽）', () => {
+  let ctx: ReturnType<typeof setup>;
+  beforeEach(() => {
+    __resetFileServiceState();
+    ctx = setup();
+  });
+  afterEach(() => {
+    rmSync(ctx.root, { recursive: true, force: true });
+  });
+
+  it('docx → mammoth HTML：含中文內文與 data URI 內嵌圖片', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'docA');
+    writeFileSync(join(dir, 'sample.docx'), readFileSync(join(FIXTURES, 'sample.docx')));
+
+    const r = await readDoc(ctx.mgr, wsId, 'sample.docx');
+    expect('kind' in r && r.kind === 'html').toBe(true);
+    if ('kind' in r && r.kind === 'html') {
+      expect(r.html).toContain('DOCX_FIXTURE_BODY 這是中文內文段落。');
+      expect(r.html).toContain('data:image/png;base64'); // 圖片內嵌可直接顯示
+    }
+  });
+
+  it('doc（舊格式）→ word-extractor 純文字', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'docB');
+    writeFileSync(join(dir, 'sample.doc'), readFileSync(join(FIXTURES, 'sample.doc')));
+
+    const r = await readDoc(ctx.mgr, wsId, 'sample.doc');
+    expect('kind' in r && r.kind === 'text').toBe(true);
+    if ('kind' in r && r.kind === 'text') expect(r.text.trim().length).toBeGreaterThan(0);
+  });
+
+  it('越界路徑拒；壞檔回 error 不崩', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'docC');
+    expect('error' in (await readDoc(ctx.mgr, wsId, '../secret.docx'))).toBe(true);
+    writeFileSync(join(dir, 'bad.docx'), 'not a real docx', 'utf8');
+    expect('error' in (await readDoc(ctx.mgr, wsId, 'bad.docx'))).toBe(true);
+    writeFileSync(join(dir, 'bad.doc'), 'not a real doc', 'utf8');
+    expect('error' in (await readDoc(ctx.mgr, wsId, 'bad.doc'))).toBe(true);
   });
 });

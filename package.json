@@ -29,9 +29,11 @@
     "chokidar": "^5.0.0",
     "dockview-core": "^7.0.2",
     "dockview-react": "^7.0.2",
+    "dompurify": "^3.4.11",
     "electron-updater": "^6.8.9",
     "iconv-lite": "^0.7.2",
     "jschardet": "^3.1.4",
+    "mammoth": "^1.12.0",
     "monaco-editor": "^0.55.1",
     "node-pty": "^1.1.0",
     "react": "^19.0.0",
@@ -39,6 +41,7 @@
     "react-resizable-panels": "^4.12.0",
     "vscode-jsonrpc": "^9.0.0",
     "vscode-languageserver-protocol": "^3.18.1",
+    "word-extractor": "^1.0.4",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

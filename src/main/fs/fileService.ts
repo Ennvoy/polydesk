@@ -13,6 +13,8 @@ import { resolve, relative, isAbsolute, dirname, join, basename } from 'node:pat
 import jschardet from 'jschardet';
 import iconv from 'iconv-lite';
 import * as XLSX from 'xlsx';
+import mammoth from 'mammoth';
+import WordExtractor from 'word-extractor';
 import { shell } from 'electron';
 import type { IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
@@ -567,6 +569,31 @@ export async function readSheet(
   }
 }
 
+/**
+ * 讀 Word 文件唯讀預覽：docx/docm → mammoth 轉語意 HTML（圖片預設內嵌 base64 data URI）；
+ * doc（舊二進位格式）→ word-extractor 抽純文字（無圖無格式）。HTML 由 renderer 端 dompurify
+ * 消毒後才渲染（此處不信任文件內容）。
+ */
+export async function readDoc(
+  mgr: WorkspaceManager,
+  wsId: string,
+  p: string,
+): Promise<{ kind: 'html'; html: string } | { kind: 'text'; text: string } | { error: string }> {
+  const safe = resolveSafe(mgr, wsId, p);
+  if ('error' in safe) return { error: '路徑超出工作區範圍' };
+  try {
+    const buf = await fsp.readFile(safe.abs);
+    if (/\.(docx|docm)$/i.test(p)) {
+      const r = await mammoth.convertToHtml({ buffer: buf });
+      return { kind: 'html', html: r.value };
+    }
+    const doc = await new WordExtractor().extract(buf);
+    return { kind: 'text', text: doc.getBody() };
+  } catch (e) {
+    return { error: fsOpError(e) };
+  }
+}
+
 /** 測試輔助：清空模組級版本指紋狀態。 */
 export function __resetFileServiceState(): void {
   readVersions.clear();
@@ -582,6 +609,13 @@ export function registerFileService(ipc: IpcMain, workspaces: WorkspaceManager):
   ipc.handle('fs:copy', (_e, req: InvokeReq<'fs:copy'>) => copyEntry(workspaces, req.wsId, req.from, req.to));
   ipc.handle('fs:importFiles', (_e, req: InvokeReq<'fs:importFiles'>) => importFiles(workspaces, req.wsId, req.destDir, req.sources));
   ipc.handle('fs:readSheet', (_e, req: InvokeReq<'fs:readSheet'>) => readSheet(workspaces, req.wsId, req.path));
+  ipc.handle('fs:readDoc', (_e, req: InvokeReq<'fs:readDoc'>) => readDoc(workspaces, req.wsId, req.path));
+  ipc.handle('fs:openExternal', async (_e, req: InvokeReq<'fs:openExternal'>) => {
+    const safe = resolveSafe(workspaces, req.wsId, req.path);
+    if ('error' in safe) return { error: '路徑超出工作區範圍' } as const;
+    const err = await shell.openPath(safe.abs); // '' = 成功，否則為錯誤訊息
+    return err ? ({ error: err } as const) : ({ ok: true } as const);
+  });
   ipc.handle('fs:reveal', (_e, req: InvokeReq<'fs:reveal'>) => {
     const safe = resolveSafe(workspaces, req.wsId, req.path);
     if ('error' in safe) return { error: '路徑超出工作區範圍' } as const;

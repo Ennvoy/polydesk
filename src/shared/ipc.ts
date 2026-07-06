@@ -62,6 +62,13 @@ export interface InvokeChannels {
     req: { wsId: string; path: string };
     res: { sheets: { name: string; rows: string[][] }[] } | { error: string };
   };
+  /** 讀 Word 文件唯讀預覽：docx/docm→mammoth HTML（圖片內嵌 data URI）、doc→word-extractor 純文字。 */
+  'fs:readDoc': {
+    req: { wsId: string; path: string };
+    res: { kind: 'html'; html: string } | { kind: 'text'; text: string } | { error: string };
+  };
+  /** 用系統預設程式開啟工作區內檔案（shell.openPath；path 經 resolveSafe 限工作區內）。 */
+  'fs:openExternal': { req: { wsId: string; path: string }; res: { ok: true } | { error: string } };
   'fs:reveal': { req: { wsId: string; path: string }; res: { ok: true } | { error: string } };
   // git
   'git:status': { req: { wsId: string }; res: GitStatus };

@@ -14,6 +14,7 @@ import type { FileEncoding, Eol } from '../../../shared/types';
 import type { InvokeRes } from '../../../shared/ipc';
 import { tabKey, modelUri, baseName, langFromPath, monoFontFamily, applyMonacoTheme } from './models';
 import { SheetView } from './SheetView';
+import { DocView } from './DocView';
 
 interface Tab {
   key: string;
@@ -21,7 +22,7 @@ interface Tab {
   path: string;
   name: string;
   /** 'file'=可編輯檔；'diff'=唯讀差異檢視（SCM 點變更檔）；'sheet'=xlsx/xls 唯讀表格預覽。 */
-  kind: 'file' | 'diff' | 'sheet';
+  kind: 'file' | 'diff' | 'sheet' | 'doc';
   language: string;
   encoding: FileEncoding;
   eol: Eol;
@@ -171,6 +172,16 @@ export function EditorGroup(): React.JSX.Element {
       setTabs((prev) => [
         ...prev,
         { key, wsId: req.wsId, path: req.path, name: baseName(req.path), kind: 'sheet', language: 'xlsx', encoding: 'utf-8', eol: 'lf', readonly: true, dirty: false },
+      ]);
+      setActiveKey(key);
+      return;
+    }
+
+    // Word 文件（docx/docm/doc）→ 唯讀文件預覽（mammoth HTML／doc 純文字），不進 Monaco
+    if (/\.(docx|docm|doc)$/i.test(req.path)) {
+      setTabs((prev) => [
+        ...prev,
+        { key, wsId: req.wsId, path: req.path, name: baseName(req.path), kind: 'doc', language: 'word', encoding: 'utf-8', eol: 'lf', readonly: true, dirty: false },
       ]);
       setActiveKey(key);
       return;
@@ -561,7 +572,7 @@ export function EditorGroup(): React.JSX.Element {
           className="pd-editor-pane"
           role="group"
           aria-label="編輯區"
-          style={active?.kind === 'diff' || active?.kind === 'sheet' ? { display: 'none' } : undefined}
+          style={active?.kind !== 'file' ? { display: 'none' } : undefined}
         />
         {split && (
           <div
@@ -569,7 +580,7 @@ export function EditorGroup(): React.JSX.Element {
             className="pd-editor-pane pd-editor-pane-split"
             role="group"
             aria-label="分割編輯區"
-            style={active?.kind === 'diff' || active?.kind === 'sheet' ? { display: 'none' } : undefined}
+            style={active?.kind !== 'file' ? { display: 'none' } : undefined}
           />
         )}
         {active?.kind === 'diff' && active.patch !== undefined && (
@@ -580,6 +591,11 @@ export function EditorGroup(): React.JSX.Element {
         {active?.kind === 'sheet' && (
           <div className="pd-editor-pane" role="group" aria-label={`試算表：${active.name}`}>
             <SheetView key={active.key} wsId={active.wsId} path={active.path} />
+          </div>
+        )}
+        {active?.kind === 'doc' && (
+          <div className="pd-editor-pane" role="group" aria-label={`文件：${active.name}`}>
+            <DocView key={active.key} wsId={active.wsId} path={active.path} />
           </div>
         )}
         {tabs.length === 0 && (

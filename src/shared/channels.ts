@@ -21,6 +21,8 @@ export const INVOKE_CHANNELS = [
   'fs:copy',
   'fs:importFiles',
   'fs:readSheet',
+  'fs:readDoc',
+  'fs:openExternal',
   'fs:reveal',
   'git:status',
   'git:changes',
