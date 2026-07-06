@@ -5,6 +5,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as monaco from 'monaco-editor';
 import { ipc } from '../../ipc/client';
+import { useAppState } from '../../state/appStore';
 import { editorBus, type OpenFileRequest, type OpenDiffRequest } from '../../state/editorBus';
 import { DiffView } from '../SourceControl/DiffView';
 import { dialog } from '../Dialogs/host';
@@ -108,6 +109,7 @@ function SaveOnClosePrompt(props: { name: string; note: string; onSave: () => vo
 
 export function EditorGroup(): React.JSX.Element {
   const { theme } = useTheme();
+  const { activeWorkspaceId } = useAppState();
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [split, setSplit] = useState(false);
@@ -137,6 +139,26 @@ export function EditorGroup(): React.JSX.Element {
   }, [activeKey]);
 
   const active = tabs.find((t) => t.key === activeKey) ?? null;
+  // 分頁依工作區分離：分頁列只列當前工作區的分頁（其餘保持開啟但隱藏，切回即還原）。
+  const visibleTabs = tabs.filter((t) => t.wsId === activeWorkspaceId);
+  const lastActivePerWsRef = useRef<Map<string, string>>(new Map());
+
+  // 記住每個工作區最後聚焦的分頁（切回工作區時還原）
+  useEffect(() => {
+    if (!activeKey) return;
+    const t = tabsRef.current.find((x) => x.key === activeKey);
+    if (t) lastActivePerWsRef.current.set(t.wsId, activeKey);
+  }, [activeKey]);
+
+  // 工作區切換：聚焦切到該工作區記住的分頁（或第一個）；該工作區沒分頁則清空編輯區
+  useEffect(() => {
+    if (!activeWorkspaceId) return;
+    const cur = tabsRef.current.find((x) => x.key === activeKeyRef.current);
+    if (cur && cur.wsId === activeWorkspaceId) return; // 已聚焦在此工作區的分頁
+    const list = tabsRef.current.filter((x) => x.wsId === activeWorkspaceId);
+    const remembered = lastActivePerWsRef.current.get(activeWorkspaceId);
+    setActiveKey(remembered && list.some((x) => x.key === remembered) ? remembered : (list[0]?.key ?? null));
+  }, [activeWorkspaceId]);
 
   // ── 重載磁碟版本（程式化 setValue，抑制 dirty 標記） ──
   const reload = useCallback(async (key: string, wsId: string, path: string) => {
@@ -342,7 +364,9 @@ export function EditorGroup(): React.JSX.Element {
     if (tab) monaco.editor.getModel(modelUri(tab.wsId, tab.path))?.dispose();
     const remaining = tabsRef.current.filter((t) => t.key !== key);
     setTabs(remaining);
-    setActiveKey((prev) => (prev === key ? (remaining.length ? remaining[remaining.length - 1].key : null) : prev));
+    // 遞補只在同一工作區內找（分頁依工作區分離，不跳到別的工作區的分頁）
+    const sameWs = tab ? remaining.filter((t) => t.wsId === tab.wsId) : remaining;
+    setActiveKey((prev) => (prev === key ? (sameWs.length ? sameWs[sameWs.length - 1].key : null) : prev));
   }, []);
 
   const requestClose = useCallback(
@@ -510,7 +534,7 @@ export function EditorGroup(): React.JSX.Element {
       <div className="pd-editor-tabs">
         {/* role=tablist 只包 role=tab 子元素（a11y）；display:contents 不影響既有 flex 版面。 */}
         <div className="pd-editor-tablist" role="tablist" aria-label="開啟的檔案" style={{ display: 'contents' }}>
-          {tabs.map((t) => (
+          {visibleTabs.map((t) => (
             <div
               key={t.key}
               role="tab"
@@ -598,7 +622,7 @@ export function EditorGroup(): React.JSX.Element {
             <DocView key={active.key} wsId={active.wsId} path={active.path} />
           </div>
         )}
-        {tabs.length === 0 && (
+        {visibleTabs.length === 0 && (
           <div className="pd-editor-empty" aria-hidden="true">
             <p>尚未開啟檔案</p>
             <p className="pd-editor-empty-sub">從左側檔案總管點檔開啟 · Ctrl+S 存檔</p>
