@@ -55,7 +55,7 @@ export function RailResizer(): React.JSX.Element {
     setWidth(w);
   };
 
-  // 掛載時還原持久化寬度（若有）。
+  // 掛載時還原持久化寬度（若有），並監看 --rail-w 的外部變動同步 aria-valuenow。
   useEffect(() => {
     ensureStyle();
     let cancelled = false;
@@ -66,8 +66,16 @@ export function RailResizer(): React.JSX.Element {
         if (typeof s.railWidth === 'number') setRailWidth(s.railWidth);
       })
       .catch(() => undefined);
+    // 外部改 --rail-w（如「重設版面」直接把 :root 設回 240、不經本元件 setRailWidth）→ aria-valuenow 會失準。
+    // 監看 documentElement 的 style 變動、把 state 同步回目前 CSS var（相同值回傳 prev 不觸發重繪；拖曳中亦為 no-op）。
+    const obs = new MutationObserver(() => {
+      const w = currentRailWidth();
+      setWidth((prev) => (prev === w ? prev : w));
+    });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
     return () => {
       cancelled = true;
+      obs.disconnect();
       overlayRef.current?.remove();
       overlayRef.current = null;
     };
