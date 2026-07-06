@@ -32,6 +32,7 @@ import {
   applyReplacements,
   applyReplacement,
   toUnpackedPath,
+  fileNameMatches,
   type SearchDeps,
   type SearchSpawnFn,
   type SearchChild,
@@ -341,31 +342,35 @@ describe('SearchService', () => {
   });
 
   // ── A4：收斂 / 生命週期（注入 spawn + 真實演算法）────────────────────
-  it('A4：連續 5 次搜尋，任一時刻存活 rg ≤1，舊的被 kill，收斂後 Map 清空', async () => {
+  // 每次搜尋 spawn 一組 2 個 rg（children[偶]=內容、children[奇]=檔名 --files）。
+  it('A4：連續 5 次搜尋，任一時刻存活 rg ≤1 組，舊的被 kill，收斂後 Map 清空', async () => {
     const { wsId } = addWorkspace(ctx.mgr, ctx.root, 'codeCap');
     const { children, spawn } = makeFakeSpawn();
     const { svc } = makeService(ctx.mgr, { spawn, rgPath: 'rg', maxConcurrent: 1 });
 
     // 慢打字節奏：每次搜尋的 rg 先真的 spawn 出來，下一次 run 的 enforceCap 才殺得到它。
-    // （快打字時舊搜尋會在 spawn 前就被取消、根本不啟動 rg —— 同樣滿足「存活 ≤1」，更省。）
+    // （快打字時舊搜尋會在 spawn 前就被取消、根本不啟動 rg —— 同樣滿足「存活 ≤1 組」，更省。）
     for (let i = 0; i < 5; i++) {
       svc.run({ wsId, query: `x${i}`, opts: {} });
-      await waitForChildren(children, i + 1);
+      await waitForChildren(children, (i + 1) * 2);
       expect(svc.activeCount).toBe(1); // 任一時刻存活搜尋 ≤1
-      expect(children.filter((c) => !c.killed).length).toBe(1); // 任一時刻存活 rg ≤1
+      expect(children.filter((c) => !c.killed).length).toBe(2); // 存活 rg ≤1 組（內容＋檔名）
     }
 
-    expect(children.length).toBe(5);
-    expect(children[4].killed).toBe(false);
-    expect(children.slice(0, 4).every((c) => c.killed)).toBe(true);
+    expect(children.length).toBe(10);
+    expect(children[8].killed).toBe(false);
+    expect(children[9].killed).toBe(false);
+    expect(children.slice(0, 8).every((c) => c.killed)).toBe(true);
     expect(svc.activeCount).toBe(1);
 
-    // 最新一個正常結束 → Map 清空（不殘留殭屍項）
-    children[4].emit('close', 0);
+    // 最新一組（內容＋檔名）都正常結束 → Map 清空（不殘留殭屍項）
+    children[8].emit('close', 0);
+    expect(svc.activeCount).toBe(1); // 檔名側未收斂前不 done
+    children[9].emit('close', 0);
     expect(svc.activeCount).toBe(0);
   });
 
-  it('A4：killByOwner 殺該 owner 的殘留 child 並清 Map（webContents destroyed）', async () => {
+  it('A4：killByOwner 殺該 owner 的殘留 child（兩支都殺）並清 Map（webContents destroyed）', async () => {
     addWorkspace(ctx.mgr, ctx.root, 'codeOwner');
     const wsId = ctx.mgr.list()[0].id;
     const { children, spawn } = makeFakeSpawn();
@@ -373,28 +378,30 @@ describe('SearchService', () => {
     const owner = { id: 'wc-1' };
 
     svc.run({ wsId, query: 'x', opts: {} }, owner);
-    await waitForChildren(children, 1);
+    await waitForChildren(children, 2);
     expect(svc.activeCount).toBe(1);
     svc.killByOwner(owner);
-    expect(children[children.length - 1].killed).toBe(true);
+    expect(children.every((c) => c.killed)).toBe(true);
     expect(svc.activeCount).toBe(0);
   });
 
-  it('A4：cancel 後不再 emit 任何事件（含 done），且對應 child 被 kill', async () => {
+  it('A4：cancel 後不再 emit 任何事件（含 done），且對應兩支 child 都被 kill', async () => {
     addWorkspace(ctx.mgr, ctx.root, 'codeCancel');
     const wsId = ctx.mgr.list()[0].id;
     const { children, spawn } = makeFakeSpawn();
     const { svc, results } = makeService(ctx.mgr, { spawn, rgPath: 'rg', batchSize: 1 });
 
     const { searchId } = svc.run({ wsId, query: 'x', opts: {} });
-    await waitForChildren(children, 1);
-    const child = children[children.length - 1];
+    await waitForChildren(children, 2);
+    const [content, files] = children;
     svc.cancel({ searchId });
-    expect(child.killed).toBe(true);
+    expect(content.killed).toBe(true);
+    expect(files.killed).toBe(true);
 
     // 取消後才到的資料/結束事件一律被吞掉
-    child.stdout.emit('data', matchLine('a.txt', 2, 3, 'hi'));
-    child.emit('close', 0);
+    content.stdout.emit('data', matchLine('a.txt', 2, 3, 'hi'));
+    content.emit('close', 0);
+    files.emit('close', 0);
     await Promise.resolve();
     expect(results.filter((r) => r.searchId === searchId).length).toBe(0);
   });
@@ -413,8 +420,8 @@ describe('SearchService', () => {
     });
 
     const { searchId } = svc.run({ wsId, query: 'x', opts: {} });
-    await waitForChildren(children, 1);
-    const child = children[children.length - 1];
+    await waitForChildren(children, 2);
+    const [child, filesChild] = children;
 
     // 2000 bytes 無換行無 NUL → 超過 maxLineBytes → 累加器丟棄
     child.stdout.emit('data', Buffer.alloc(2000, 0x61));
@@ -430,6 +437,7 @@ describe('SearchService', () => {
     expect(ghit?.preview.length).toBe(50);
 
     child.emit('close', 0);
+    filesChild.emit('close', 0);
     expect(svc.activeCount).toBe(0);
   });
 
@@ -451,6 +459,51 @@ describe('SearchService', () => {
     expect(done.done).toBe(true);
     expect(done.truncated).toBe(false);
     expect(hitsFor(searchId).length).toBe(0);
+  });
+
+  // ── 檔名搜尋（kind:'file'，真 rg --files）─────────────────────────────
+  it('檔名含 query → kind:file 命中（smart-case、排除 node_modules），與內容命中共存', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'codeFname');
+    mkdirSync(join(dir, 'src'), { recursive: true });
+    mkdirSync(join(dir, 'node_modules', 'dep'), { recursive: true });
+    writeFileSync(join(dir, 'src', 'FindMe_notes.txt'), 'nothing here\n', 'utf8');
+    writeFileSync(join(dir, 'other.txt'), 'hello findme world\n', 'utf8');
+    writeFileSync(join(dir, 'node_modules', 'dep', 'findme.txt'), 'x\n', 'utf8');
+
+    const { svc, waitDone, hitsFor } = makeService(ctx.mgr);
+    const { searchId } = svc.run({ wsId, query: 'findme', opts: {} });
+    await waitDone(searchId);
+
+    const hits = hitsFor(searchId);
+    const fileHit = hits.find((h) => h.kind === 'file');
+    expect(fileHit?.path).toBe('src/FindMe_notes.txt'); // 全小寫 query 不分大小寫
+    expect(fileHit?.preview).toBe('FindMe_notes.txt'); // preview = basename
+    expect(fileHit?.line).toBe(1);
+    expect(hits.some((h) => h.kind !== 'file' && h.path === 'other.txt')).toBe(true); // 內容命中共存
+    expect(hits.every((h) => !h.path.includes('node_modules'))).toBe(true);
+  });
+
+  it('檔名命中達 fileHitLimit → 截到上限、整體 done 正常（內容搜尋不受影響）', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'codeFcap');
+    for (let i = 0; i < 5; i++) writeFileSync(join(dir, `hitname-${i}.txt`), 'zzz\n', 'utf8');
+    writeFileSync(join(dir, 'body.txt'), 'hitname in content\n', 'utf8');
+
+    const { svc, waitDone, hitsFor } = makeService(ctx.mgr, { fileHitLimit: 3 });
+    const { searchId } = svc.run({ wsId, query: 'hitname', opts: {} });
+    const done = await waitDone(searchId);
+
+    expect(done.done).toBe(true);
+    const hits = hitsFor(searchId);
+    expect(hits.filter((h) => h.kind === 'file').length).toBe(3);
+    expect(hits.some((h) => h.kind !== 'file' && h.path === 'body.txt')).toBe(true);
+  });
+
+  it('fileNameMatches：只比 basename、smart-case/caseSensitive 規則與內容搜尋一致', () => {
+    expect(fileNameMatches('src/FindMe_notes.txt', 'findme', {})).toBe(true); // 全小寫→不分大小寫
+    expect(fileNameMatches('src/FindMe_notes.txt', 'FindMe', {})).toBe(true); // 含大寫→區分且相符
+    expect(fileNameMatches('src/FindMe_notes.txt', 'FINDME', {})).toBe(false); // 含大寫→區分且不符
+    expect(fileNameMatches('src/FindMe_notes.txt', 'findme', { caseSensitive: true })).toBe(false);
+    expect(fileNameMatches('findme-dir/plain.txt', 'findme', {})).toBe(false); // 目錄名不算檔名命中
   });
 
   it('空 query / 無工作區 → 立即收斂 done，不 spawn', async () => {

@@ -117,6 +117,8 @@ export interface SearchHit {
   line: number;
   col: number;
   preview: string;
+  /** 'file' ＝檔名命中（preview 為 basename、line/col 固定 1）；未給＝內容命中。 */
+  kind?: 'file';
 }
 
 export interface LspServerInfo {

@@ -1,6 +1,7 @@
 // 全域搜尋面板（F-6：REQ-SEARCH-001~005、REQ-E2E-006）。
 // search-as-you-type（debounce）→ ipc.search.run；訂閱 ipc.events.search.result 累積、依檔分組顯示、
-// 高亮 query；可取消；點命中經 editorBus.openFile 跳檔跳行；超量顯示「已截斷」；可取代（全部取代）。
+// 高亮 query；可取消；點命中經 editorBus.openFile 跳檔跳行＋反白命中片段；超量顯示「已截斷」；
+// 可取代（全部取代）。檔名命中（kind:'file'）獨立「檔案」群組列最上方，點了直接開檔。
 // 全用既有 pd-* class + var(--*) token；每互動元素具 aria-label 與 loading/empty/error 微狀態。
 //
 // 註冊：模組頂層 registerPanel(SLOT.viewSearch, Search)（features.ts side-effect import 後生效）。
@@ -181,15 +182,31 @@ export function Search(): React.JSX.Element {
 
   const openHit = useCallback(
     (hit: SearchHit): void => {
-      if (wsId) editorBus.openFile({ wsId, path: hit.path, line: hit.line });
+      if (!wsId) return;
+      if (hit.kind === 'file') {
+        editorBus.openFile({ wsId, path: hit.path }); // 檔名命中：開檔即可
+        return;
+      }
+      // Monaco 欄位是 UTF-16 單位、rg col 是 byte 位移（行內含中文會偏）：
+      // 優先以 preview 內字面位置換算並反白命中片段；找不到（regex/截斷）退回 rg col 只定位。
+      const idx = regex ? -1 : hit.preview.toLowerCase().indexOf(query.toLowerCase());
+      editorBus.openFile({
+        wsId,
+        path: hit.path,
+        line: hit.line,
+        col: idx >= 0 ? idx + 1 : hit.col,
+        selectLen: idx >= 0 ? query.length : 0,
+      });
     },
-    [wsId],
+    [wsId, regex, query],
   );
 
-  // 依檔分組（保命中先後序）。
+  // 檔名命中（kind:'file'）與內容命中分流；內容依檔分組（保命中先後序）。
+  const fileHits = useMemo(() => hits.filter((h) => h.kind === 'file'), [hits]);
   const groups = useMemo(() => {
     const map = new Map<string, SearchHit[]>();
     for (const h of hits) {
+      if (h.kind === 'file') continue;
       const arr = map.get(h.path);
       if (arr) arr.push(h);
       else map.set(h.path, [h]);
@@ -294,7 +311,7 @@ export function Search(): React.JSX.Element {
             {error}
           </div>
         ) : !hasQuery ? (
-          <Hint>輸入字詞以搜尋目前工作區（自動略過 node_modules、.git 等）。</Hint>
+          <Hint>輸入字詞以搜尋目前工作區的檔名與內容（自動略過 node_modules、.git 等）。</Hint>
         ) : lastAction === 'replace' && !replaceBusy ? (
           <div style={{ padding: 'var(--space-3)' }}>
             <div style={{ color: 'var(--success)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-2)' }}>
@@ -312,7 +329,58 @@ export function Search(): React.JSX.Element {
         ) : hits.length === 0 && searching ? (
           <Hint>搜尋中…</Hint>
         ) : (
-          groups.map(([path, fileHits]) => (
+          <>
+          {fileHits.length > 0 && (
+            <div>
+              <div
+                className="pd-row"
+                style={{ position: 'sticky', top: 0, background: 'var(--bg-1, var(--bg))', color: 'var(--fg-2)', fontWeight: 600, gap: 'var(--space-2)' }}
+              >
+                <span>檔案（檔名符合）</span>
+                <span style={{ marginLeft: 'auto', color: 'var(--meta)', fontWeight: 400, fontSize: 'var(--text-xs)' }}>
+                  {fileHits.length}
+                </span>
+              </div>
+              {fileHits.map((h) => (
+                <button
+                  key={h.path}
+                  type="button"
+                  className="pd-row"
+                  aria-label={`開啟檔案 ${h.path}`}
+                  title={h.path}
+                  onClick={() => openHit(h)}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    paddingLeft: 'var(--space-6)',
+                    gap: 'var(--space-2)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 'var(--text-sm)' }}>
+                    {/* 檔名比對永遠是字面（regex 選項不影響），highlight 恆開 */}
+                    <Highlight text={h.preview} query={query} enabled />
+                  </span>
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      color: 'var(--meta)',
+                      fontSize: 'var(--text-xs)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 1,
+                    }}
+                  >
+                    {h.path.includes('/') ? h.path.slice(0, h.path.lastIndexOf('/')) : ''}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          {groups.map(([path, lineHits]) => (
             <div key={path}>
               <div
                 className="pd-row"
@@ -321,10 +389,10 @@ export function Search(): React.JSX.Element {
               >
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{path}</span>
                 <span style={{ marginLeft: 'auto', color: 'var(--meta)', fontWeight: 400, fontSize: 'var(--text-xs)' }}>
-                  {fileHits.length}
+                  {lineHits.length}
                 </span>
               </div>
-              {fileHits.map((h, i) => (
+              {lineHits.map((h, i) => (
                 <button
                   key={`${h.line}:${h.col}:${i}`}
                   type="button"
@@ -359,7 +427,8 @@ export function Search(): React.JSX.Element {
                 </button>
               ))}
             </div>
-          ))
+          ))}
+          </>
         )}
       </div>
     </div>

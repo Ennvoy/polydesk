@@ -6,6 +6,10 @@ export interface OpenFileRequest {
   path: string;
   /** 可選：開啟後跳到此行（搜尋點擊用，1-based）。 */
   line?: number;
+  /** 可選：跳行後定位到此欄（1-based；Monaco UTF-16 欄位）。 */
+  col?: number;
+  /** 可選：自 (line,col) 起選取反白的長度（搜尋命中 highlight 用；0/未給＝只定位游標）。 */
+  selectLen?: number;
   /** 可選：分割並排開啟。 */
   split?: boolean;
 }

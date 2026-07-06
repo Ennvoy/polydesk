@@ -1,6 +1,8 @@
 // 全域搜尋後端（F-6：REQ-SEARCH-001~005、REQ-E2E-006）。
 // 以內建 @vscode/ripgrep 的 rg 執行檔 spawn，串流 stdout 逐行解析成 SearchHit，分批 emit
 // 'search:result' 給 renderer（不卡 UI）；達上限截斷、可取消、會自動回收程序。
+// 檔名搜尋：每次搜尋另 spawn 一支 rg --files 串流過濾 basename（kind:'file' 命中，上限
+// fileHitLimit），與內容 rg 平行、兩側都收斂才發 done；檔名側失敗 fail-open 不影響內容。
 //
 // 安全硬化（紅軍 A1~A5）：
 //  - A1：spawn rg 走「白名單最小 env」（顯式排除 RIPGREP_CONFIG_PATH / RIPGREP_*，避免半可信 repo
@@ -89,16 +91,24 @@ export interface SearchDeps {
   maxColumns?: number;
   /** rg -l 檔名清單 stdout 上限（bytes）。 */
   maxListBytes?: number;
+  /** 檔名命中上限（達標殺檔名 rg、內容搜尋照常）。 */
+  fileHitLimit?: number;
 }
 
 interface ActiveSearch {
   kind: 'search' | 'replace';
   child: SearchChild | null;
+  /** 檔名搜尋 rg（--files 清單過濾 basename）；與內容 rg 平行，兩側都 settle 才 done。 */
+  fileChild: SearchChild | null;
+  contentSettled: boolean;
+  filesSettled: boolean;
   owner: unknown;
   cancelled: boolean;
   done: boolean;
   total: number;
   buf: Buffer;
+  fileBuf: Buffer;
+  fileHitCount: number;
   pending: SearchHit[];
   flushTimer: ReturnType<typeof setTimeout> | null;
   startedAt: number;
@@ -123,6 +133,16 @@ function parseList(buf: Buffer): string[] {
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * 檔名命中判定：basename 含 query 字面（大小寫規則與內容搜尋一致：caseSensitive 或 query
+ * 含大寫才區分，否則 smart-case 不區分）。regex 選項不影響檔名比對、維持字面。
+ */
+export function fileNameMatches(relPosix: string, query: string, opts: { caseSensitive?: boolean }): boolean {
+  const base = relPosix.split('/').pop() ?? relPosix;
+  const sensitive = Boolean(opts.caseSensitive) || /[A-Z]/.test(query);
+  return sensitive ? base.includes(query) : base.toLowerCase().includes(query.toLowerCase());
 }
 
 /**
@@ -266,6 +286,7 @@ export class SearchService {
   private readonly previewMax: number;
   private readonly maxColumns: number;
   private readonly maxListBytes: number;
+  private readonly fileHitLimit: number;
 
   constructor(
     private readonly workspaces: WorkspaceManager,
@@ -282,6 +303,7 @@ export class SearchService {
     this.previewMax = deps.previewMax ?? 500;
     this.maxColumns = deps.maxColumns ?? 500;
     this.maxListBytes = deps.maxListBytes ?? 8 * 1024 * 1024;
+    this.fileHitLimit = deps.fileHitLimit ?? 50;
   }
 
   /** 存活搜尋數（測試用）。 */
@@ -304,11 +326,16 @@ export class SearchService {
     const a: ActiveSearch = {
       kind: isReplace ? 'replace' : 'search',
       child: null,
+      fileChild: null,
+      contentSettled: false,
+      filesSettled: false,
       owner,
       cancelled: false,
       done: false,
       total: 0,
       buf: Buffer.alloc(0),
+      fileBuf: Buffer.alloc(0),
+      fileHitCount: 0,
       pending: [],
       flushTimer: null,
       startedAt: performance.now(),
@@ -361,20 +388,75 @@ export class SearchService {
       return;
     }
     if (a.cancelled) return; // 解析 rg 期間可能已被取消
-    let child: SearchChild;
+
+    // 內容 rg：error(ENOENT)/close(任何 exit code) 一律結清該側（A5：UI 永不卡住）
     try {
-      child = this.spawnFn(rg, this.searchArgs(query, opts), { cwd, env: this.buildEnv() });
+      const child = this.spawnFn(rg, this.searchArgs(query, opts), { cwd, env: this.buildEnv() });
+      a.child = child;
+      child.stdout?.on('data', (c: Buffer) => this.onStdout(searchId, c));
+      child.stderr?.on('data', () => {
+        /* 排空 stderr 防 backpressure；內容忽略（exit code 已足夠判斷） */
+      });
+      child.on('error', () => this.settle(searchId, 'content'));
+      child.on('close', () => this.settle(searchId, 'content'));
     } catch {
-      this.emitDone(searchId, false, []); // 同步 spawn 失敗也收斂 done
-      return;
+      a.contentSettled = true;
     }
-    a.child = child;
-    child.stdout?.on('data', (c: Buffer) => this.onStdout(searchId, c));
-    child.stderr?.on('data', () => {
-      /* 排空 stderr 防 backpressure；內容忽略（exit code 已足夠判斷） */
-    });
-    child.on('error', () => this.emitDone(searchId, false, [])); // ENOENT 等：收斂 done（A5）
-    child.on('close', () => this.emitDone(searchId, false)); // exit 0/1/≥2 一律收斂 done（A5）
+
+    // 檔名 rg（--files 清單、basename 過濾）：fail-open——失敗只少檔名區塊，內容照常
+    try {
+      const fileChild = this.spawnFn(rg, this.filesArgs(), { cwd, env: this.buildEnv() });
+      a.fileChild = fileChild;
+      fileChild.stdout?.on('data', (c: Buffer) => this.onFilesStdout(searchId, query, opts, c));
+      fileChild.stderr?.on('data', () => {
+        /* 排空 stderr 防 backpressure */
+      });
+      fileChild.on('error', () => this.settle(searchId, 'files'));
+      fileChild.on('close', () => this.settle(searchId, 'files'));
+    } catch {
+      a.filesSettled = true;
+    }
+
+    if (a.contentSettled && a.filesSettled) this.emitDone(searchId, false, []); // 兩側同步 spawn 皆失敗
+  }
+
+  /** 結清一側；兩側（內容＋檔名）都結清才發 done（emitDone 冪等，重複呼叫安全）。 */
+  private settle(searchId: string, side: 'content' | 'files'): void {
+    const a = this.active.get(searchId);
+    if (!a || a.cancelled || a.done) return;
+    if (side === 'content') a.contentSettled = true;
+    else a.filesSettled = true;
+    if (a.contentSettled && a.filesSettled) this.emitDone(searchId, false);
+  }
+
+  /** rg --files --null 串流：NUL 分隔路徑，basename 含 query（smart-case）＝檔名命中。 */
+  private onFilesStdout(searchId: string, query: string, opts: SearchOpts, chunk: Buffer): void {
+    const a = this.active.get(searchId);
+    if (!a || a.cancelled || a.done) return;
+    const data = a.fileBuf.length ? Buffer.concat([a.fileBuf, chunk]) : chunk;
+    let start = 0;
+    for (;;) {
+      const nul = data.indexOf(0x00, start);
+      if (nul < 0) break;
+      const rel = toPosix(data.subarray(start, nul).toString('utf8'));
+      start = nul + 1;
+      if (!rel || !fileNameMatches(rel, query, opts)) continue;
+      const cur = this.active.get(searchId);
+      if (!cur || cur.done || cur.cancelled) return;
+      cur.fileHitCount += 1;
+      this.addHit(searchId, { path: rel, line: 1, col: 1, preview: rel.split('/').pop() ?? rel, kind: 'file' });
+      const after = this.active.get(searchId);
+      if (!after || after.done || after.cancelled) return; // addHit 可能觸發整體截斷收尾
+      if (after.fileHitCount >= this.fileHitLimit) {
+        // 檔名區塊達上限：殺檔名 rg、結清 files 側，內容搜尋照常繼續
+        if (after.fileChild) this.killChild(after.fileChild);
+        after.fileChild = null;
+        this.settle(searchId, 'files');
+        return;
+      }
+    }
+    const rem = data.subarray(start);
+    a.fileBuf = rem.length > this.maxLineBytes ? Buffer.alloc(0) : Buffer.from(rem); // A5 同款上限
   }
 
   private onStdout(searchId: string, chunk: Buffer): void {
@@ -564,6 +646,13 @@ export class SearchService {
     return [...this.baseFlags(opts), '-l', '--null', '-e', query, '--', '.'];
   }
 
+  /** 檔名清單 argv（rg --files --null；沿用同一組 ignore glob，query 過濾在 JS 端做）。 */
+  private filesArgs(): string[] {
+    const f: string[] = ['--color=never', '--files', '--null'];
+    for (const dir of IGNORED_DIRS) f.push('--glob', `!${dir}`);
+    return f;
+  }
+
   /**
    * 白名單最小 env（A1）：只帶執行 rg 必要變數，永不帶 RIPGREP_CONFIG_PATH / RIPGREP_*，
    * 杜絕半可信環境以 config 的 --pre 達成零點擊 RCE。
@@ -602,7 +691,9 @@ export class SearchService {
       a.flushTimer = null;
     }
     if (kill && a.child) this.killChild(a.child);
+    if (kill && a.fileChild) this.killChild(a.fileChild);
     a.child = null;
+    a.fileChild = null;
     this.active.delete(searchId); // child 'close'/'error' 之後查不到 → 不再 emit（A4）
   }
 

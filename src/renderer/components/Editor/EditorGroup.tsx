@@ -125,7 +125,7 @@ export function EditorGroup(): React.JSX.Element {
   const listenersRef = useRef<Map<string, monaco.IDisposable>>(new Map());
   const suppressDirtyRef = useRef<Set<string>>(new Set());
   const selfWriteRef = useRef<Map<string, number>>(new Map());
-  const pendingRevealRef = useRef<number | null>(null);
+  const pendingRevealRef = useRef<{ line: number; col: number; len: number } | null>(null);
   const lastFocusKeyRef = useRef<string | null>(null); // 上次因開檔/切分頁聚焦過的 key（避免背景 metadata 變動搶焦點）
 
   useEffect(() => {
@@ -162,7 +162,7 @@ export function EditorGroup(): React.JSX.Element {
     if (tabsRef.current.some((t) => t.key === key)) {
       setActiveKey(key);
       if (req.split) setSplit(true);
-      if (req.line) pendingRevealRef.current = req.line;
+      if (req.line) pendingRevealRef.current = { line: req.line, col: req.col ?? 1, len: req.selectLen ?? 0 };
       return;
     }
 
@@ -215,7 +215,7 @@ export function EditorGroup(): React.JSX.Element {
     setTabs((prev) => [...prev, tab]);
     setActiveKey(key);
     if (req.split) setSplit(true);
-    if (req.line) pendingRevealRef.current = req.line;
+    if (req.line) pendingRevealRef.current = { line: req.line, col: req.col ?? 1, len: req.selectLen ?? 0 };
     measure('fileOpen', startMark); // REQ-PERF-003：開檔到首屏
   }, []);
 
@@ -397,10 +397,16 @@ export function EditorGroup(): React.JSX.Element {
     if (ed.getModel() !== model) ed.setModel(model ?? null); // 避免 dirty 變動觸發無謂 setModel（重置游標）
     ed.updateOptions({ readOnly: active.readonly });
     if (model && pendingRevealRef.current) {
-      const line = pendingRevealRef.current;
+      const { line, col, len } = pendingRevealRef.current;
       pendingRevealRef.current = null;
-      ed.revealLineInCenter(line);
-      ed.setPosition({ lineNumber: line, column: 1 });
+      if (len > 0) {
+        // 搜尋命中：反白選取命中片段並置中（selection 即 highlight）
+        ed.setSelection({ startLineNumber: line, startColumn: col, endLineNumber: line, endColumn: col + len });
+        ed.revealRangeInCenter({ startLineNumber: line, startColumn: col, endLineNumber: line, endColumn: col + len });
+      } else {
+        ed.revealLineInCenter(line);
+        ed.setPosition({ lineNumber: line, column: col });
+      }
       ed.focus();
     } else if (model && lastFocusKeyRef.current !== activeKey) {
       // 開檔 / 切分頁（active key 變更）後聚焦編輯器：鍵盤可直接編輯（REQ-UI-004 / 開檔即可打字）。

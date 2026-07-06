@@ -11,6 +11,7 @@ function seedRepo(): string {
   mkdirSync(join(dir, 'src'), { recursive: true });
   mkdirSync(join(dir, 'node_modules', 'dep'), { recursive: true });
   writeFileSync(join(dir, 'src', 'a.txt'), 'hello FINDME_TOKEN world\n');
+  writeFileSync(join(dir, 'src', 'NAMEHIT_notes.md'), '# 筆記內容\n');
   writeFileSync(join(dir, 'node_modules', 'dep', 'd.txt'), 'FINDME_TOKEN in deps\n');
   return dir;
 }
@@ -35,6 +36,35 @@ test('REQ-E2E-006：全域搜尋串流結果（排除 node_modules）→點命�
   await hit.click();
   await expect(page.locator('.monaco-editor').first()).toBeVisible({ timeout: 15000 });
   await expect(page.locator('.monaco-editor').first()).toContainText('FINDME_TOKEN', { timeout: 10000 });
+
+  await app.close();
+  rmSync(dir, { recursive: true, force: true });
+  rmSync(userData, { recursive: true, force: true });
+});
+
+test('檔名搜尋：命中列「檔案」群組點了開檔；內容命中點擊跳行並反白命中片段', async () => {
+  const dir = seedRepo();
+  const { app, page, userData } = await launchApp();
+  await stubFolderPicker(app, [dir]);
+  await addWorkspaceViaUI(page);
+  await page.locator('button[aria-label="開啟工作區 searchws"]').click();
+  await page.locator('button[aria-label="搜尋"]').click();
+
+  // 檔名命中（smart-case：全小寫 query 對到大寫檔名）→「檔案」群組 → 點了直接開檔
+  await page.locator('input[aria-label="搜尋字詞"]').fill('namehit');
+  const fileRow = page.locator('button[aria-label="開啟檔案 src/NAMEHIT_notes.md"]');
+  await expect(fileRow).toBeVisible({ timeout: 15000 });
+  await fileRow.click();
+  await expect(page.locator('.monaco-editor').first()).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.monaco-editor').first()).toContainText('筆記內容', { timeout: 10000 });
+
+  // 內容命中 → 點擊跳行＋反白：游標落在命中片段結尾（'hello ' 6 字 + FINDME_TOKEN 12 字 → 欄 19）
+  await page.locator('input[aria-label="搜尋字詞"]').fill('FINDME_TOKEN');
+  const hit = page.locator('[aria-label*="a.txt 第 1 行"]').first();
+  await expect(hit).toBeVisible({ timeout: 15000 });
+  await hit.click();
+  await expect(page.locator('.monaco-editor').first()).toContainText('FINDME_TOKEN', { timeout: 15000 });
+  await expect(page.getByText('行 1，欄 19')).toBeVisible({ timeout: 10000 });
 
   await app.close();
   rmSync(dir, { recursive: true, force: true });
