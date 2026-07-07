@@ -41,6 +41,14 @@ type EmitFn = (payload: EventChannels['claude:status']) => void;
 
 /** 待確認桌面通知（PE-2）；預設 Electron Notification，測試可注入。 */
 type AwaitNotifier = (info: { wsId: string; name: string }) => void;
+/**
+ * 存活通知的強引用：Notification 若只留在函式區域變數，show() 後隨時可能被 GC 回收，
+ * click handler 跟著消失（點了沒反應、時好時壞）。保留到 close/click/failed 才放掉；
+ * 上限防洩漏（超過就丟最舊的——那些多半早已離幕，只剩通知中心點擊，portable 本就收不到）。
+ */
+const liveNotifications = new Set<Notification>();
+const LIVE_NOTIFICATIONS_MAX = 50;
+
 function defaultNotifyAwait(info: { wsId: string; name: string }): void {
   try {
     if (!Notification.isSupported()) return;
@@ -48,8 +56,12 @@ function defaultNotifyAwait(info: { wsId: string; name: string }): void {
       title: 'Claude 待確認',
       body: `工作區「${info.name}」的 Claude 需要你確認（點此回到 Polydesk）。`,
     });
+    const release = (): void => {
+      liveNotifications.delete(n);
+    };
     // 點通知 → 聚焦 Polydesk 視窗並切到該工作區（PE-2：通知可回跳）。
     n.on('click', () => {
+      release();
       const win = BrowserWindow.getAllWindows()[0];
       if (!win) return;
       if (win.isMinimized()) win.restore();
@@ -57,6 +69,13 @@ function defaultNotifyAwait(info: { wsId: string; name: string }): void {
       win.focus();
       win.webContents.send('workspace:activate', { wsId: info.wsId });
     });
+    n.on('close', release);
+    n.on('failed', release);
+    liveNotifications.add(n);
+    if (liveNotifications.size > LIVE_NOTIFICATIONS_MAX) {
+      const oldest = liveNotifications.values().next().value;
+      if (oldest) liveNotifications.delete(oldest);
+    }
     n.show();
   } catch {
     /* 通知失敗不致命 */
