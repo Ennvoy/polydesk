@@ -16,6 +16,7 @@ import type { InvokeRes } from '../../../shared/ipc';
 import { tabKey, modelUri, baseName, langFromPath, monoFontFamily, applyMonacoTheme } from './models';
 import { SheetView } from './SheetView';
 import { DocView } from './DocView';
+import { ImageView } from './ImageView';
 
 interface Tab {
   key: string;
@@ -23,7 +24,7 @@ interface Tab {
   path: string;
   name: string;
   /** 'file'=可編輯檔；'diff'=唯讀差異檢視（SCM 點變更檔）；'sheet'=xlsx/xls 唯讀表格預覽。 */
-  kind: 'file' | 'diff' | 'sheet' | 'doc';
+  kind: 'file' | 'diff' | 'sheet' | 'doc' | 'image';
   language: string;
   encoding: FileEncoding;
   eol: Eol;
@@ -194,6 +195,16 @@ export function EditorGroup(): React.JSX.Element {
       setTabs((prev) => [
         ...prev,
         { key, wsId: req.wsId, path: req.path, name: baseName(req.path), kind: 'sheet', language: 'xlsx', encoding: 'utf-8', eol: 'lf', readonly: true, dirty: false },
+      ]);
+      setActiveKey(key);
+      return;
+    }
+
+    // 圖片 → 唯讀圖片預覽，不進 Monaco（避免二進位亂碼）
+    if (/\.(png|jpe?g|gif|webp|bmp|ico|svg)$/i.test(req.path)) {
+      setTabs((prev) => [
+        ...prev,
+        { key, wsId: req.wsId, path: req.path, name: baseName(req.path), kind: 'image', language: 'image', encoding: 'utf-8', eol: 'lf', readonly: true, dirty: false },
       ]);
       setActiveKey(key);
       return;
@@ -620,6 +631,11 @@ export function EditorGroup(): React.JSX.Element {
         {active?.kind === 'doc' && (
           <div className="pd-editor-pane" role="group" aria-label={`文件：${active.name}`}>
             <DocView key={active.key} wsId={active.wsId} path={active.path} />
+          </div>
+        )}
+        {active?.kind === 'image' && (
+          <div className="pd-editor-pane" role="group" aria-label={`圖片：${active.name}`}>
+            <ImageView key={active.key} wsId={active.wsId} path={active.path} />
           </div>
         )}
         {visibleTabs.length === 0 && (

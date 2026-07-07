@@ -23,6 +23,7 @@ export const INVOKE_CHANNELS = [
   'fs:readSheet',
   'fs:readDoc',
   'fs:openExternal',
+  'fs:readImage',
   'fs:reveal',
   'git:status',
   'git:changes',

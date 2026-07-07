@@ -30,6 +30,7 @@ import {
   deleteEntry,
   readSheet,
   readDoc,
+  readImage,
   __resetFileServiceState,
 } from './fileService';
 
@@ -518,5 +519,41 @@ describe('fileService readDoc（Word 文件預覽）', () => {
     expect('error' in (await readDoc(ctx.mgr, wsId, 'bad.docx'))).toBe(true);
     writeFileSync(join(dir, 'bad.doc'), 'not a real doc', 'utf8');
     expect('error' in (await readDoc(ctx.mgr, wsId, 'bad.doc'))).toBe(true);
+  });
+});
+
+// ── readImage：圖片唯讀預覽（data URI） ────────────────────────────────────
+const PNG_1PX = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+describe('fileService readImage（圖片預覽）', () => {
+  let ctx: ReturnType<typeof setup>;
+  beforeEach(() => {
+    __resetFileServiceState();
+    ctx = setup();
+  });
+  afterEach(() => {
+    rmSync(ctx.root, { recursive: true, force: true });
+  });
+
+  it('png → data:image/png;base64 前綴與 bytes 正確', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'imgA');
+    writeFileSync(join(dir, 'dot.png'), PNG_1PX);
+    const r = await readImage(ctx.mgr, wsId, 'dot.png');
+    expect('dataUri' in r).toBe(true);
+    if ('dataUri' in r) {
+      expect(r.dataUri.startsWith('data:image/png;base64,')).toBe(true);
+      expect(r.bytes).toBe(PNG_1PX.length);
+      expect(Buffer.from(r.dataUri.split(',')[1], 'base64').equals(PNG_1PX)).toBe(true); // 內容忠實
+    }
+  });
+
+  it('不支援副檔名 / 越界路徑 → error', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'imgB');
+    writeFileSync(join(dir, 'x.exe'), PNG_1PX);
+    expect('error' in (await readImage(ctx.mgr, wsId, 'x.exe'))).toBe(true);
+    expect('error' in (await readImage(ctx.mgr, wsId, '../out.png'))).toBe(true);
   });
 });

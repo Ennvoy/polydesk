@@ -594,6 +594,41 @@ export async function readDoc(
   }
 }
 
+/** 圖片預覽上限（data URI 常駐 renderer 記憶體 ~1.33×，20MB 已遠超一般 UI 資產）。 */
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const IMAGE_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+  svg: 'image/svg+xml', // <img> 載入的 SVG 不執行腳本（瀏覽器規格），安全
+};
+
+/** 讀圖片成 data URI（唯讀預覽；副檔名不支援/超上限/越界回 error）。 */
+export async function readImage(
+  mgr: WorkspaceManager,
+  wsId: string,
+  p: string,
+): Promise<{ dataUri: string; bytes: number } | { error: string }> {
+  const safe = resolveSafe(mgr, wsId, p);
+  if ('error' in safe) return { error: '路徑超出工作區範圍' };
+  const ext = p.slice(p.lastIndexOf('.') + 1).toLowerCase();
+  const mime = IMAGE_MIME[ext];
+  if (!mime) return { error: `不支援的圖片格式：.${ext}` };
+  try {
+    const st = await fsp.stat(safe.abs);
+    if (!st.isFile()) return { error: '不是檔案' };
+    if (st.size > MAX_IMAGE_BYTES) return { error: `圖片過大（${Math.round(st.size / 1024 / 1024)}MB，上限 20MB）` };
+    const buf = await fsp.readFile(safe.abs);
+    return { dataUri: `data:${mime};base64,${buf.toString('base64')}`, bytes: buf.length };
+  } catch (e) {
+    return { error: fsOpError(e) };
+  }
+}
+
 /** 測試輔助：清空模組級版本指紋狀態。 */
 export function __resetFileServiceState(): void {
   readVersions.clear();
@@ -610,6 +645,7 @@ export function registerFileService(ipc: IpcMain, workspaces: WorkspaceManager):
   ipc.handle('fs:importFiles', (_e, req: InvokeReq<'fs:importFiles'>) => importFiles(workspaces, req.wsId, req.destDir, req.sources));
   ipc.handle('fs:readSheet', (_e, req: InvokeReq<'fs:readSheet'>) => readSheet(workspaces, req.wsId, req.path));
   ipc.handle('fs:readDoc', (_e, req: InvokeReq<'fs:readDoc'>) => readDoc(workspaces, req.wsId, req.path));
+  ipc.handle('fs:readImage', (_e, req: InvokeReq<'fs:readImage'>) => readImage(workspaces, req.wsId, req.path));
   ipc.handle('fs:openExternal', async (_e, req: InvokeReq<'fs:openExternal'>) => {
     const safe = resolveSafe(workspaces, req.wsId, req.path);
     if ('error' in safe) return { error: '路徑超出工作區範圍' } as const;

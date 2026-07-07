@@ -69,6 +69,11 @@ export interface InvokeChannels {
   };
   /** 用系統預設程式開啟工作區內檔案（shell.openPath；path 經 resolveSafe 限工作區內）。 */
   'fs:openExternal': { req: { wsId: string; path: string }; res: { ok: true } | { error: string } };
+  /** 讀圖片 → data URI（唯讀預覽；超過上限回 error 防 OOM）。 */
+  'fs:readImage': {
+    req: { wsId: string; path: string };
+    res: { dataUri: string; bytes: number } | { error: string };
+  };
   'fs:reveal': { req: { wsId: string; path: string }; res: { ok: true } | { error: string } };
   // git
   'git:status': { req: { wsId: string }; res: GitStatus };
