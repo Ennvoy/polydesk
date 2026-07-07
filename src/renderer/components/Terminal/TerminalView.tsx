@@ -266,12 +266,18 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
     });
 
     // 右鍵：有選取＝複製並清選取；無選取＝貼上（Windows Terminal 慣例；xterm 原生無右鍵貼上）。
+    // 貼上防抖 300ms：觸控板/滑鼠驅動偶發把一次手勢送成兩個 contextmenu、或貼上非同步延遲下
+    // 使用者連點 → 忠實執行會貼兩次（dogfood 回報）；0.3 秒內故意連貼兩次在終端機無真實需求。
+    let lastCtxPasteAt = 0;
     const onContextMenu = (e: MouseEvent): void => {
       e.preventDefault();
       if (term.hasSelection()) {
         copySelection();
         term.clearSelection();
       } else {
+        const now = Date.now();
+        if (now - lastCtxPasteAt < 300) return;
+        lastCtxPasteAt = now;
         pasteFromClipboard();
       }
     };

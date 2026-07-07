@@ -127,3 +127,54 @@ test('OSC52 寫入：真 shell 發序列 → 系統剪貼簿更新（Claude Code
     rmSync(userData, { recursive: true, force: true });
   }
 });
+
+test('右鍵貼上防抖：300ms 內第二次右鍵只貼一次；窗過後可再貼', async () => {
+  const dir = seedDir('clip-ws4');
+  const { app, page, userData } = await launchApp();
+  let restore: (() => Promise<void>) | null = null;
+  try {
+    await stubFolderPicker(app, [dir]);
+    await addWorkspaceViaUI(page);
+    await page.locator('button[aria-label="開啟工作區 clip-ws4"]').click();
+    await openTerminal(page);
+
+    // main 端累積 pty:write 資料流（數 token 出現次數＝實際貼上次數）
+    await app.evaluate(({ ipcMain }) => {
+      (globalThis as { __pdPty?: string }).__pdPty = '';
+      ipcMain.on('pty:write', (_e, p: { data?: string }) => {
+        (globalThis as { __pdPty?: string }).__pdPty += String(p && p.data ? p.data : '');
+      });
+    });
+    restore = await seedClipboard(app, 'PD_DEBOUNCE_TOKEN');
+
+    const view = page.locator('.pd-term-view').first();
+    const screen = page.locator('.pd-term-view .xterm-screen').first();
+    await view.click(); // 聚焦、無選取
+    // 同一瞬間連發兩個 contextmenu（模擬裝置重複觸發/手快連點；從最深節點冒泡到 host handler）
+    // → 防抖應只貼一次
+    await screen.evaluate((el) => {
+      const fire = (): void => {
+        el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+      };
+      fire();
+      fire();
+    });
+    await page.waitForTimeout(1000);
+    let data = await app.evaluate(() => (globalThis as { __pdPty?: string }).__pdPty ?? '');
+    expect(data.split('PD_DEBOUNCE_TOKEN').length - 1).toBe(1);
+
+    // 防抖窗（300ms）過後再右鍵 → 允許再貼一次（防抖不是永久封鎖）
+    await page.waitForTimeout(500);
+    await screen.evaluate((el) => {
+      el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+    });
+    await page.waitForTimeout(1000);
+    data = await app.evaluate(() => (globalThis as { __pdPty?: string }).__pdPty ?? '');
+    expect(data.split('PD_DEBOUNCE_TOKEN').length - 1).toBe(2);
+  } finally {
+    await restore?.();
+    await app.close();
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(userData, { recursive: true, force: true });
+  }
+});
