@@ -315,7 +315,8 @@ export function Explorer(): React.JSX.Element {
     setMenu(null);
     const winRel = rel.replace(/\//g, '\\');
     const text = relative ? winRel : ws?.path ? `${ws.path}\\${winRel}` : winRel;
-    void navigator.clipboard?.writeText(text).catch(() => undefined);
+    // 走 clipboard IPC：renderer 的 navigator.clipboard 被 REQ-SEC-001 權限封鎖（必 NotAllowedError）
+    void ipc.clipboard.writeText({ text }).catch(() => undefined);
   };
   const reveal = (rel: string): void => {
     setMenu(null);

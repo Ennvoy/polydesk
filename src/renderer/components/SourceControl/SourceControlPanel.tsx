@@ -926,12 +926,13 @@ export function SourceControlPanel(): React.JSX.Element {
         >
           {(
             [
-              ['複製雜湊', () => void navigator.clipboard?.writeText(commitMenu.c.hash).catch(() => {})],
+              // 走 clipboard IPC：renderer 的 navigator.clipboard 被 REQ-SEC-001 權限封鎖（必 NotAllowedError）
+              ['複製雜湊', () => void ipc.clipboard.writeText({ text: commitMenu.c.hash }).catch(() => {})],
               [
                 '複製訊息',
                 () =>
-                  void navigator.clipboard
-                    ?.writeText(commitMenu.c.body ? `${commitMenu.c.subject}\n\n${commitMenu.c.body}` : commitMenu.c.subject)
+                  void ipc.clipboard
+                    .writeText({ text: commitMenu.c.body ? `${commitMenu.c.subject}\n\n${commitMenu.c.body}` : commitMenu.c.subject })
                     .catch(() => {}),
               ],
               [
