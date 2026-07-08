@@ -9,6 +9,7 @@ import { ipc } from '../ipc/client';
 import { editorBus } from '../state/editorBus';
 import { dialog } from './Dialogs/host';
 import { registerPanel, SLOT } from '../layout/panelRegistry';
+import { DRAG_PATH_MIME } from './Terminal/pathDrop';
 
 interface Entry {
   name: string;
@@ -311,10 +312,15 @@ export function Explorer(): React.JSX.Element {
     else void loadDir(relDirname(rel));
   };
 
+  /** rel（/ 分隔）→ Windows 絕對路徑（\ 分隔；無 ws.path 時退相對）。複製路徑與拖曳共用同一組法。 */
+  const absPathOf = (rel: string): string => {
+    const winRel = rel.replace(/\//g, '\\');
+    return ws?.path ? `${ws.path}\\${winRel}` : winRel;
+  };
+
   const copyPath = (rel: string, relative: boolean): void => {
     setMenu(null);
-    const winRel = rel.replace(/\//g, '\\');
-    const text = relative ? winRel : ws?.path ? `${ws.path}\\${winRel}` : winRel;
+    const text = relative ? rel.replace(/\//g, '\\') : absPathOf(rel);
     // 走 clipboard IPC：renderer 的 navigator.clipboard 被 REQ-SEC-001 權限封鎖（必 NotAllowedError）
     void ipc.clipboard.writeText({ text }).catch(() => undefined);
   };
@@ -464,6 +470,19 @@ export function Explorer(): React.JSX.Element {
                 aria-selected={selected?.rel === childRel}
                 tabIndex={0}
                 title={entry.name}
+                draggable
+                onDragStart={(e) => {
+                  // 拖到終端機貼絕對路徑（VS Code 慣例）。自訂 MIME 供終端機辨識；text/plain 供
+                  // 一般文字 drop 目標（編輯器等）。setData 失敗（受限環境）不致命：拖曳僅無效果。
+                  const abs = absPathOf(childRel);
+                  try {
+                    e.dataTransfer.setData(DRAG_PATH_MIME, abs);
+                    e.dataTransfer.setData('text/plain', abs);
+                    e.dataTransfer.effectAllowed = 'copy';
+                  } catch {
+                    /* setData 受限：略過 */
+                  }
+                }}
                 style={{
                   paddingLeft: indent,
                   opacity: clip?.op === 'cut' && clip.rel === childRel ? 0.5 : 1,

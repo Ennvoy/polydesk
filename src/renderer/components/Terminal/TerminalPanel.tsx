@@ -494,6 +494,7 @@ export function TerminalPanel(): React.JSX.Element {
         createPortal(
           <TerminalView
             termId={t.termId}
+            shell={t.shell}
             visible={t.wsId === activeWs.id && !t.hidden}
             exitCode={t.exitCode}
             onRestart={() => void restartTerm(t)}

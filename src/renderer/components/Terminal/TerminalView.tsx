@@ -33,10 +33,14 @@ import {
 import { useTerminalFont } from '../../theme/TerminalFontProvider';
 import { classifyClipboardKey } from './clipboardKeys';
 import { stripEnclosingKeycap } from './displayNormalize';
+import { DRAG_PATH_MIME, formatPathsForShell } from './pathDrop';
 import type { ITheme } from '@xterm/xterm';
+import type { ShellKind } from '../../../shared/types';
 
 interface Props {
   termId: string;
+  /** 此終端機的 shell 種類（拖放貼路徑時決定引號策略）。 */
+  shell: ShellKind;
   visible: boolean;
   /** 非 null 表示該程序已結束（顯示 exit overlay + 重啟）。 */
   exitCode: number | null;
@@ -83,7 +87,7 @@ function readTerminalTheme(el: HTMLElement): ITheme {
   }
 }
 
-export function TerminalView({ termId, visible, exitCode, onRestart }: Props): React.JSX.Element {
+export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Props): React.JSX.Element {
   const viewRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -92,6 +96,13 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
   const { font } = useTerminalFont();
   const fontRef = useRef(font);
   fontRef.current = font;
+  // shell 種類走 ref（同 fontRef 理由）：進主 effect deps 會 dispose 重建整個 xterm。
+  const shellRef = useRef(shell);
+  shellRef.current = shell;
+  // exitCode 也走 ref：drop handler 在主 effect closure 內，拿不到最新 prop——已結束的終端機
+  // 要拒收 drop（pty 對死程序是 no-op，照收會「顯示可放置卻靜默丟失」還搶焦點）。
+  const exitCodeRef = useRef(exitCode);
+  exitCodeRef.current = exitCode;
   // 近似按鍵延遲：使用者輸入時記時間戳，下一個回流的 chunk 視為回顯。
   const keyTsRef = useRef<number | null>(null);
   // 上次送往 main 的尺寸；避免版面每次微動都對 ConPTY 連發 resize（重複重繪）。termId 改變時重置。
@@ -283,6 +294,54 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
     };
     host.addEventListener('contextmenu', onContextMenu);
 
+    // 拖放貼路徑（VS Code 慣例）：側欄檔案（自訂 MIME）或 OS 檔案（'Files'）拖進終端機 → 貼上絕對路徑
+    // （依 shell 包引號，pathDrop）。刻意不吃裸 text/plain——終端機分頁拖曳排序的 payload 是 text/plain
+    // 的 termId，吃了會把 termId 誤貼進終端機。掛 view（整個面板區域皆為 drop 目標）。
+    const view = viewRef.current;
+    // 已結束的終端機不接（不 preventDefault ＝ 不高亮、瀏覽器顯示禁止游標、drop 不觸發）。
+    const acceptsDrop = (dt: DataTransfer | null): boolean =>
+      exitCodeRef.current === null && !!dt && (dt.types.includes(DRAG_PATH_MIME) || dt.types.includes('Files'));
+    let dragDepth = 0; // dragenter/dragleave 在子元素間會連發：計數歸零才移除高亮
+    const clearDropHint = (): void => {
+      dragDepth = 0;
+      view?.classList.remove('pd-term-view--drop');
+    };
+    const onDragEnter = (e: DragEvent): void => {
+      if (!acceptsDrop(e.dataTransfer)) return;
+      e.preventDefault();
+      dragDepth++;
+      view?.classList.add('pd-term-view--drop');
+    };
+    const onDragOver = (e: DragEvent): void => {
+      if (!acceptsDrop(e.dataTransfer)) return;
+      e.preventDefault(); // 必要：不 preventDefault 瀏覽器不觸發 drop
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    };
+    const onDragLeave = (): void => {
+      if (dragDepth > 0 && --dragDepth === 0) view?.classList.remove('pd-term-view--drop');
+    };
+    const onDrop = (e: DragEvent): void => {
+      if (!acceptsDrop(e.dataTransfer)) return;
+      e.preventDefault();
+      clearDropHint();
+      const dt = e.dataTransfer;
+      if (!dt) return;
+      const internal = dt.getData(DRAG_PATH_MIME);
+      const paths = internal
+        ? [internal]
+        : Array.from(dt.files)
+            .map((f) => ipc.fileUtils.pathForFile(f))
+            .filter((p) => p.length > 0);
+      const text = formatPathsForShell(paths, shellRef.current); // 含控制字元的路徑會被整條剔除
+      if (!text) return;
+      term.paste(text); // bracketed paste：shell/TUI 認得是貼上
+      term.focus();
+    };
+    view?.addEventListener('dragenter', onDragEnter);
+    view?.addEventListener('dragover', onDragOver);
+    view?.addEventListener('dragleave', onDragLeave);
+    view?.addEventListener('drop', onDrop);
+
     const ro = new ResizeObserver(() => scheduleFit());
     ro.observe(host);
     // 初次 fit（下一幀，確保 DOM 已量得尺寸）。
@@ -296,6 +355,11 @@ export function TerminalView({ termId, visible, exitCode, onRestart }: Props): R
       ro.disconnect();
       host.removeEventListener('contextmenu', onContextMenu);
       host.removeEventListener('paste', onNativePaste, true);
+      view?.removeEventListener('dragenter', onDragEnter);
+      view?.removeEventListener('dragover', onDragOver);
+      view?.removeEventListener('dragleave', onDragLeave);
+      view?.removeEventListener('drop', onDrop);
+      clearDropHint();
       onDataDisp.dispose();
       offData();
       fitNowRef.current = () => {};

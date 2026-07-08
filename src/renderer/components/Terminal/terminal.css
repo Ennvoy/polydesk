@@ -28,6 +28,11 @@
 .pd-term-pane-head--drop {
   background: color-mix(in oklab, var(--accent, #6e8efb), transparent 72%);
 }
+/* 檔案拖放目標高亮：側欄/OS 檔案拖過終端機（drop=貼上絕對路徑）。內框畫在 host 的 inset 邊距帶內。 */
+.pd-term-view--drop {
+  box-shadow: inset 0 0 0 2px var(--accent, #6e8efb);
+}
+
 /* 雙擊改名的就地輸入框。 */
 .pd-term-pane-rename {
   flex: 1;
