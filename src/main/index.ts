@@ -42,9 +42,16 @@ function applyContentSecurityPolicy(): void {
       responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] },
     });
   });
-  // REQ-SEC-001：app 自有 UI 不需要任何 web 權限（地理位置/相機麥克風/通知/剪貼簿讀…）→ 一律拒絕。
-  session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
-  session.defaultSession.setPermissionCheckHandler(() => false);
+  // REQ-SEC-001：app 自有 UI 不需要 web 權限（地理位置/相機麥克風/通知…）→ 預設一律拒絕。
+  // 唯一例外：自家主視窗的剪貼簿讀寫——Monaco 編輯器右鍵選單貼上走 navigator.clipboard.readText，
+  // 全拒會讓它靜默失敗（同 explorer/scm 複製路徑失效的病因，見 1b01e21）。renderer 本就可經
+  // clipboard IPC（clipboard:readText/writeText）讀寫剪貼簿，此放行不新增攻擊面。
+  const isOwnClipboardPermission = (wc: Electron.WebContents | null, permission: string): boolean =>
+    (permission === 'clipboard-read' || permission === 'clipboard-sanitized-write') &&
+    wc !== null &&
+    wc === mainWindow?.webContents;
+  session.defaultSession.setPermissionRequestHandler((wc, perm, cb) => cb(isOwnClipboardPermission(wc, perm)));
+  session.defaultSession.setPermissionCheckHandler((wc, perm) => isOwnClipboardPermission(wc, perm));
 }
 
 /** 上次存的位置若已不在任何螢幕工作區內（外接螢幕拔除/解析度改變），丟掉 x/y 讓 Electron 置中，避免視窗開在螢幕外。 */

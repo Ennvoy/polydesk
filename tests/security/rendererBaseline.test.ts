@@ -40,9 +40,16 @@ describe('prod CSP', () => {
 });
 
 describe('權限與導航守門', () => {
-  it('註冊 setPermissionRequestHandler 並以 false 拒絕', () => {
-    expect(indexSrc).toMatch(/setPermissionRequestHandler\([\s\S]*?cb\(false\)/);
-    expect(indexSrc).toMatch(/setPermissionCheckHandler\(\(\)\s*=>\s*false\)/);
+  it('權限預設全拒；唯一例外＝自家主視窗的剪貼簿讀寫（Monaco 貼上）', () => {
+    // request/check 兩個 handler 都必須經過同一個守門函式，不得散落各自判斷
+    expect(indexSrc).toMatch(/setPermissionRequestHandler\(\(wc, perm, cb\) => cb\(isOwnClipboardPermission\(wc, perm\)\)\)/);
+    expect(indexSrc).toMatch(/setPermissionCheckHandler\(\(wc, perm\) => isOwnClipboardPermission\(wc, perm\)\)/);
+    // 例外白名單僅限剪貼簿兩權限，且必須綁定自家 mainWindow 的 webContents
+    const guard = indexSrc.split('const isOwnClipboardPermission')[1]?.split(';')[0] ?? '';
+    expect(guard).toContain("permission === 'clipboard-read'");
+    expect(guard).toContain("permission === 'clipboard-sanitized-write'");
+    expect(guard).toContain('wc === mainWindow?.webContents');
+    expect(guard).not.toMatch(/geolocation|media|notifications|fullscreen|openExternal/);
   });
   it('外開連結 deny + 僅 https? 丟系統瀏覽器；will-navigate 與 will-redirect 皆守門', () => {
     expect(indexSrc).toMatch(/setWindowOpenHandler/);
