@@ -8,6 +8,7 @@ import { checkForUpdatesOnStartup } from './update/AutoUpdater';
 import { installClaudeStatusHooks } from './claude/statusHooks';
 import { installStatuslineUsage } from './claude/statuslineUsage';
 import { setMainWindow, emit } from './ipc/broadcast';
+import { closeGate } from './window/windowControls';
 import { mark, measure, getMeasures } from '../shared/perf';
 import { APP_NAME, STATE_FILE_NAME } from '../shared/constants';
 import type { WindowBounds } from '../shared/types';
@@ -68,6 +69,7 @@ function ensureVisibleBounds(bounds: WindowBounds | undefined): WindowBounds | u
 }
 
 function createWindow(): void {
+  closeGate.reset();
   const bounds = ensureVisibleBounds(store.get('windowBounds'));
   mainWindow = new BrowserWindow({
     width: bounds?.width ?? 1280,
@@ -118,11 +120,23 @@ function createWindow(): void {
   mainWindow.webContents.on('will-navigate', blockNavigation);
   mainWindow.webContents.on('will-redirect', blockNavigation);
 
-  // 視窗位置/大小持久化（REQ-PERSIST-003）
-  mainWindow.on('close', () => {
+  // 視窗位置/大小持久化（REQ-PERSIST-003）＋ app 關閉攔截（REQ-TERM-007 app 層）：
+  // 仍有 alive 終端機（可能跑著 claude / 建置 / 伺服器）→ 擋下這次 close、推 app:closeRequest
+  // 讓 renderer 彈確認，核可（window:confirmClose）才放行。renderer 掛掉時不攔（否則永遠關不掉）。
+  mainWindow.on('close', (e) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       store.setWindowBounds(mainWindow.getBounds());
     }
+    if (closeGate.confirmed() || !services) return;
+    const wsIds = services.workspaces
+      .list()
+      .filter((w) => services.pty.hasRunningProcesses(w.id))
+      .map((w) => w.id);
+    if (wsIds.length === 0) return;
+    const wc = mainWindow?.webContents;
+    if (!wc || wc.isDestroyed() || wc.isCrashed()) return;
+    e.preventDefault();
+    emit('app:closeRequest', { wsIds });
   });
   mainWindow.on('closed', () => {
     setMainWindow(null);
@@ -175,9 +189,30 @@ if (!gotTheLock) {
   });
 
   // 結束前完整 teardown 所有工作區執行中程序/監看（避免殭屍程序，REQ-WS-009）。
-  app.on('before-quit', () => {
-    if (!services) return;
-    services.monitor.stop(); // 先停輪詢，避免關閉中再起一次 probe
-    for (const w of services.workspaces.list()) void services.lifecycle.teardown(w.id);
+  // 必須「等 teardown 真的做完」才退出：原本射後不理，taskkill 常來不及跑 → PTY shell 變孤兒、
+  // ConPTY 原生 handle 未釋放 → 打包版整棵程序樹卡在工作管理員。故攔下第一次 quit、await 全部
+  // teardown（保底逾時，清理卡死也不留殭屍）後 app.exit(0) 硬退（quit 事件仍會發，updater 掛勾不受影響）。
+  let quitting = false;
+  app.on('before-quit', (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    quitting = true;
+    void shutdownAndExit();
   });
+}
+
+const SHUTDOWN_TIMEOUT_MS = 3_000;
+
+async function shutdownAndExit(): Promise<void> {
+  try {
+    if (services) {
+      services.monitor.stop(); // 先停輪詢，避免關閉中再起一次 probe
+      const teardownAll = (async () => {
+        for (const w of services.workspaces.list()) await services.lifecycle.teardown(w.id);
+      })();
+      await Promise.race([teardownAll, new Promise<void>((r) => setTimeout(r, SHUTDOWN_TIMEOUT_MS))]);
+    }
+  } finally {
+    app.exit(0);
+  }
 }

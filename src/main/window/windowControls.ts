@@ -5,6 +5,19 @@ import type { IpcMain } from 'electron';
 import { getMainWindow } from '../ipc/broadcast';
 import type { InvokeRes } from '../../shared/ipc';
 
+// app 關閉攔截的核可狀態：index.ts 的 close 攔截據此放行（renderer 確認彈窗核可
+// 經 window:confirmClose 設起）；createWindow 重建視窗時 reset。
+let closeConfirmed = false;
+export const closeGate = {
+  confirmed: (): boolean => closeConfirmed,
+  confirm: (): void => {
+    closeConfirmed = true;
+  },
+  reset: (): void => {
+    closeConfirmed = false;
+  },
+};
+
 export function registerWindowControls(ipc: IpcMain): void {
   ipc.handle('window:minimize', (): InvokeRes<'window:minimize'> => {
     getMainWindow()?.minimize();
@@ -19,6 +32,11 @@ export function registerWindowControls(ipc: IpcMain): void {
     return { maximized: w?.isMaximized() ?? false };
   });
   ipc.handle('window:close', (): InvokeRes<'window:close'> => {
+    getMainWindow()?.close();
+    return { ok: true } as const;
+  });
+  ipc.handle('window:confirmClose', (): InvokeRes<'window:confirmClose'> => {
+    closeGate.confirm();
     getMainWindow()?.close();
     return { ok: true } as const;
   });

@@ -175,6 +175,8 @@ export interface InvokeChannels {
   'window:minimize': { req: void; res: { ok: true } };
   'window:maximizeToggle': { req: void; res: { maximized: boolean } };
   'window:close': { req: void; res: { ok: true } };
+  /** app 關閉攔截的核可：renderer 確認彈窗（app:closeRequest）核可後呼叫，main 放行 close 並退出。 */
+  'window:confirmClose': { req: void; res: { ok: true } };
   'window:isMaximized': { req: void; res: { maximized: boolean } };
 }
 
@@ -196,6 +198,8 @@ export interface EventChannels {
   'update:progress': { percent: number; state: 'checking' | 'downloading' | 'ready' };
   /** 視窗最大化狀態變動（自訂標題列同步 max/restore 圖示；OS 快捷鍵/雙擊也會觸發）。 */
   'window:maximizedChange': { maximized: boolean };
+  /** app 關閉攔截（REQ-TERM-007 app 層）：close 時仍有 alive 終端機的工作區 → renderer 彈確認，核可後呼 window:confirmClose。 */
+  'app:closeRequest': { wsIds: string[] };
 }
 
 export type InvokeChannel = keyof InvokeChannels;

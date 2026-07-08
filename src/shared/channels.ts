@@ -76,6 +76,7 @@ export const INVOKE_CHANNELS = [
   'window:minimize',
   'window:maximizeToggle',
   'window:close',
+  'window:confirmClose',
   'window:isMaximized',
 ] as const satisfies readonly InvokeChannel[];
 
@@ -88,6 +89,7 @@ export const EVENT_CHANNELS = [
   'lsp:diagnostics',
   'update:progress',
   'window:maximizedChange',
+  'app:closeRequest',
 ] as const satisfies readonly EventChannel[];
 
 /** PTY 高頻資料流通道（不走 invoke）。 */

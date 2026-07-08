@@ -323,7 +323,9 @@ describe('PtyManager teardown 殺子程序樹（F-3-A6）', () => {
     const killed: number[] = [];
     const mgr = new PtyManager(ctx.workspaces, ctx.lifecycle, {
       spawn,
-      treeKill: (pid) => killed.push(pid),
+      treeKill: (pid) => {
+        killed.push(pid);
+      },
       emitData: vi.fn(),
     });
     mgr.create({ wsId: ctx.wsId, shell: 'powershell' });

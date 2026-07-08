@@ -6,6 +6,7 @@ import { ActivityBar } from './components/ActivityBar';
 import { TitleBar } from './components/TitleBar';
 import { DockLayout } from './layout/DockLayout';
 import { DialogHost } from './components/Dialogs/host';
+import { confirmCloseApp } from './components/Dialogs/CloseConfirm';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { RailResizer } from './components/RailResizer';
 import { OverviewPanel } from './components/OverviewPanel';
@@ -93,6 +94,21 @@ export function App(): React.JSX.Element {
   React.useEffect(() => railBus.subscribe(setRailVisible), []);
   // 桌面通知點擊 → 切到該工作區（main 端已聚焦/還原視窗，見 ClaudeStatusMonitor.defaultNotifyAwait）。
   React.useEffect(() => ipc.events.workspace.activate(({ wsId }) => appStore.setActiveWorkspace(wsId)), []);
+  // app 關閉攔截（main close 事件推播）：仍有 alive 終端機 → 彙總確認彈窗，核可才放行退出。
+  const closeAsking = React.useRef(false);
+  React.useEffect(
+    () =>
+      ipc.events.app.closeRequest(({ wsIds }) => {
+        if (closeAsking.current) return; // 連按 X 只彈一次
+        closeAsking.current = true;
+        void confirmCloseApp(wsIds)
+          .then((ok) => (ok ? ipc.window.confirmClose().then(() => undefined) : undefined))
+          .finally(() => {
+            closeAsking.current = false;
+          });
+      }),
+    [],
+  );
   return (
     <div className="pd-root">
       <TitleBar />

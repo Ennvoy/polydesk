@@ -179,8 +179,8 @@ export interface PtyDeps {
   spawn?: SpawnFn;
   emitData?: (payload: { termId: string; chunk: Uint8Array }) => void;
   emitExit?: (payload: { termId: string; exitCode: number }) => void;
-  /** 殺整個 process tree（Windows: taskkill /PID <pid> /T /F）。 */
-  treeKill?: (pid: number) => void;
+  /** 殺整個 process tree（Windows: taskkill /PID <pid> /T /F）；回傳 promise 者於 kill 完成時 resolve。 */
+  treeKill?: (pid: number) => void | Promise<void>;
   /** frame 批次合併間隔（ms），預設 16（約一幀）。 */
   flushIntervalMs?: number;
   /** 待送 byte 超過此門檻即 pause() backpressure，預設 1MB。 */
@@ -217,17 +217,17 @@ interface Term {
 const defaultSpawn: SpawnFn = (file, args, opts) =>
   pty.spawn(file, args, opts) as unknown as ManagedPty;
 
-function defaultTreeKill(pid: number): void {
+function defaultTreeKill(pid: number): void | Promise<void> {
   if (process.platform === 'win32') {
-    execFile('taskkill', ['/PID', String(pid), '/T', '/F'], () => {
-      /* best-effort：程序可能已自行結束 */
+    // 回傳 promise 讓 app 關閉路徑 await 到 taskkill 真的跑完——否則 app.exit 先到、shell 變孤兒。
+    return new Promise<void>((resolve) => {
+      execFile('taskkill', ['/PID', String(pid), '/T', '/F'], () => resolve()); // best-effort：程序可能已自行結束
     });
-  } else {
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {
-      /* 已結束 */
-    }
+  }
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    /* 已結束 */
   }
 }
 
@@ -246,7 +246,7 @@ export class PtyManager {
   private readonly spawn: SpawnFn;
   private readonly emitData: (p: { termId: string; chunk: Uint8Array }) => void;
   private readonly emitExit: (p: { termId: string; exitCode: number }) => void;
-  private readonly treeKill: (pid: number) => void;
+  private readonly treeKill: (pid: number) => void | Promise<void>;
   private readonly flushIntervalMs: number;
   private readonly highWaterBytes: number;
   private readonly stripClipboard: boolean;
@@ -337,7 +337,7 @@ export class PtyManager {
   close(req: { termId: string }): { ok: true } {
     const t = this.terms.get(req.termId);
     if (!t) return { ok: true } as const;
-    this.disposeTerm(req.termId, t);
+    void this.disposeTerm(req.termId, t); // 互動關閉不等 tree kill（teardown 路徑才 await）
     return { ok: true } as const;
   }
 
@@ -383,11 +383,13 @@ export class PtyManager {
     return out;
   }
 
-  /** teardown：殺該 wsId 所有 pty（含子程序樹）並移除（REQ-WS-009）。 */
-  killWorkspace(wsId: string): void {
+  /** teardown：殺該 wsId 所有 pty（含子程序樹）並移除（REQ-WS-009）；resolve 於所有 tree kill 完成。 */
+  killWorkspace(wsId: string): Promise<void> {
+    const kills: Promise<void>[] = [];
     for (const [termId, t] of [...this.terms]) {
-      if (t.wsId === wsId) this.disposeTerm(termId, t);
+      if (t.wsId === wsId) kills.push(this.disposeTerm(termId, t));
     }
+    return Promise.all(kills).then(() => undefined);
   }
 
   // ── 內部 ──
@@ -450,17 +452,18 @@ export class PtyManager {
     this.emitExit({ termId, exitCode }); // 保留 Map 項（alive=false）供 UI 顯示「重啟」
   }
 
-  /** 殺 pty（含子程序樹）+ 清理 + 自 Map 移除。 */
-  private disposeTerm(termId: string, t: Term): void {
+  /** 殺 pty（含子程序樹）+ 清理 + 自 Map 移除；resolve 於 tree kill 完成（app 關閉路徑 await 用）。 */
+  private disposeTerm(termId: string, t: Term): Promise<void> {
     if (t.flushTimer !== null) {
       clearTimeout(t.flushTimer);
       t.flushTimer = null;
     }
     t.alive = false;
     const pid = t.pty.pid;
+    let killed: void | Promise<void> = undefined;
     if (typeof pid === 'number' && pid > 0) {
       try {
-        this.treeKill(pid);
+        killed = this.treeKill(pid);
       } catch {
         /* best-effort */
       }
@@ -473,6 +476,10 @@ export class PtyManager {
     t.onDataDisposable?.dispose();
     t.onExitDisposable?.dispose();
     this.terms.delete(termId);
+    return Promise.resolve(killed).then(
+      () => undefined,
+      () => undefined,
+    );
   }
 }
 

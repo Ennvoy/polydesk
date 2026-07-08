@@ -193,7 +193,7 @@ export interface LspDeps {
   connect?: LspConnectFactory;
   probe?: (langId: string, excludeDirs: string[]) => LspServerInfo;
   emitDiagnostics?: (payload: EventChannels['lsp:diagnostics']) => void;
-  treeKill?: (pid: number) => void;
+  treeKill?: (pid: number) => void | Promise<void>;
   runInstall?: (file: string, args: string[]) => Promise<void>;
   requestTimeoutMs?: number;
   initTimeoutMs?: number;
@@ -240,17 +240,17 @@ const defaultConnect: LspConnectFactory = (child, onFrameViolation) => {
   };
 };
 
-function defaultTreeKill(pid: number): void {
+function defaultTreeKill(pid: number): void | Promise<void> {
   if (process.platform === 'win32') {
-    nodeExecFile('taskkill', ['/PID', String(pid), '/T', '/F'], () => {
-      /* best-effort：程序可能已自行結束 */
+    // 回傳 promise 讓 app 關閉路徑 await 到 taskkill 真的跑完——否則 app.exit 先到、LS 變孤兒。
+    return new Promise<void>((resolve) => {
+      nodeExecFile('taskkill', ['/PID', String(pid), '/T', '/F'], () => resolve()); // best-effort：程序可能已自行結束
     });
-  } else {
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {
-      /* 已結束 */
-    }
+  }
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    /* 已結束 */
   }
 }
 
@@ -320,7 +320,7 @@ export class LspManager {
   private readonly connect: LspConnectFactory;
   private readonly probeFn: (langId: string, excludeDirs: string[]) => LspServerInfo;
   private readonly emitDiagnostics: (payload: EventChannels['lsp:diagnostics']) => void;
-  private readonly treeKill: (pid: number) => void;
+  private readonly treeKill: (pid: number) => void | Promise<void>;
   private readonly runInstall: (file: string, args: string[]) => Promise<void>;
   private readonly requestTimeoutMs: number;
   private readonly initTimeoutMs: number;
@@ -426,11 +426,14 @@ export class LspManager {
   }
 
   // ── teardown ──
-  killWorkspace(wsId: string): void {
+  /** 殺該 ws 所有 LS（含子程序樹）；resolve 於所有 tree kill 完成（app 關閉路徑 await 用）。 */
+  killWorkspace(wsId: string): Promise<void> {
     const prefix = `${wsId}::`;
+    const kills: Promise<void>[] = [];
     for (const key of [...this.servers.keys()]) {
-      if (key.startsWith(prefix)) this.dropServer(key);
+      if (key.startsWith(prefix)) kills.push(this.dropServer(key));
     }
+    return Promise.all(kills).then(() => undefined);
   }
 
   /** 存活伺服器數（測試用）。 */
@@ -495,14 +498,14 @@ export class LspManager {
       return Promise.resolve(null);
     }
 
-    const conn = this.connect(child, () => this.dropServer(key));
+    const conn = this.connect(child, () => void this.dropServer(key));
     const entry: ServerEntry = { child, conn, alive: true, openUris: new Set(), ready: Promise.resolve(false) };
     this.servers.set(key, entry);
 
     // A5：spawn error / 程序 exit / 連線 close 任一 → 清理降級（不影響編輯/存檔）
-    child.on('error', () => this.dropServer(key));
-    child.on('exit', () => this.dropServer(key));
-    conn.onClose(() => this.dropServer(key));
+    child.on('error', () => void this.dropServer(key));
+    child.on('exit', () => void this.dropServer(key));
+    conn.onClose(() => void this.dropServer(key));
     conn.onError(() => {
       /* 連線層錯誤非致命：記錄即可，保留連線交由 close/exit 收尾 */
     });
@@ -512,7 +515,7 @@ export class LspManager {
     entry.ready = this.initialize(conn, wsPath).then(
       () => entry.alive,
       () => {
-        this.dropServer(key);
+        void this.dropServer(key);
         return false;
       },
     );
@@ -549,9 +552,9 @@ export class LspManager {
     this.emitDiagnostics({ wsId, uri: o.uri, diagnostics: diags }); // A4：截斷數量上限
   }
 
-  private dropServer(key: string): void {
+  private dropServer(key: string): Promise<void> {
     const e = this.servers.get(key);
-    if (!e) return;
+    if (!e) return Promise.resolve();
     this.servers.delete(key);
     e.alive = false;
     try {
@@ -560,9 +563,10 @@ export class LspManager {
       /* ignore */
     }
     const pid = e.child.pid;
+    let killed: void | Promise<void> = undefined;
     if (typeof pid === 'number' && pid > 0) {
       try {
-        this.treeKill(pid); // A5：殺整個 process tree（含 java/go build 等衍生子程序）
+        killed = this.treeKill(pid); // A5：殺整個 process tree（含 java/go build 等衍生子程序）
       } catch {
         /* best-effort */
       }
@@ -572,6 +576,10 @@ export class LspManager {
     } catch {
       /* 可能已被 treeKill 殺掉 */
     }
+    return Promise.resolve(killed).then(
+      () => undefined,
+      () => undefined,
+    );
   }
 
   private withTimeout<T>(p: Promise<T>, ms: number): Promise<TimeoutResult<T>> {
