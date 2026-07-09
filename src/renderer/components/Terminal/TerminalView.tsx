@@ -279,9 +279,24 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
     // 右鍵：有選取＝複製並清選取；無選取＝貼上（Windows Terminal 慣例；xterm 原生無右鍵貼上）。
     // 貼上防抖 300ms：觸控板/滑鼠驅動偶發把一次手勢送成兩個 contextmenu、或貼上非同步延遲下
     // 使用者連點 → 忠實執行會貼兩次（dogfood 回報）；0.3 秒內故意連貼兩次在終端機無真實需求。
+    //
+    // 右鍵手勢由本元件全權處理 → capture 階段擋下右鍵 mousedown/mouseup，不讓 xterm 把右鍵
+    // 回報給開啟滑鼠模式的 TUI（如 claude 開 ?1000/1002/1003/1006）。實測（統計 15 輪、main 端
+    // 計數佐證 renderer 僅送一次）：「右鍵按下/放開回報」三條小 write 緊貼 bracketed paste 時，
+    // ConPTY/TUI 輸入解析偶發把貼上套用兩次＝claude 裡右鍵雙貼的病根；拿掉回報即無觸發序列。
+    // contextmenu 為獨立事件不受 stopPropagation 影響；一般 shell（無滑鼠模式）行為不變。
+    const suppressRightButton = (e: MouseEvent): void => {
+      if (e.button === 2) {
+        e.stopPropagation();
+        e.preventDefault(); // 阻掉右鍵 mousedown 的預設失焦——否則 ?1004 下會多出 \e[O\e[I 焦點回報緊貼貼上（同款觸發形狀）
+      }
+    };
+    host.addEventListener('mousedown', suppressRightButton, true);
+    host.addEventListener('mouseup', suppressRightButton, true);
     let lastCtxPasteAt = 0;
     const onContextMenu = (e: MouseEvent): void => {
       e.preventDefault();
+      term.focus(); // 右鍵也聚焦終端機（原由 xterm 的 mousedown 聚焦，該路徑已被上方擋下）
       if (term.hasSelection()) {
         copySelection();
         term.clearSelection();
@@ -354,6 +369,8 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
       themeObserver.disconnect();
       ro.disconnect();
       host.removeEventListener('contextmenu', onContextMenu);
+      host.removeEventListener('mousedown', suppressRightButton, true);
+      host.removeEventListener('mouseup', suppressRightButton, true);
       host.removeEventListener('paste', onNativePaste, true);
       view?.removeEventListener('dragenter', onDragEnter);
       view?.removeEventListener('dragover', onDragOver);
