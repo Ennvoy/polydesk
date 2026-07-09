@@ -174,6 +174,8 @@ export function Explorer(): React.JSX.Element {
   const [clip, setClip] = useState<{ rel: string; name: string; op: 'cut' | 'copy' } | null>(null);
   const [selected, setSelected] = useState<{ rel: string; dir: boolean } | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  /** OS 檔案拖懸中的目的資料夾（null=無拖曳；''=工作區根；其餘=資料夾 rel），驅動列/容器高亮。 */
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const dirsRef = useRef(dirs);
   dirsRef.current = dirs;
   const selectedRef = useRef(selected);
@@ -196,6 +198,22 @@ export function Explorer(): React.JSX.Element {
       }
     },
     [wsId],
+  );
+
+  /** 匯入外部絕對路徑（Ctrl+V 貼上與 OS 拖放共用）：importFiles → 展開目的層 → 重載顯示。 */
+  const runImport = useCallback(
+    async (destDir: string, sources: string[]): Promise<void> => {
+      if (!wsId) return;
+      const r = await ipc.fs.importFiles({ wsId, destDir, sources });
+      if ('error' in r) {
+        setErr(r.error);
+        return;
+      }
+      if (r.errors?.length) setErr(r.errors.join('；'));
+      if (destDir !== '') setExpanded((p) => ({ ...p, [destDir]: true }));
+      void loadDir(destDir);
+    },
+    [wsId, loadDir],
   );
 
   useEffect(() => {
@@ -377,16 +395,7 @@ export function Explorer(): React.JSX.Element {
       }
       const sel = selectedRef.current;
       const destDir = sel ? (sel.dir ? sel.rel : relDirname(sel.rel)) : '';
-      void (async () => {
-        const r = await ipc.fs.importFiles({ wsId, destDir, sources });
-        if ('error' in r) {
-          setErr(r.error);
-          return;
-        }
-        if (r.errors?.length) setErr(r.errors.join('；'));
-        if (destDir !== '') setExpanded((p) => ({ ...p, [destDir]: true }));
-        void loadDir(destDir);
-      })();
+      void runImport(destDir, sources);
     };
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('paste', onPaste, true);
@@ -394,7 +403,43 @@ export function Explorer(): React.JSX.Element {
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('paste', onPaste, true);
     };
-  }, [wsId, loadDir]);
+  }, [wsId, runImport]);
+
+  // OS 檔案拖入 → 複製進工作區（VS Code 慣例；與 Ctrl+V 貼上同走 importFiles：重名自動改名、
+  // 資料夾遞迴）。只認外部拖曳（types 含 'Files'）；app 內部樹列拖曳（自訂 MIME、無 Files）不觸發。
+  // 目的地＝游標下的資料夾列（檔案列→其父層；空白區→工作區根），與 VS Code 檔案總管一致。
+  const osDropDest = (e: React.DragEvent): string | null => {
+    const types = e.dataTransfer ? Array.from(e.dataTransfer.types) : [];
+    if (!types.includes('Files') || types.includes(DRAG_PATH_MIME)) return null;
+    const row = (e.target as HTMLElement).closest?.('[data-drop-rel]') as HTMLElement | null;
+    if (!row) return '';
+    const rel = row.dataset['dropRel'] ?? '';
+    return row.dataset['dropDir'] === '1' ? rel : relDirname(rel);
+  };
+  const onTreeDragOver = (e: React.DragEvent): void => {
+    const dest = osDropDest(e);
+    if (dest === null) return;
+    e.preventDefault(); // 必要：不 preventDefault 瀏覽器不觸發 drop
+    e.dataTransfer.dropEffect = 'copy';
+    setDropTarget(dest);
+  };
+  const onTreeDragLeave = (e: React.DragEvent): void => {
+    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) setDropTarget(null);
+  };
+  const onTreeDrop = (e: React.DragEvent): void => {
+    const dest = osDropDest(e);
+    setDropTarget(null);
+    if (dest === null) return;
+    e.preventDefault();
+    const sources = Array.from(e.dataTransfer.files)
+      .map((f) => ipc.fileUtils.pathForFile(f))
+      .filter((p) => p.length > 0);
+    if (sources.length === 0) {
+      setErr('無法取得拖入檔案的路徑');
+      return;
+    }
+    void runImport(dest, sources);
+  };
 
   const openMenu = (e: React.MouseEvent, entry: Entry | null, rel: string): void => {
     e.preventDefault();
@@ -471,6 +516,8 @@ export function Explorer(): React.JSX.Element {
                 tabIndex={0}
                 title={entry.name}
                 draggable
+                data-drop-rel={childRel}
+                data-drop-dir={entry.dir ? '1' : '0'}
                 onDragStart={(e) => {
                   // 拖到終端機貼絕對路徑（VS Code 慣例）。自訂 MIME 供終端機辨識；text/plain 供
                   // 一般文字 drop 目標（編輯器等）。setData 失敗（受限環境）不致命：拖曳僅無效果。
@@ -486,7 +533,12 @@ export function Explorer(): React.JSX.Element {
                 style={{
                   paddingLeft: indent,
                   opacity: clip?.op === 'cut' && clip.rel === childRel ? 0.5 : 1,
-                  background: selected?.rel === childRel ? 'var(--surface-warm)' : undefined,
+                  background:
+                    dropTarget !== null && entry.dir && dropTarget === childRel
+                      ? 'color-mix(in oklab, var(--accent), transparent 80%)'
+                      : selected?.rel === childRel
+                        ? 'var(--surface-warm)'
+                        : undefined,
                 }}
                 onClick={() => {
                   setSelected({ rel: childRel, dir: entry.dir });
@@ -547,8 +599,16 @@ export function Explorer(): React.JSX.Element {
           className="pd-scroll"
           role="tree"
           aria-label={`檔案總管${ws ? `：${ws.name}` : ''}`}
-          style={{ flex: 1, minHeight: 0, paddingBottom: 'var(--space-3)' }}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            paddingBottom: 'var(--space-3)',
+            boxShadow: dropTarget === '' ? 'inset 0 0 0 1.5px var(--accent)' : undefined,
+          }}
           onContextMenu={(e) => openMenu(e, null, '')}
+          onDragOver={onTreeDragOver}
+          onDragLeave={onTreeDragLeave}
+          onDrop={onTreeDrop}
         >
           {!rootState ? (
             <Hint>載入中…</Hint>
