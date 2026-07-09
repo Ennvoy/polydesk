@@ -204,6 +204,9 @@ interface Term {
   shell: ShellKind;
   title: string;
   alive: boolean;
+  /** 最後「實際套用成功」的 PTY 尺寸（resize 去重基準；失敗不記帳 → 下次重送自動重試）。 */
+  appliedCols: number;
+  appliedRows: number;
   exitCode?: number;
   pending: Buffer[];
   pendingBytes: number;
@@ -295,6 +298,8 @@ export class PtyManager {
       shell,
       title: shell,
       alive: true,
+      appliedCols: 80,
+      appliedRows: 24,
       pending: [],
       pendingBytes: 0,
       flushTimer: null,
@@ -320,14 +325,23 @@ export class PtyManager {
     }
   }
 
-  /** 調整尺寸；termId 不存在/已死則安全 no-op（F-3-A4）。 */
+  /** 調整尺寸；termId 不存在/已死則安全 no-op（F-3-A4）。
+   *  去重以「實際套用成功」的尺寸為準：renderer 每次 fit 都重送，同尺寸在此擋下（不打擾 ConPTY）；
+   *  resize 失敗「不」記帳 → 下一次重送自動重試——避免 PTY↔xterm 行數一次失敗永久漂移
+   *  （漂移＝claude 等 TUI 把底部 UI 畫在不存在的列上，dogfood 回報「展開時最下方被擋」）。 */
   resize(req: { termId: string; cols: number; rows: number }): { ok: true } {
     const t = this.terms.get(req.termId);
     if (t && t.alive) {
-      try {
-        t.pty.resize(Math.max(1, req.cols | 0), Math.max(1, req.rows | 0));
-      } catch {
-        /* 競態：忽略 */
+      const cols = Math.max(1, req.cols | 0);
+      const rows = Math.max(1, req.rows | 0);
+      if (cols !== t.appliedCols || rows !== t.appliedRows) {
+        try {
+          t.pty.resize(cols, rows);
+          t.appliedCols = cols;
+          t.appliedRows = rows;
+        } catch {
+          /* 競態/ConPTY 失敗：applied 保持舊值，下次重送重試 */
+        }
       }
     }
     return { ok: true } as const;

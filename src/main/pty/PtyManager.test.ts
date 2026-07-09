@@ -448,4 +448,41 @@ describe('PtyManager 關閉時序競態安全（F-3-A4）', () => {
     expect(mgr.close({ termId: 'never-existed' })).toEqual({ ok: true });
     expect(() => mgr.write('never-existed', 'x')).not.toThrow();
   });
+
+  it('resize 以「實際套用成功」去重：同尺寸重送不打 pty；失敗不記帳→下次重送重試（自癒）', () => {
+    // 自訂 fake：計數 + 可注入一次失敗
+    let calls = 0;
+    let failNext = false;
+    class ResizeFake extends FakePty {
+      override resize(): void {
+        calls++;
+        if (failNext) {
+          failNext = false;
+          throw new Error('conpty resize failed');
+        }
+      }
+    }
+    const fake = new ResizeFake();
+    const mgr = new PtyManager(ctx.workspaces, ctx.lifecycle, {
+      spawn: () => fake,
+      emitData: vi.fn(),
+      treeKill: vi.fn(),
+    });
+    const { termId } = mgr.create({ wsId: ctx.wsId, shell: 'powershell' });
+
+    // 同尺寸重送 → 只打一次 pty（main 端去重，ConPTY 不被重複打擾）
+    mgr.resize({ termId, cols: 120, rows: 40 });
+    mgr.resize({ termId, cols: 120, rows: 40 });
+    mgr.resize({ termId, cols: 120, rows: 40 });
+    expect(calls).toBe(1);
+
+    // 失敗不記帳：這次 resize 丟例外 → applied 停在 120x40 → 同目標尺寸重送會「再試」
+    failNext = true;
+    mgr.resize({ termId, cols: 120, rows: 46 });
+    expect(calls).toBe(2); // 有嘗試但失敗
+    mgr.resize({ termId, cols: 120, rows: 46 }); // 重送 → 重試成功
+    expect(calls).toBe(3);
+    mgr.resize({ termId, cols: 120, rows: 46 }); // 已套用 → 去重
+    expect(calls).toBe(3);
+  });
 });

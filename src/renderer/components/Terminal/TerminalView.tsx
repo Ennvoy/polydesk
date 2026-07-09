@@ -105,8 +105,6 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
   exitCodeRef.current = exitCode;
   // 近似按鍵延遲：使用者輸入時記時間戳，下一個回流的 chunk 視為回顯。
   const keyTsRef = useRef<number | null>(null);
-  // 上次送往 main 的尺寸；避免版面每次微動都對 ConPTY 連發 resize（重複重繪）。termId 改變時重置。
-  const lastSentRef = useRef<{ cols: number; rows: number } | null>(null);
   // 上次實際 fit 時量到的 host 尺寸；供反震盪比對（捲軸回彈在容差內就不再 fit）。
   const lastFitBoxRef = useRef<{ w: number; h: number }>({ w: -1, h: -1 });
   // 由 visible 切換（useLayoutEffect）呼叫的就地 fit；指向 useEffect 內已掛好接線的 safeFit。
@@ -115,8 +113,7 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    lastSentRef.current = null; // 新 termId：重置「上次送出尺寸」
-    lastFitBoxRef.current = { w: -1, h: -1 }; // 與反震盪基準
+    lastFitBoxRef.current = { w: -1, h: -1 }; // 反震盪基準：新 termId 重置
 
     const theme = readTerminalTheme(host);
     const term = new Terminal(createSecureTerminalOptions(theme, fontRef.current));
@@ -158,26 +155,43 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
       }
     })();
 
-    // fit + （必要時）回報尺寸給 main。極窄寬（reflow 中間態）→ 不 fit、不 resize；尺寸未變 → 不重送。
+    // fit + 回報尺寸給 main。極窄寬（reflow 中間態）→ 不 fit、排一次重試待尺寸穩定再校正。
+    // 尺寸「一律重送」不在 renderer 去重：main 端以「實際套用成功」的尺寸去重（PtyManager.resize），
+    // resize 失敗不記帳 → 下次任何 fit 自動重試——PTY↔xterm 行數才不會一次失敗永久漂移
+    // （漂移＝claude 等 TUI 把底部 UI 畫在不存在的列上、滾也滾不出來，dogfood 回報）。
+    let fitRetryTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleFitRetry = (): void => {
+      if (fitRetryTimer) return; // single-flight
+      fitRetryTimer = setTimeout(() => {
+        fitRetryTimer = null;
+        safeFit();
+      }, 350);
+    };
     const safeFit = (): void => {
       const h = hostRef.current;
       if (!h || h.offsetWidth === 0 || h.offsetHeight === 0) return;
       try {
         const dims = fit.proposeDimensions();
-        // 提議無效或極窄寬（cols 掉到個位數）：略過，待尺寸穩定再校正 → 從源頭斷掉 cols≈1 的窄欄瀑布。
-        if (!dims || !Number.isFinite(dims.cols) || !Number.isFinite(dims.rows) || dims.cols < MIN_FIT_COLS) return;
+        // 提議無效或極窄寬（cols 掉到個位數）：略過並排重試 → 從源頭斷掉 cols≈1 的窄欄瀑布，
+        // 且過渡態結束後就算 ResizeObserver 不再觸發也會自行校正（不留卡死的中間態）。
+        if (!dims || !Number.isFinite(dims.cols) || !Number.isFinite(dims.rows) || dims.cols < MIN_FIT_COLS) {
+          scheduleFitRetry();
+          return;
+        }
         fit.fit();
         // 記下這次 fit 的 host 尺寸：供 ResizeObserver 反震盪比對（即使 cols 未變也更新基準）。
         lastFitBoxRef.current = { w: h.offsetWidth, h: h.offsetHeight };
-        const last = lastSentRef.current;
-        if (last && last.cols === term.cols && last.rows === term.rows) return; // 尺寸未變：不重複 resize
-        lastSentRef.current = { cols: term.cols, rows: term.rows };
         void ipc.pty.resize({ termId, cols: term.cols, rows: term.rows });
       } catch {
         /* 尺寸尚未就緒：略過本次 */
       }
     };
     fitNowRef.current = safeFit;
+
+    // 自癒觸發點：點進終端機（focusin）就重跑 fit＋重送尺寸——若 ConPTY 尺寸曾漂移
+    // （resize 失敗被吞等），使用者一互動立即校正回來。
+    const onFocusIn = (): void => safeFit();
+    host.addEventListener('focusin', onFocusIn);
 
     // ResizeObserver 去抖 + 反震盪：合併 reflow 多次事件；若新尺寸與上次 fit 的尺寸差距在捲軸容差內，
     // 判定為 fit 自身造成的回彈（捲軸出現/消失 ±17px），不再排程 fit → 斷開 ResizeObserver↔fit 震盪迴圈。
@@ -366,8 +380,10 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
       disposed = true;
       cancelAnimationFrame(raf);
       if (fitTimer) clearTimeout(fitTimer);
+      if (fitRetryTimer) clearTimeout(fitRetryTimer);
       themeObserver.disconnect();
       ro.disconnect();
+      host.removeEventListener('focusin', onFocusIn);
       host.removeEventListener('contextmenu', onContextMenu);
       host.removeEventListener('mousedown', suppressRightButton, true);
       host.removeEventListener('mouseup', suppressRightButton, true);
@@ -394,7 +410,7 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
     const apply = (): void => {
       term.options.fontFamily = buildTerminalFontFamily(font.family);
       term.options.fontSize = clampTerminalFontSize(font.size);
-      fitNowRef.current(); // 走同一條 safeFit（含極窄寬守衛 + skip-unchanged）
+      fitNowRef.current(); // 走同一條 safeFit（含極窄寬守衛）
     };
     // 打包字型（JetBrains Mono 等）是 @font-face lazy load：webgl renderer 首次量測需字型 ready，否則
     // 用 fallback 量測且不會自動重繪 → 先確保載入再套用（載入失敗也 fallback 套用，不卡）。
@@ -410,7 +426,7 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
     if (!visible) return;
     const host = hostRef.current;
     if (!host || host.offsetWidth === 0 || host.offsetHeight === 0) return;
-    fitNowRef.current(); // 走同一條 safeFit（含極窄寬守衛 + skip-unchanged + 更新反震盪基準）
+    fitNowRef.current(); // 走同一條 safeFit（含極窄寬守衛 + 更新反震盪基準）
     termRef.current?.focus();
   }, [visible, termId]);
 
