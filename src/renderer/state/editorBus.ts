@@ -31,9 +31,21 @@ type DiffListener = (req: OpenDiffRequest) => void;
 const listeners = new Set<Listener>();
 const diffListeners = new Set<DiffListener>();
 
+// 派送隔離：訂閱者依註冊順序同步執行（DockLayout 叫回編輯器排在 EditorGroup 開檔之前），
+// 任一訂閱者 throw 不得炸斷派送鏈，否則後面的開檔訂閱者收不到＝點檔無反應。
+function dispatch<T>(subs: Set<(req: T) => void>, req: T): void {
+  for (const l of subs) {
+    try {
+      l(req);
+    } catch {
+      /* 單一訂閱者失敗不拖累其他訂閱者 */
+    }
+  }
+}
+
 export const editorBus = {
   openFile(req: OpenFileRequest): void {
-    for (const l of listeners) l(req);
+    dispatch(listeners, req);
   },
   subscribe(l: Listener): () => void {
     listeners.add(l);
@@ -41,7 +53,7 @@ export const editorBus = {
   },
   /** 在編輯器區開啟差異分頁（編輯器 F-4 訂閱）。 */
   openDiff(req: OpenDiffRequest): void {
-    for (const l of diffListeners) l(req);
+    dispatch(diffListeners, req);
   },
   subscribeDiff(l: DiffListener): () => void {
     diffListeners.add(l);

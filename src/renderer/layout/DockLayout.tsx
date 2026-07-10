@@ -225,16 +225,36 @@ export function DockLayout(): React.JSX.Element {
     setToolbar(deriveToolbarState(api, { sidebar: SIDEBAR_ID, editor: EDITOR_ID, terminal: TERMINAL_ID }));
   }, []);
 
-  // 隱藏編輯器時點檔（Explorer/Search 呼 openFile）→ 自動把編輯器 group 顯示回來（否則檔案開了卻看不到）。
+  // 編輯器看不到時開檔/開差異（Explorer/Search/SCM 經 editorBus）→ 把編輯器叫回最前（否則開了卻看不到）。
+  // 偶發「點檔沒反應」的病根群，硬化三點：
+  //  - 無條件 setVisible(true)：api.isVisible 是事件快取，版面重組後可能過期誤判「可見」而略過叫回；
+  //    dockview 內部讀 splitview 真實狀態、相同即 no-op（冪等），故繞過快取直接設。
+  //  - setActive()：編輯器被拖成其他 group 的背景 tab 時 group 可見但編輯器不在最前 → 帶到最前。
+  //  - try/catch：dockview 於版面暫態可 throw（Invalid from location 等）；本訂閱者排在 EditorGroup
+  //    之前，例外一旦外洩就會吞掉整個開檔請求（editorBus 另有派送隔離兜底）。
   useEffect(() => {
-    return editorBus.subscribe(() => {
+    const reveal = (): void => {
       const api = layoutApi;
-      const g = api?.getPanel(EDITOR_ID)?.api.group;
-      if (g && !g.api.isVisible) {
-        g.api.setVisible(true);
+      if (!api) return;
+      try {
+        const p = api.getPanel(EDITOR_ID);
+        if (!p) {
+          addEditor(api); // panel 不存在（legacy/壞檔還原殘局）→ 重建；本次請求無從投遞，下次點擊即正常
+        } else {
+          p.api.group.api.setVisible(true);
+          if (p.api.group.activePanel?.id !== EDITOR_ID) p.api.setActive();
+        }
         syncToolbar();
+      } catch {
+        /* 版面暫態下 dockview 可能 throw；不致命 */
       }
-    });
+    };
+    const offFile = editorBus.subscribe(reveal);
+    const offDiff = editorBus.subscribeDiff(reveal);
+    return () => {
+      offFile();
+      offDiff();
+    };
   }, [syncToolbar]);
 
   const onReady = useCallback(
