@@ -230,4 +230,12 @@ describe('parseLogRefs（%D --decorate=full 純函式解析）', () => {
       { name: 'origin/feature/x', kind: 'remote', head: false },
     ]);
   });
+
+  it('<remote>/HEAD（遠端預設分支符號 ref）濾掉，不限 origin', () => {
+    expect(parseLogRefs('HEAD -> refs/heads/main, refs/remotes/origin/main, refs/remotes/origin/HEAD')).toEqual([
+      { name: 'main', kind: 'local', head: true },
+      { name: 'origin/main', kind: 'remote', head: false },
+    ]);
+    expect(parseLogRefs('refs/remotes/upstream/HEAD')).toEqual([]);
+  });
 });

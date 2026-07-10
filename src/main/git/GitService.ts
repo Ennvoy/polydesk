@@ -147,7 +147,7 @@ function pushXY(changes: GitChange[], xy: string, path: string): void {
 /**
  * 解析 `git log --decorate=full` 的 %D 欄（", " 分隔；refname 不含空白故分隔無歧義）。
  * 例：`HEAD -> refs/heads/main, refs/remotes/origin/main, tag: refs/tags/v1.0`。
- * 分離 HEAD 時 %D 只有 `HEAD`；refs/stash 等其他 ref 略過。
+ * 分離 HEAD 時 %D 只有 `HEAD`；refs/stash 等其他 ref 略過；`<remote>/HEAD` 符號 ref 濾掉（與預設分支徽章恆重複）。
  */
 export function parseLogRefs(d: string): GitLogRef[] {
   const out: GitLogRef[] = [];
@@ -167,6 +167,9 @@ export function parseLogRefs(d: string): GitLogRef[] {
     if (part.startsWith('refs/heads/')) {
       out.push({ name: part.slice('refs/heads/'.length), kind: 'local', head });
     } else if (part.startsWith('refs/remotes/')) {
+      // <remote>/HEAD 是遠端預設分支的符號 ref，永遠黏著 origin/main 之類，徽章成對重複無資訊量
+      // → 比照 VS Code 濾掉（但不限 origin）。remote 名不含斜線，故 [^/]+ 不會誤傷巢狀分支名。
+      if (/^refs\/remotes\/[^/]+\/HEAD$/.test(part)) continue;
       out.push({ name: part.slice('refs/remotes/'.length), kind: 'remote', head: false });
     } else if (part.startsWith('refs/tags/')) {
       out.push({ name: part.slice('refs/tags/'.length), kind: 'tag', head: false });
