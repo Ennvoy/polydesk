@@ -233,10 +233,14 @@ type EventApi = {
  * preload 暴露於 `window.polydesk` 的最小 namespaced API（一個 IPC 一個方法）。
  * 例：`window.polydesk.store.getState()`、`window.polydesk.events.claude.status(cb)`。
  */
-export type PolydeskApi = Omit<InvokeApi, 'pty'> & {
+export type PolydeskApi = Omit<InvokeApi, 'pty' | 'store'> & {
   pty: InvokeApi['pty'] & {
     write: (termId: string, data: string) => void;
     onData: (cb: (payload: { termId: string; chunk: Uint8Array }) => void) => Unsubscribe;
+  };
+  store: InvokeApi['store'] & {
+    /** 關窗前同步落檔版面（sendSync 阻塞到主程序寫完；beforeunload 專用，平時走去抖 invoke）。 */
+    setLayoutSync: (req: { layout: LayoutJson }) => void;
   };
   events: EventApi;
   /** 檔案工具（非 IPC，preload 直接橋接 Electron webUtils）：取得 File 的真實磁碟路徑，供貼上/拖放匯入。 */

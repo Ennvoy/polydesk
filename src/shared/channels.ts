@@ -96,6 +96,13 @@ export const EVENT_CHANNELS = [
 export const PTY_DATA = 'pty:data';
 export const PTY_WRITE = 'pty:write';
 
+/**
+ * 版面關窗同步落檔通道（sendSync，不走 invoke）：beforeunload 的非同步 invoke 會與
+ * app.exit(0) 競速（無工作區時 teardown 瞬間完成、IPC 必輸→顯隱狀態丟失）；
+ * sendSync 阻塞 renderer 直到主程序寫完，保證退出前落檔。僅關窗用，平時仍走去抖 invoke。
+ */
+export const LAYOUT_FLUSH_SYNC = 'store:setLayoutSync';
+
 // ── compile-time 完整性守門：若有型別通道未列入上方陣列即報錯（單一真相不漂移）──
 const _checkInvokeComplete: [Exclude<InvokeChannel, (typeof INVOKE_CHANNELS)[number]>] extends [never]
   ? true

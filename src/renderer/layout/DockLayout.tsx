@@ -21,9 +21,17 @@ import {
   serialize,
   toggleTerminalMaximize,
   togglePanel,
+  withinSizeLimit,
   type LayoutUiState,
   type ToolbarState,
 } from './layoutPersist';
+
+declare global {
+  interface Window {
+    /** 關窗/退出前同步落檔版面；main 的 quit 路徑經 executeJavaScript 呼叫（beforeunload 不觸發時的保底）。 */
+    __polydeskFlushLayout?: () => void;
+  }
+}
 
 // panel id 單一真相（顯隱/最大化判定一律以這些 id 對 dockview getPanel）。
 const SIDEBAR_ID = 'sidebar';
@@ -324,14 +332,36 @@ export function DockLayout(): React.JSX.Element {
     [syncToolbar],
   );
 
-  // A5：視窗關閉前 flush 去抖（避免去抖視窗內關閉丟失最新版面）；卸載時也 flush + 清理。
+  // A5：視窗關閉前落檔最新版面。關窗走 sendSync 同步落檔（beforeunload 的非同步 invoke 會與
+  // app.exit(0) 競速：無工作區時 teardown 瞬間完成、IPC 送不到 → 顯隱狀態重啟不還原），
+  // 且直接序列化「當下」dockview 狀態、不依賴去抖 pending（dockview layout 事件有緩衝，pending 可能落後）。
+  // React 卸載（HMR 等，視窗仍活）維持原本非同步 flush。
   useEffect(() => {
-    const flush = (): void => controllerRef.current?.flush();
-    window.addEventListener('beforeunload', flush);
-    window.addEventListener('pagehide', flush);
+    let flushed = false; // beforeunload 與 pagehide 都會觸發，只落檔一次
+    const flushSync = (): void => {
+      if (flushed) return;
+      const api = layoutApi;
+      const controller = controllerRef.current;
+      if (!api || !controller || controller.isRestoring()) return;
+      try {
+        const env = serialize(api.toJSON(), deriveUiState(api, TOGGLEABLE, TERMINAL_ID));
+        if (!withinSizeLimit(env)) return; // A4：超大 envelope 拒存（保留上一次良好值）
+        ipc.store.setLayoutSync({ layout: env });
+        flushed = true;
+        controller.dispose(); // 已同步落檔，丟棄 pending 避免殘留
+      } catch {
+        /* 關窗保底失敗不擋關閉（保留上一次落檔值） */
+      }
+    };
+    window.addEventListener('beforeunload', flushSync);
+    window.addEventListener('pagehide', flushSync);
+    // quit 路徑（app.quit → before-quit preventDefault → app.exit 硬退）不經視窗關閉、
+    // beforeunload 不觸發 → main 於退出前經 executeJavaScript 呼此全域 flush（見 main/index.ts）。
+    window.__polydeskFlushLayout = flushSync;
     return () => {
-      window.removeEventListener('beforeunload', flush);
-      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('beforeunload', flushSync);
+      window.removeEventListener('pagehide', flushSync);
+      delete window.__polydeskFlushLayout;
       controllerRef.current?.flush();
       controllerRef.current?.dispose();
       controllerRef.current = null;

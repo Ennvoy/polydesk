@@ -3,7 +3,7 @@
 // 例：window.polydesk.store.getState()、window.polydesk.events.claude.status(cb)。
 
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
-import { INVOKE_CHANNELS, EVENT_CHANNELS, PTY_DATA, PTY_WRITE } from '../shared/channels';
+import { INVOKE_CHANNELS, EVENT_CHANNELS, PTY_DATA, PTY_WRITE, LAYOUT_FLUSH_SYNC } from '../shared/channels';
 
 type Method = (...args: unknown[]) => unknown;
 type Ns = Record<string, Method>;
@@ -27,6 +27,12 @@ for (const ch of EVENT_CHANNELS) {
     };
   }) as Method;
 }
+
+// 版面關窗同步落檔（sendSync：阻塞到主程序寫完，beforeunload 專用；平時走去抖 invoke）
+const storeNs = (invokeApi.store ??= {});
+storeNs.setLayoutSync = ((req: unknown) => {
+  ipcRenderer.sendSync(LAYOUT_FLUSH_SYNC, req);
+}) as Method;
 
 // PTY 高頻資料流（不走 invoke）
 const ptyNs = (invokeApi.pty ??= {});

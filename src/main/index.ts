@@ -202,9 +202,20 @@ if (!gotTheLock) {
 }
 
 const SHUTDOWN_TIMEOUT_MS = 3_000;
+const LAYOUT_FLUSH_TIMEOUT_MS = 500;
 
 async function shutdownAndExit(): Promise<void> {
   try {
+    // quit 路徑（before-quit preventDefault → app.exit 硬退）不經視窗關閉、renderer 的
+    // beforeunload 落檔不觸發 → 退出前主動叫 renderer 同步落檔版面（sendSync 進 store），
+    // 否則去抖視窗內的顯隱切換重啟不還原。保底逾時：renderer 卡死不擋退出。
+    const wc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null;
+    if (wc && !wc.isDestroyed() && !wc.isCrashed()) {
+      await Promise.race([
+        wc.executeJavaScript('window.__polydeskFlushLayout?.(); 0', true).catch(() => 0),
+        new Promise<void>((r) => setTimeout(r, LAYOUT_FLUSH_TIMEOUT_MS)),
+      ]);
+    }
     if (services) {
       services.monitor.stop(); // 先停輪詢，避免關閉中再起一次 probe
       const teardownAll = (async () => {
