@@ -699,7 +699,7 @@ export function SourceControlPanel(): React.JSX.Element {
               <button
                 className="pd-btn"
                 aria-label="智慧產生 commit 訊息（依已暫存的變更）"
-                title={`用 ${engine === 'codex' ? 'Codex' : 'Claude'} 依已暫存變更產生 commit 訊息`}
+                title={`用 ${{ claude: 'Claude', codex: 'Codex', agy: 'Agy', custom: '自訂 CLI' }[engine]} 依已暫存變更產生 commit 訊息`}
                 onClick={() => void onGenerateMsg()}
                 disabled={genBusy || busy}
                 style={{ padding: '2px 10px', flexShrink: 0 }}
@@ -715,6 +715,7 @@ export function SourceControlPanel(): React.JSX.Element {
               >
                 <option value="claude">Claude</option>
                 <option value="codex">Codex</option>
+                <option value="agy">Agy</option>
               </select>
               <button
                 className="pd-btn pd-btn-primary pd-scm-commitbtn"

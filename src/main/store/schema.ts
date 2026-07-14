@@ -60,7 +60,7 @@ export function migrate(raw: unknown): PersistState {
 function isValidAiCommit(v: unknown): boolean {
   if (typeof v !== 'object' || v === null) return false;
   const e = (v as { engine?: unknown }).engine;
-  return e === 'claude' || e === 'codex' || e === 'custom';
+  return e === 'claude' || e === 'codex' || e === 'agy' || e === 'custom';
 }
 
 /**

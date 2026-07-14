@@ -65,7 +65,7 @@ function StatusBarBranch({ wsId }: { wsId: string }): React.JSX.Element | null {
 function StatusBar(): React.JSX.Element {
   const { workspaces, activeWorkspaceId } = useAppState();
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
-  const { running, awaiting } = useClaudeCounts(); // PE-2：多專案 Claude 狀態總覽
+  const { running, awaiting } = useClaudeCounts(); // PE-2：多專案 AI 狀態總覽
   return (
     <footer className="pd-statusbar" aria-label="狀態列">
       <span>Polydesk</span>
@@ -74,12 +74,12 @@ function StatusBar(): React.JSX.Element {
       {active && <StatusBarBranch wsId={active.id} />}
       <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 'var(--space-3)' }}>
         {running > 0 && (
-          <span style={{ color: 'var(--success)' }} aria-label={`${running} 個工作區 Claude 執行中`}>
+          <span style={{ color: 'var(--success)' }} aria-label={`${running} 個 AI 工作階段執行中`}>
             {running} 執行中
           </span>
         )}
         {awaiting > 0 && (
-          <span style={{ color: 'var(--warn)' }} aria-label={`${awaiting} 個工作區 Claude 待確認`}>
+          <span style={{ color: 'var(--warn)' }} aria-label={`${awaiting} 個 AI 工作階段待確認`}>
             {awaiting} 待確認
           </span>
         )}

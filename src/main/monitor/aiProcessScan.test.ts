@@ -1,6 +1,6 @@
 // aiProcessScan 解析純函式測試：wmic/powershell 輸出 → parent pid 集合（跳 header/空行/非數字）。
 import { describe, it, expect } from 'vitest';
-import { parsePids } from './aiProcessScan';
+import { parsePids, parseTaggedPids } from './aiProcessScan';
 
 describe('aiProcessScan.parsePids', () => {
   it('解析 wmic 輸出：跳 header 與空行、取數字 ppid', () => {
@@ -21,5 +21,12 @@ describe('aiProcessScan.parsePids', () => {
     expect(out.size).toBe(2);
     expect(out.has(5828)).toBe(true);
     expect(out.has(999)).toBe(true);
+  });
+
+  it('解析合併標記輸出：Claude / Codex / Agy 各自歸戶並忽略壞值', () => {
+    const out = parseTaggedPids('C:100\r\nX:200\r\nA:300\r\nA:300\r\nA:nope\r\n');
+    expect([...out.claude]).toEqual([100]);
+    expect([...out.codex]).toEqual([200]);
+    expect([...out.agy]).toEqual([300]);
   });
 });

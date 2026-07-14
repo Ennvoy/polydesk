@@ -12,8 +12,12 @@ export type Eol = 'crlf' | 'lf';
  *  done=已停止（Stop，整個回合完成沒事做）、idle=未啟動（無 claude session）。
  */
 export type ClaudeState = 'running' | 'stopped-await' | 'done' | 'idle';
-/** 受監控的 AI 工具（claude 由 hook 狀態檔；codex 由解析其 rollout JSONL）。 */
-export type AiTool = 'claude' | 'codex';
+/**
+ * 受監控的 AI 工具清單（main / renderer 共用，新增 provider 時只維護這個順序）。
+ * claude 由 hook 狀態檔、codex 由 rollout JSONL、agy 第一版由 Polydesk PTY 下的真實程序判定。
+ */
+export const AI_TOOLS = ['claude', 'codex', 'agy'] as const;
+export type AiTool = (typeof AI_TOOLS)[number];
 
 /** 單一額度視窗：已用百分比 + reset 時間（unix 秒）。 */
 export interface RateWindow {
@@ -181,7 +185,7 @@ export interface TerminalFontSettings {
 }
 
 /** 智慧 commit message 的產生引擎。custom＝使用者自訂 argv 範本（任何 CLI；prompt 走 stdin）。 */
-export type AiEngine = 'claude' | 'codex' | 'custom';
+export type AiEngine = 'claude' | 'codex' | 'agy' | 'custom';
 
 export interface AiCommitSettings {
   engine: AiEngine;

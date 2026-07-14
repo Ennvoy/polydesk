@@ -9,7 +9,7 @@
 //
 // 取尾端最後出現的 task_started/task_complete 決定 working/done；只回報「近期還在更新（mtime 在窗內）」的
 // rollout，超窗視為該 session 已結束 → 不回報，交給 monitor 的 hasAlivePty/idle 閘門。
-// codex（你的 full-access 設定）幾乎不進 awaiting（不會停下來問），故僅 working/done 兩態 + idle 閘門。
+// 待確認只採用 rollout 內「明確且尚未收到回覆」的互動請求；不以靜默秒數猜測，避免把長工具誤判成待確認。
 
 import { open, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -38,15 +38,20 @@ export function parseSessionMetaCwd(firstLine: string): string | null {
  * 尾端有活動但沒掃到 task 邊界（turn 很長、邊界在更前面）→ 保守視為進行中（working）。
  * 回 null 表示尾端沒有可辨識的活動。
  */
-export function parseRolloutTail(tailText: string): { state: 'working' | 'done'; ts: number } | null {
+export function parseRolloutTail(tailText: string): { state: 'working' | 'awaiting' | 'done'; ts: number } | null {
   const lines = tailText.split('\n');
   let lastTask: { done: boolean; ts: number } | null = null;
   let lastActivityTs = 0;
   let sawActivity = false;
+  const pendingInteractions = new Map<string, number>();
   for (const line of lines) {
     const s = line.trim();
     if (!s) continue;
-    let j: { timestamp?: string; type?: string; payload?: { type?: string } };
+    let j: {
+      timestamp?: string;
+      type?: string;
+      payload?: { type?: string; name?: string; call_id?: string; id?: string };
+    };
     try {
       j = JSON.parse(s);
     } catch {
@@ -54,6 +59,19 @@ export function parseRolloutTail(tailText: string): { state: 'working' | 'done';
     }
     const ts = j.timestamp ? Date.parse(j.timestamp) || 0 : 0;
     const pt = j.payload?.type;
+    const callId = j.payload?.call_id ?? j.payload?.id;
+    const name = j.payload?.name ?? '';
+    const isInteraction =
+      pt === 'request_user_input' ||
+      pt === 'elicitation_request' ||
+      pt === 'exec_approval_request' ||
+      pt === 'apply_patch_approval_request' ||
+      (pt === 'function_call' && (name === 'request_user_input' || /approval|confirmation|elicitation/i.test(name)));
+    if (isInteraction) pendingInteractions.set(callId ?? `${pt}:${name}`, ts);
+    if (pt === 'function_call_output' || /approval_response|elicitation_response|user_input_response/.test(pt ?? '')) {
+      if (callId) pendingInteractions.delete(callId);
+      else pendingInteractions.clear();
+    }
     if (pt === 'task_started') lastTask = { done: false, ts };
     else if (pt === 'task_complete' || pt === 'turn_complete' || pt === 'turn_aborted' || pt === 'turn_end')
       lastTask = { done: true, ts }; // turn 正常結束/中止皆＝已停止
@@ -61,6 +79,9 @@ export function parseRolloutTail(tailText: string): { state: 'working' | 'done';
       sawActivity = true;
       if (ts > lastActivityTs) lastActivityTs = ts;
     }
+  }
+  if (lastTask && !lastTask.done && pendingInteractions.size > 0) {
+    return { state: 'awaiting', ts: Math.max(...pendingInteractions.values(), lastActivityTs) };
   }
   if (lastTask) return { state: lastTask.done ? 'done' : 'working', ts: lastTask.ts || lastActivityTs };
   if (sawActivity) return { state: 'working', ts: lastActivityTs };

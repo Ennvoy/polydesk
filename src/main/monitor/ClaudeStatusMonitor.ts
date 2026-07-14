@@ -10,14 +10,15 @@ import type { WorkspaceManager } from '../workspace/WorkspaceManager';
 import type { PtyManager } from '../pty/PtyManager';
 import type { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
 import type { EventChannels } from '../../shared/ipc';
-import type { AiTool, ClaudeState } from '../../shared/types';
+import { AI_TOOLS, type AiTool, type ClaudeState } from '../../shared/types';
 import { emit } from '../ipc/broadcast';
 import { Notification, BrowserWindow } from 'electron';
 import { readdir, readFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
-import { aggregateByTool, AI_TOOLS, matchWorkspace, type SessionStatus } from './claudeHookState';
+import { aggregateByTool, matchWorkspace, type SessionStatus } from './claudeHookState';
 import { readCodexSessions } from './codexRollout';
+import { readAgySessions } from './agyLog';
 import { scanAiShellPids, type AiShellPids } from './aiProcessScan';
 import { claudePaths } from '../claude/statusHooks';
 
@@ -40,7 +41,7 @@ type PtyView = Pick<PtyManager, 'pidsOf'>;
 type EmitFn = (payload: EventChannels['claude:status']) => void;
 
 /** 待確認桌面通知（PE-2）；預設 Electron Notification，測試可注入。 */
-type AwaitNotifier = (info: { wsId: string; name: string }) => void;
+type AwaitNotifier = (info: { wsId: string; name: string; tool: AiTool }) => void;
 /**
  * 存活通知的強引用：Notification 若只留在函式區域變數，show() 後隨時可能被 GC 回收，
  * click handler 跟著消失（點了沒反應、時好時壞）。保留到 close/click/failed 才放掉；
@@ -49,12 +50,13 @@ type AwaitNotifier = (info: { wsId: string; name: string }) => void;
 const liveNotifications = new Set<Notification>();
 const LIVE_NOTIFICATIONS_MAX = 50;
 
-function defaultNotifyAwait(info: { wsId: string; name: string }): void {
+function defaultNotifyAwait(info: { wsId: string; name: string; tool: AiTool }): void {
   try {
     if (!Notification.isSupported()) return;
+    const toolName = info.tool === 'claude' ? 'Claude' : info.tool === 'codex' ? 'Codex' : 'Agy';
     const n = new Notification({
-      title: 'Claude 待確認',
-      body: `工作區「${info.name}」的 Claude 需要你確認（點此回到 Polydesk）。`,
+      title: `${toolName} 待確認`,
+      body: `工作區「${info.name}」的 ${toolName} 需要你確認（點此回到 Polydesk）。`,
     });
     const release = (): void => {
       liveNotifications.delete(n);
@@ -95,7 +97,9 @@ export interface ClaudeStatusMonitorOptions {
   readSessions?: SessionReader;
   /** codex rollout 來源（預設掃 ~/.codex/sessions）；測試可注入。 */
   readCodex?: SessionReader;
-  /** claude/codex process 掃描（單一 spawn 一趟掃兩工具；工具值 null＝該輪失敗、保留上次快取）；測試可注入。 */
+  /** Agy CLI log 來源；測試可注入。 */
+  readAgy?: SessionReader;
+  /** claude/codex/agy process 掃描（fallback 單一 spawn 掃全部工具；null＝該輪失敗、保留上次快取）；測試可注入。 */
   scanPids?: () => Promise<AiShellPids | null>;
   /** 掃描節流間隔（測試用；預設 PROCESS_SCAN_MS）。 */
   processScanMs?: number;
@@ -120,11 +124,13 @@ export class ClaudeStatusMonitor {
   private readonly notifyAwait: AwaitNotifier;
   private readonly readSessions: SessionReader;
   private readonly readCodex: SessionReader;
+  private readonly readAgy: SessionReader;
   private readonly scanPids: () => Promise<AiShellPids | null>;
   private readonly processScanMs: number;
   private readonly forceScanMinMs: number;
   private claudeShellPids = new Set<number>();
   private codexShellPids = new Set<number>();
+  private agyShellPids = new Set<number>();
   private lastScanAt = 0;
   /** 掃描 single-flight（in-flight 時重複要求共用同一趟）。 */
   private scanning: Promise<void> | null = null;
@@ -145,6 +151,7 @@ export class ClaudeStatusMonitor {
     this.notifyAwait = opts.notifyAwait ?? defaultNotifyAwait;
     this.readSessions = opts.readSessions ?? (() => this.defaultReadSessions());
     this.readCodex = opts.readCodex ?? (() => readCodexSessions());
+    this.readAgy = opts.readAgy ?? (() => readAgySessions());
     this.scanPids = opts.scanPids ?? scanAiShellPids;
     this.processScanMs = opts.processScanMs ?? PROCESS_SCAN_MS;
     this.forceScanMinMs = opts.forceScanMinMs ?? FORCE_SCAN_MIN_MS;
@@ -211,18 +218,34 @@ export class ClaudeStatusMonitor {
     const scan = this.maybeScanPids(false);
     if (scan && !this.scannedOnce) await scan; // 冷啟動首輪：等真實 pid 再聚合
     const now = Date.now();
-    // claude（hook 狀態檔）+ codex（rollout 解析）兩來源並行讀、各自容錯。
-    const [claudeSessions, codexSessions] = await Promise.all([
+    // Claude（hook）+ Codex（rollout）+ Agy（CLI log）三來源並行讀、各自容錯。
+    const [claudeSessions, codexSessions, agySessions] = await Promise.all([
       this.readSessions().catch(() => [] as SessionStatus[]),
       this.readCodex().catch(() => [] as SessionStatus[]),
+      this.readAgy().catch(() => [] as SessionStatus[]),
     ]);
-    const sessions = [...claudeSessions, ...codexSessions];
+    const sessions = [...claudeSessions, ...codexSessions, ...agySessions];
+    // Codex rollout / Agy log 尚未出現活動前補一筆 done，代表 CLI 已開但尚未送出任務。
+    // 有 session 時以事件的 working/awaiting/done 為準，不再把「程序存在」等同「執行中」。
+    for (const ws of this.workspaces.list()) {
+      const ptyPids = this.pty.pidsOf(ws.id);
+      const hasCodex = ptyPids.some((pid) => this.codexShellPids.has(pid));
+      const hasCodexSession = codexSessions.some((s) => matchWorkspace(s.cwd, [ws]) === ws.id);
+      if (hasCodex && !hasCodexSession) {
+        sessions.push({ sessionId: `codex-process:${ws.id}`, cwd: ws.path, state: 'done', ts: now, tool: 'codex' });
+      }
+      const hasAgy = ptyPids.some((pid) => this.agyShellPids.has(pid));
+      const hasAgySession = agySessions.some((s) => matchWorkspace(s.cwd, [ws]) === ws.id);
+      if (hasAgy && !hasAgySession) {
+        sessions.push({ sessionId: `agy-process:${ws.id}`, cwd: ws.path, state: 'done', ts: now, tool: 'agy' });
+      }
+    }
     // per-tool idle 閘門：claude 要「Polydesk 終端機真的有 claude 子程序」（process 偵測，取代殘留猜測）；
     // codex 有 PTY 即可（其 sessions 由 rollout reader 已用 mtime gate 活躍度）。
     const isAlive = (wsId: string, tool: AiTool): boolean => {
       const ptyPids = this.pty.pidsOf(wsId);
       if (ptyPids.length === 0) return false;
-      const shells = tool === 'claude' ? this.claudeShellPids : this.codexShellPids;
+      const shells = tool === 'claude' ? this.claudeShellPids : tool === 'codex' ? this.codexShellPids : this.agyShellPids;
       return ptyPids.some((p) => shells.has(p));
     };
     // 新 session 但 pid 快取還沒它 → 強制補掃一次（加快「剛啟動 claude → 燈亮」；每 session 最多一次）。
@@ -264,6 +287,11 @@ export class ClaudeStatusMonitor {
         if (r.codex) {
           if (!sameSet(r.codex, this.codexShellPids)) changed = true;
           this.codexShellPids = r.codex;
+          this.scannedOnce = true;
+        }
+        if (r.agy) {
+          if (!sameSet(r.agy, this.agyShellPids)) changed = true;
+          this.agyShellPids = r.agy;
           this.scannedOnce = true;
         }
         if (changed) void this.recompute();
@@ -323,7 +351,7 @@ export class ClaudeStatusMonitor {
     this.emitFn({ wsId, tool, status: { state } });
     if (prev !== 'stopped-await' && state === 'stopped-await') {
       const name = this.workspaces.list().find((w) => w.id === wsId)?.name ?? wsId;
-      this.notifyAwait({ wsId, name });
+      this.notifyAwait({ wsId, name, tool });
     }
   }
 }

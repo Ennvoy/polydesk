@@ -11,7 +11,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { ipc } from '../ipc/client';
-import type { AiTool, ClaudeState } from '../../shared/types';
+import { AI_TOOLS, type AiTool, type ClaudeState } from '../../shared/types';
 
 const VIEW: Record<ClaudeState, { color: string; label: string; pulse: boolean }> = {
   running: { color: 'var(--success)', label: '執行中', pulse: true }, // 跑工具/subagent/workflow
@@ -20,7 +20,7 @@ const VIEW: Record<ClaudeState, { color: string; label: string; pulse: boolean }
   idle: { color: 'var(--meta)', label: '未啟動', pulse: false }, // 無 AI session
 };
 
-const TOOL_LABEL: Record<AiTool, string> = { claude: 'Claude', codex: 'Codex' };
+const TOOL_LABEL: Record<AiTool, string> = { claude: 'Claude', codex: 'Codex', agy: 'Agy' };
 
 const STYLE_ID = 'pdws-claude-badge-style';
 function ensureStyle(): void {
@@ -37,7 +37,7 @@ function ensureStyle(): void {
 }
 
 export function ClaudeStatusBadge({ wsId }: { wsId: string }): React.JSX.Element {
-  // 每工具一個狀態（claude/codex），合併成一顆徽章：主視覺取最高優先態、tooltip 拆每工具。
+  // 每工具一個狀態（claude/codex/agy），各自顯示 chip 與 tooltip。
   const [states, setStates] = useState<Partial<Record<AiTool, ClaudeState>>>({});
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export function ClaudeStatusBadge({ wsId }: { wsId: string }): React.JSX.Element
   }, [wsId]);
 
   // 每工具一個 chip（dot 顏色/脈動＝狀態、文字＝工具名）分開顯示；只顯示非 idle 的工具，都 idle → 不顯示。
-  const active = (Object.keys(TOOL_LABEL) as AiTool[]).filter((t) => (states[t] ?? 'idle') !== 'idle');
+  const active = AI_TOOLS.filter((t) => (states[t] ?? 'idle') !== 'idle');
   if (active.length === 0) return <span aria-hidden="true" />;
 
   return (

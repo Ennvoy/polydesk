@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { ipc } from '../ipc/client';
 import { useAppState } from '../state/appStore';
 import { overviewBus } from '../state/overviewBus';
-import type { AiTool, AiUsage, ClaudeState, RateWindow } from '../../shared/types';
+import { AI_TOOLS, type AiTool, type AiUsage, type ClaudeState, type RateWindow } from '../../shared/types';
 
 const STATE_VIEW: Record<ClaudeState, { color: string; label: string }> = {
   running: { color: 'var(--success)', label: '執行中' },
@@ -13,7 +13,7 @@ const STATE_VIEW: Record<ClaudeState, { color: string; label: string }> = {
   done: { color: 'var(--info, #5b9bd5)', label: '已停止' },
   idle: { color: 'var(--meta)', label: '未啟動' },
 };
-const TOOL_LABEL: Record<AiTool, string> = { claude: 'Claude', codex: 'Codex' };
+const TOOL_LABEL: Record<AiTool, string> = { claude: 'Claude', codex: 'Codex', agy: 'Agy' };
 
 function formatReset(sec?: number): string {
   if (!sec) return '';
@@ -158,7 +158,7 @@ export function OverviewPanel(): React.JSX.Element | null {
                   {ws.name}
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--space-4)' }}>
-                  {(['claude', 'codex'] as AiTool[]).map((tool) => {
+                  {AI_TOOLS.map((tool) => {
                     const v = STATE_VIEW[states[`${ws.id}::${tool}`] ?? 'idle'];
                     return (
                       <span key={tool} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)' }}>

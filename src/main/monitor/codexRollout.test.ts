@@ -11,6 +11,12 @@ function metaLine(cwd: string): string {
 function ev(type: string, ts: string, evType = false): string {
   return JSON.stringify({ timestamp: ts, type: evType ? 'event_msg' : 'response_item', payload: { type } });
 }
+function call(name: string, callId: string, ts: string): string {
+  return JSON.stringify({ timestamp: ts, type: 'response_item', payload: { type: 'function_call', name, call_id: callId } });
+}
+function callOutput(callId: string, ts: string): string {
+  return JSON.stringify({ timestamp: ts, type: 'response_item', payload: { type: 'function_call_output', call_id: callId } });
+}
 
 describe('codexRollout 解析純函式', () => {
   it('parseSessionMetaCwd 取 payload.cwd；壞檔/缺欄回 null', () => {
@@ -37,6 +43,26 @@ describe('codexRollout 解析純函式', () => {
       ev('function_call', '2026-06-30T09:05:10.000Z'),
     ].join('\n');
     expect(parseRolloutTail(tail)?.state).toBe('working');
+  });
+
+  it('未回覆的 request_user_input → awaiting；收到對應 output → working', () => {
+    const base = [
+      ev('task_started', '2026-06-30T09:05:00.000Z', true),
+      call('request_user_input', 'ask-1', '2026-06-30T09:05:10.000Z'),
+    ];
+    expect(parseRolloutTail(base.join('\n'))?.state).toBe('awaiting');
+    expect(parseRolloutTail([...base, callOutput('ask-1', '2026-06-30T09:05:20.000Z')].join('\n'))?.state).toBe('working');
+  });
+
+  it('明確 approval request → awaiting；task_complete 優先收斂為 done', () => {
+    const approval = JSON.stringify({
+      timestamp: '2026-06-30T09:05:10.000Z',
+      type: 'event_msg',
+      payload: { type: 'exec_approval_request', id: 'approve-1' },
+    });
+    const base = [ev('task_started', '2026-06-30T09:05:00.000Z', true), approval];
+    expect(parseRolloutTail(base.join('\n'))?.state).toBe('awaiting');
+    expect(parseRolloutTail([...base, ev('task_complete', '2026-06-30T09:06:00.000Z', true)].join('\n'))?.state).toBe('done');
   });
 
   it('尾端只有活動、沒掃到 task 邊界 → 保守 working', () => {

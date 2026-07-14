@@ -1,4 +1,4 @@
-// 總覽面板：toolbar「總覽」toggle → 最大化 overlay，顯示 claude/codex 用量卡片 + 各工作區 AI 狀態 → 關閉。
+// 總覽面板：toolbar「總覽」toggle → 最大化 overlay，顯示 claude/codex 用量卡片 + 各工作區 AI 狀態（含 Agy）→ 關閉。
 import { test, expect } from '@playwright/test';
 import { rmSync } from 'node:fs';
 import { launchApp, makeTempDir, makeSubDir, stubFolderPicker, addWorkspaceViaUI } from './electronApp';
@@ -33,6 +33,7 @@ test('總覽面板：開 → 用量卡片 + 工作區狀態 → 關閉', async (
   await expect(overview.getByRole('heading', { name: 'Codex' })).toBeVisible();
   await expect(overview.getByText('工作區 AI 狀態')).toBeVisible();
   await expect(overview.getByText('proj', { exact: true })).toBeVisible();
+  await expect(overview.getByText('Agy', { exact: true })).toBeVisible();
 
   // 關閉
   await page.locator('button[aria-label="關閉總覽"]').click();

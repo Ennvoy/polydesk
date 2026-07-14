@@ -37,6 +37,15 @@ describe('StateStore', () => {
     expect(state.windowBounds).toEqual({ width: 1024, height: 768, x: 10, y: 20 });
   });
 
+  it('Agy commit 引擎設定可持久化並通過 schema 正規化', () => {
+    const store = new StateStore(file);
+    store.load();
+    store.setAiCommit({ engine: 'agy' });
+
+    const reopened = new StateStore(file);
+    expect(reopened.load().aiCommit).toEqual({ engine: 'agy' });
+  });
+
   it('故意寫壞檔 → 偵測到 → 備份 + 回預設、不丟例外', () => {
     writeFileSync(file, '{ 這不是合法 json ', 'utf-8');
     const store = new StateStore(file);

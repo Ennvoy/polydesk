@@ -1,7 +1,7 @@
 // Claude hook 狀態聚合（純函式，可單測）。把各 session 的 hook 狀態（working/awaiting/done）對應到
 // 工作區的 ClaudeState：cwd→工作區（最長路徑前綴）、綜合多 session 取優先序、無 alive PTY 一律 idle。
 
-import type { AiTool, ClaudeState } from '../../shared/types';
+import { AI_TOOLS, type AiTool, type ClaudeState } from '../../shared/types';
 
 /** 單一 AI session 的狀態（claude 由 hook 腳本寫的狀態檔；codex 由解析 rollout 得出）。 */
 export interface SessionStatus {
@@ -102,9 +102,6 @@ export function aggregateWorkspaceStates(
   }
   return out;
 }
-
-/** 監控涵蓋的工具（每工作區都對這些工具各算一個狀態）。 */
-export const AI_TOOLS: readonly AiTool[] = ['claude', 'codex'];
 
 /**
  * 工具中立聚合：每個 session 依 cwd 歸戶工作區、依 tool 分組，逐 (工作區,工具) 算綜合狀態。

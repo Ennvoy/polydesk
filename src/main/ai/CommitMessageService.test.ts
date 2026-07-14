@@ -1,5 +1,5 @@
 // 智慧 commit message 服務單測：取 staged diff（真 git repo）+ 無暫存時回明確 error（不呼叫引擎、不耗額度）。
-// 引擎端到端（真 claude/codex 產生）走 dogfood，因為會耗 LLM 額度且需登入，不在 CI 單測內跑。
+// 引擎端到端（真 claude/codex/agy 產生）走 dogfood，因為會耗 LLM 額度且需登入，不在 CI 單測內跑。
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
