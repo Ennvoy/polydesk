@@ -253,7 +253,8 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
       }
     });
 
-    // 剪貼簿：Ctrl+V / Ctrl+Shift+V / Shift+Insert 貼上、Ctrl+Shift+C 複製選取、右鍵貼上（有選取則複製）。
+    // 剪貼簿：Ctrl+V / Ctrl+Shift+V / Shift+Insert 貼上；Ctrl+C / Ctrl+Shift+C 有選取時複製，
+    // 無選取的 Ctrl+C 保留給終端機送 SIGINT；右鍵貼上（有選取則複製）。
     // 讀寫走 clipboard IPC（main 端 electron clipboard）——renderer 的 navigator.clipboard 讀權限被
     // REQ-SEC-001 封鎖；此為使用者手勢觸發、與 REQ-TERM-008 正交（不掛 clipboard addon、不改 secureOptions）。
     const pasteFromClipboard = (): void => {
@@ -283,7 +284,9 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
     // 改由我們讀剪貼簿後 term.paste（原生 paste 已被上方阻斷，故此處是唯一貼上來源、不重複）。
     term.attachCustomKeyEventHandler((e) => {
       const action = classifyClipboardKey(e);
-      if (!action) return true; // 其餘鍵（含純 Ctrl+C＝SIGINT）交還 xterm 原生處理
+      if (!action) return true;
+      // Ctrl+C 沒有選取時不可攔截，必須交還 xterm 送出 ^C / SIGINT。
+      if (action === 'copy' && !term.hasSelection()) return true;
       e.preventDefault();
       if (action === 'paste') pasteFromClipboard();
       else copySelection();

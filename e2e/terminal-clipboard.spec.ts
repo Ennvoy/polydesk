@@ -97,6 +97,88 @@ test('右鍵（無選取）貼上剪貼簿內容進終端機', async () => {
   }
 });
 
+test('同工作區兩個終端機：A 選取後 Ctrl+C 可複製到 B，無選取仍保留 SIGINT', async () => {
+  const dir = seedDir('clip-two-term-ws');
+  const { app, page, userData } = await launchApp();
+  let restore: (() => Promise<void>) | null = null;
+  const payload = `PD_A_TO_B_${Date.now()}`;
+  try {
+    await stubFolderPicker(app, [dir]);
+    await addWorkspaceViaUI(page);
+    await page.locator('button[aria-label="開啟工作區 clip-two-term-ws"]').click();
+    await openTerminal(page);
+    await openTerminal(page);
+    await expect(page.locator('.pd-term-view')).toHaveCount(2);
+
+    restore = await seedClipboard(app, 'SENTINEL_BEFORE_A_TO_B');
+    await app.evaluate(({ ipcMain }) => {
+      (globalThis as { __pdPtyWrites?: Array<{ termId?: string; data?: string }> }).__pdPtyWrites = [];
+      ipcMain.on('pty:write', (_e, p: { termId?: string; data?: string }) => {
+        (globalThis as { __pdPtyWrites?: Array<{ termId?: string; data?: string }> }).__pdPtyWrites?.push(p);
+      });
+    });
+
+    const terminals = page.locator('.pd-term-view');
+    const firstHost = terminals.nth(0).locator('[data-term-unicode]');
+
+    // 無選取 Ctrl+C 必須繼續送 ^C，不能因支援一般複製鍵而破壞 SIGINT。
+    await terminals.nth(0).click();
+    await firstHost.evaluate((el) => {
+      (el as unknown as { __pdTerm?: { clearSelection(): void; focus(): void } }).__pdTerm?.clearSelection();
+      (el as unknown as { __pdTerm?: { clearSelection(): void; focus(): void } }).__pdTerm?.focus();
+    });
+    await page.keyboard.press('Control+c');
+    await expect
+      .poll(
+        () => app.evaluate(() => (globalThis as { __pdPtyWrites?: Array<{ data?: string }> }).__pdPtyWrites?.map((p) => p.data ?? '').join('') ?? ''),
+        { timeout: 5000, message: '無選取 Ctrl+C 未送出 SIGINT' },
+      )
+      .toContain('\x03');
+
+    // 在 A 的 xterm buffer 放入並選取測試字串，走真實 Ctrl+C → clipboard IPC。
+    await firstHost.evaluate(async (el, text) => {
+      const term = (el as unknown as {
+        __pdTerm?: {
+          buffer: { active: { cursorX: number; cursorY: number } };
+          write(data: string, callback: () => void): void;
+          select(column: number, row: number, length: number): void;
+          focus(): void;
+        };
+      }).__pdTerm;
+      if (!term) throw new Error('找不到第一個 xterm 實例');
+      const column = term.buffer.active.cursorX;
+      const row = term.buffer.active.cursorY;
+      await new Promise<void>((resolve) => term.write(text, resolve));
+      term.select(column, row, text.length);
+      term.focus();
+    }, payload);
+    await page.keyboard.press('Control+c');
+    await expect.poll(() => readClipboard(app), { timeout: 5000, message: '終端機 A 的選取未寫入剪貼簿' }).toBe(payload);
+
+    // 切到 B 貼上，斷言資料實際送往第二個 PTY，而非只停在剪貼簿。
+    const beforePaste = await app.evaluate(
+      () => (globalThis as { __pdPtyWrites?: Array<{ data?: string }> }).__pdPtyWrites?.length ?? 0,
+    );
+    await terminals.nth(1).click();
+    await page.keyboard.press('Control+v');
+    await expect
+      .poll(
+        () =>
+          app.evaluate((start) => {
+            const writes = (globalThis as { __pdPtyWrites?: Array<{ data?: string }> }).__pdPtyWrites ?? [];
+            return writes.slice(start).map((p) => p.data ?? '').join('');
+          }, beforePaste),
+        { timeout: 5000, message: '終端機 B 未收到從 A 複製的內容' },
+      )
+      .toContain(payload);
+  } finally {
+    await restore?.();
+    await app.close();
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(userData, { recursive: true, force: true });
+  }
+});
+
 test('OSC52 寫入：真 shell 發序列 → 系統剪貼簿更新（Claude Code 選取複製鏈路）', async () => {
   const dir = seedDir('clip-ws3');
   const { app, page, userData } = await launchApp();

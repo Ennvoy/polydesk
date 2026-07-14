@@ -144,6 +144,7 @@
 - [x] **DF-6 PE-1/PE-2 增強**（見下）— dogfood 規劃的兩組增強，已實作交付。
 - [x] **DF-7 終端機底色填滿 pane**（dogfood 回報：終端機四周留白框）— xterm 只能排整數 cols/rows，右/下剩餘空隙＋inset 邊距露出主題底色形成留白框；修法：`.pd-term-view` 容器底色漆成 xterm theme.background 同色（fit 邏輯不動、不重疊不裁列）。e2e terminal-fit-clip「容器底色＝xterm 背景色」綠。
 - [x] **DF-8 已開終端機主題即時跟隨**（dogfood 回報：開著終端機切風格、終端機顏色不變）— 主題色原本只在掛載時讀一次；修法：MutationObserver 監聽 documentElement `[data-theme]` → 重讀 CSS var → 更新 `term.options.theme`＋容器底色（先 xterm 後容器，不脫鉤）。e2e terminal-fit-clip「切主題即時跟隨」真實 UI 路徑綠。
+- [x] **DF-9 同工作區終端機互相複製貼上＋總覽用量資訊校正**（2026-07-14 dogfood 回報）— 終端機原先只接受 `Ctrl+Shift+C` 複製，使用者在 A 選取後按一般 `Ctrl+C` 仍送出 SIGINT，導致切到 B 無內容可貼；修法：`Ctrl/Cmd+C` 先判斷 xterm 是否有選取，有選取才寫入系統剪貼簿，無選取仍交還 xterm 送出 SIGINT。總覽移除無法取得數值的 Agy 用量卡，但保留各工作區 Agy 執行狀態。vitest 快捷鍵判定 8 案例、terminal-clipboard e2e 5 案例（含 A→B 與 SIGINT）、overview e2e、typecheck、build 全綠。
 
 ## 規劃增強（dogfood 提出、AskUserQuestion 定版範圍、ship 後交付）
 
