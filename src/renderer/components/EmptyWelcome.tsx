@@ -3,7 +3,7 @@
 
 import React from 'react';
 
-export function EmptyWelcome({ onAdd }: { onAdd: () => void }): React.JSX.Element {
+export function EmptyWelcome({ onAdd, onClone }: { onAdd: () => void; onClone: () => void }): React.JSX.Element {
   return (
     <div
       role="region"
@@ -39,14 +39,14 @@ export function EmptyWelcome({ onAdd }: { onAdd: () => void }): React.JSX.Elemen
       <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--fg-2)', lineHeight: 1.6, maxWidth: 200 }}>
         新增一個專案資料夾，開始多工作區的終端機、編輯與 Claude 體驗。
       </p>
-      <button
-        className="pd-btn pd-btn-primary"
-        onClick={onAdd}
-        aria-label="新增工作區"
-        style={{ marginTop: 'var(--space-2)', padding: '8px 16px' }}
-      >
-        + 新增工作區
-      </button>
+      <div style={{ display: 'flex', gap: 8, marginTop: 'var(--space-2)', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <button className="pd-btn pd-btn-primary" onClick={onAdd} aria-label="新增工作區" style={{ padding: '8px 16px' }}>
+          新增工作區
+        </button>
+        <button className="pd-btn" onClick={onClone} aria-label="Clone Git Repository" style={{ padding: '8px 16px' }}>
+          Clone Git Repository
+        </button>
+      </div>
     </div>
   );
 }

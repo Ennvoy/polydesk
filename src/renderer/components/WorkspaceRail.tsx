@@ -21,6 +21,7 @@ import { ClaudeStatusBadge } from './ClaudeStatusBadge';
 import { TrustConfirm, neutralizeBidi } from './Dialogs/TrustConfirm';
 import { confirmCloseWorkspace } from './Dialogs/CloseConfirm';
 import { CreateWorktreeDialog } from './Worktree/CreateWorktreeDialog';
+import { CloneRepositoryDialog } from './CloneRepositoryDialog';
 import { worktreeBranchDisplay } from './Worktree/worktreeModel';
 import type { Workspace } from '../../shared/types';
 
@@ -117,6 +118,13 @@ export async function createWorktreeFlow(): Promise<void> {
   await dialog.open((close) => (
     <CreateWorktreeDialog wsId={active.id} wsPath={active.path} onResult={(v) => close(v)} />
   ));
+}
+
+/** Clone 遠端 repository，成功後由對話框重載並切換工作區。Clone 中禁止點外或 Esc 關閉。 */
+export async function cloneRepositoryFlow(): Promise<void> {
+  await dialog.open((close) => (
+    <CloneRepositoryDialog onResult={(wsId) => close(wsId)} />
+  ), { dismissable: false });
 }
 
 /**
@@ -369,7 +377,19 @@ export function WorkspaceRail(): React.JSX.Element {
                   void addWorkspaceFlow();
                 }}
               >
-                📁 新增工作區…
+                新增工作區…
+              </button>
+              <button
+                role="menuitem"
+                className="pd-row"
+                style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit', font: 'inherit', padding: '8px 10px', borderRadius: 'var(--radius-sm)' }}
+                aria-label="Clone Git Repository"
+                onClick={() => {
+                  setAddMenuOpen(false);
+                  void cloneRepositoryFlow();
+                }}
+              >
+                Clone Git Repository…
               </button>
               <button
                 role="menuitem"
@@ -389,7 +409,7 @@ export function WorkspaceRail(): React.JSX.Element {
       </div>
 
       {ordered.length === 0 ? (
-        <EmptyWelcome onAdd={() => void addWorkspaceFlow()} />
+        <EmptyWelcome onAdd={() => void addWorkspaceFlow()} onClone={() => void cloneRepositoryFlow()} />
       ) : (
         <div
           className="pd-scroll"

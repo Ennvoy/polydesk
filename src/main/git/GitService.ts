@@ -17,9 +17,9 @@ import {
 } from 'node:child_process';
 import { shell, type IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
-import type { GitStatus, GitChange, GitLogEntry, GitLogRef, GitWorktree } from '../../shared/types';
+import type { GitStatus, GitChange, GitLogEntry, GitLogRef, GitWorktree, GitCloneInput, GitCloneResult, GitCloneErrorCode } from '../../shared/types';
 import type { InvokeReq } from '../../shared/ipc';
-import { GIT_LOCAL_TIMEOUT_MS, GIT_NETWORK_TIMEOUT_MS } from '../../shared/constants';
+import { GIT_CLONE_TIMEOUT_MS, GIT_LOCAL_TIMEOUT_MS, GIT_NETWORK_TIMEOUT_MS } from '../../shared/constants';
 import {
   validateRef,
   readHardeningArgs,
@@ -31,9 +31,10 @@ import {
 import { enqueue } from './gitSerialQueue';
 import { buildSpawnEnv } from '../security/spawnEnv';
 import { readFile, writeFile } from 'node:fs/promises';
-import { realpathSync, existsSync, rmSync } from 'node:fs';
-import { join as pathJoin, resolve as pathResolve } from 'node:path';
+import { realpathSync, existsSync, rmSync, statSync } from 'node:fs';
+import { join as pathJoin, resolve as pathResolve, dirname as pathDirname } from 'node:path';
 import { validateWorktreeTarget, resolveTargetPath } from './worktreePath';
+import { cloneDirectoryNameError, cloneUrlError } from '../../shared/gitClone';
 
 const GIT_BIN = 'git';
 const MAX_BUFFER = 64 * 1024 * 1024;
@@ -272,7 +273,7 @@ export class GitService {
           const e = err as ExecFileException & { killed?: boolean };
           const timedOut = e.killed === true || e.signal === 'SIGTERM';
           const code = typeof e.code === 'number' ? e.code : null;
-          reject(new GitError(code, errOut, out, timedOut));
+          reject(new GitError(code, errOut || e.message, out, timedOut));
           return;
         }
         resolve({ stdout: out, stderr: errOut });
@@ -638,6 +639,60 @@ export class GitService {
     return { ok: true };
   }
 
+  /**
+   * Clone 到使用者選定父資料夾下的新目錄；成功後立即納管為可信任工作區。
+   * 所有輸入仍在 main 重驗，且使用 execFile argv + `--`，不經 shell。
+   */
+  async clone(input: GitCloneInput): Promise<GitCloneResult> {
+    const url = input?.url?.trim() ?? '';
+    const parent = input?.parentPath?.trim() ?? '';
+    const directoryName = input?.directoryName ?? '';
+    const urlError = cloneUrlError(url);
+    if (urlError) return { error: urlError, code: 'invalid-url' };
+    const nameError = cloneDirectoryNameError(directoryName);
+    if (nameError) return { error: nameError, code: 'invalid-name' };
+
+    try {
+      if (!parent || !existsSync(parent) || !statSync(parent).isDirectory()) {
+        return { error: '選取的存放位置不存在或不是資料夾。', code: 'invalid-parent' };
+      }
+    } catch {
+      return { error: '無法讀取選取的存放位置。', code: 'invalid-parent' };
+    }
+
+    const parentAbs = pathResolve(parent);
+    const target = pathResolve(parentAbs, directoryName);
+    if (pathDirname(target) !== parentAbs) {
+      return { error: '目標資料夾必須直接位於選取的存放位置下。', code: 'invalid-name' };
+    }
+    if (existsSync(target)) return { error: `目標資料夾已存在：${target}`, code: 'target-exists' };
+
+    try {
+      await this.run(['clone', '--', url, target], {
+        cwd: parentAbs,
+        env: networkEnv(),
+        timeoutMs: GIT_CLONE_TIMEOUT_MS,
+      });
+    } catch (e) {
+      const message = errMsg(e, 'Git Clone 失敗');
+      let code: GitCloneErrorCode = 'failed';
+      if (e instanceof GitError && e.timedOut) code = 'timeout';
+      else if (/authentication failed|permission denied|publickey|could not read username|access denied|repository not found/i.test(message)) code = 'auth';
+      else if (/could not resolve host|failed to connect|connection (?:timed out|refused)|network is unreachable|unable to access/i.test(message)) code = 'network';
+      else if (/enoent|not recognized|not found/i.test(message) && /git/i.test(message)) code = 'git-not-found';
+      return { error: message, code };
+    }
+
+    const added = this.workspaces.add({ path: target });
+    if ('error' in added) {
+      return {
+        error: added.error === 'duplicate' ? 'Clone 已完成，但此資料夾已在工作區列表中。' : 'Clone 已完成，但無法加入工作區。',
+        code: 'failed',
+      };
+    }
+    return { wsId: added.id, path: target };
+  }
+
   // ─────────────── Git Worktree（REQ-WT，第二迭代）───────────────
 
   /** REQ-WT-008：列該 repo 全部 worktree（--porcelain -z 解析，特殊字元安全）。 */
@@ -890,6 +945,9 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
   );
   ipc.handle('git:init', (_e, req: InvokeReq<'git:init'>) =>
     enqueue(req.wsId, () => svc.init(req.wsId)),
+  );
+  ipc.handle('git:clone', (_e, req: InvokeReq<'git:clone'>) =>
+    enqueue(`clone:${pathResolve(req?.parentPath ?? '', req?.directoryName ?? '')}`, () => svc.clone(req)),
   );
 
   // ── Git Worktree（REQ-WT）──

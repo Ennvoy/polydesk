@@ -10,6 +10,8 @@ export const IGNORED_DIRS = ['node_modules', '.git', 'dist', 'out', '.vite', 're
 export const DEFAULT_BACKGROUND_POLL_MS = 5_000;
 /** git 網路類操作逾時（REQ-SCM-007）。 */
 export const GIT_NETWORK_TIMEOUT_MS = 30_000;
+/** Clone 可能需要下載完整歷史，給予比 pull/push 更長的逾時。 */
+export const GIT_CLONE_TIMEOUT_MS = 5 * 60_000;
 /** git 本機操作逾時。 */
 export const GIT_LOCAL_TIMEOUT_MS = 10_000;
 /** AI 產生 commit message 的引擎呼叫逾時（codex 等 agentic loop 較慢，實測約 45s，給足餘裕）。 */

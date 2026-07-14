@@ -59,6 +59,27 @@ export interface Workspace {
 }
 export type WorkspaceInput = { path: string; name?: string };
 
+/** Clone repository 的輸入與可供 UI 分流的錯誤碼。 */
+export interface GitCloneInput {
+  url: string;
+  /** 使用者選定的既有父資料夾；clone 會在其下建立 directoryName。 */
+  parentPath: string;
+  directoryName: string;
+}
+export type GitCloneErrorCode =
+  | 'invalid-url'
+  | 'invalid-parent'
+  | 'invalid-name'
+  | 'target-exists'
+  | 'auth'
+  | 'network'
+  | 'timeout'
+  | 'git-not-found'
+  | 'failed';
+export type GitCloneResult =
+  | { wsId: string; path: string }
+  | { error: string; code: GitCloneErrorCode };
+
 /** git worktree 清單項（REQ-WT-008；`git worktree list --porcelain -z` 解析）。 */
 export interface GitWorktree {
   path: string;

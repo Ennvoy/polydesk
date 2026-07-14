@@ -24,6 +24,8 @@ import type {
   AiUsage,
   McpWireResult,
   ConflictInfo,
+  GitCloneInput,
+  GitCloneResult,
 } from './types';
 
 /** invoke 通道：renderer 經 preload 呼叫、main `ipcMain.handle` 回應（一次性 Promise）。 */
@@ -37,6 +39,7 @@ export interface InvokeChannels {
   'workspace:activate': { req: { wsId: string }; res: { ok: true } };
   'workspace:setShell': { req: { wsId: string; shell: ShellKind }; res: { ok: true } };
   'workspace:pickFolder': { req: void; res: { path: string | null } };
+  'workspace:pickCloneParent': { req: void; res: { path: string | null } };
   // 檔案 / 編輯器
   'fs:read': {
     req: { wsId: string; path: string };
@@ -100,6 +103,8 @@ export interface InvokeChannels {
   'git:commitFiles': { req: { wsId: string; ref: string }; res: { files: { path: string; status: string }[] } };
   'git:stash': { req: { wsId: string; op: 'push' | 'pop' | 'list'; includeUntracked?: boolean }; res: unknown };
   'git:init': { req: { wsId: string }; res: { ok: true } };
+  /** Clone 成功後由 main 直接納管成工作區並回傳 wsId。 */
+  'git:clone': { req: GitCloneInput; res: GitCloneResult };
   // Git Worktree（REQ-WT，第二迭代）
   'git:worktreeList': { req: { wsId: string }; res: { list: GitWorktree[] } | { error: string } };
   'git:worktreeAdd': {

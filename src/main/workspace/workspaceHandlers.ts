@@ -10,6 +10,11 @@ export function registerWorkspaceHandlers(ipc: IpcMain, mgr: WorkspaceManager): 
     return { path: r.canceled || !r.filePaths[0] ? null : r.filePaths[0] };
   });
 
+  ipc.handle('workspace:pickCloneParent', async () => {
+    const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], title: '選擇 Repository 存放位置' });
+    return { path: r.canceled || !r.filePaths[0] ? null : r.filePaths[0] };
+  });
+
   ipc.handle('workspace:list', () => mgr.list());
   ipc.handle('workspace:add', (_e, req: InvokeReq<'workspace:add'>) => mgr.add(req));
   ipc.handle('workspace:remove', async (_e, req: InvokeReq<'workspace:remove'>) => {
