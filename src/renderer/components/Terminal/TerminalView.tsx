@@ -239,14 +239,27 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
       ipc.pty.write(termId, d);
     });
 
+    // 輸出跟捲自癒（dogfood：claude 點「1 shell」展開 Shell details 後底部 UI 被吃掉、且 claude
+    // 開 ?1003 滾輪被送給 TUI、使用者滾也滾不回來）：xterm 6 內部 isUserScrolling 旗標可能在
+    // 「viewport 明明在底部」時被遺留成 true（選取拖曳自動捲動、resize/reflow 直接調 ydisp 幾何
+    // 回底都不碰旗標；而 xterm 所有清旗標路徑都掛 ybase!==ydisp 守門）→ 孤兒旗標讓下一波大量
+    // 輸出（TUI 展開重繪外溢）把 viewport 凍在原地。自癒不變量＝「寫入前在底部，寫入後必須仍在
+    // 底部」；scrollToBottom 走公開 scrollLines 正路、會一併清掉孤兒旗標。寫入前就不在底部
+    // （使用者真的在讀 scrollback）則完全不干預，不與使用者搶捲動。
+    const repinIfDrifted = (): void => {
+      const b = term.buffer.active;
+      if (b.viewportY !== b.baseY) term.scrollToBottom();
+    };
     // 輸出：main → term（依 termId 過濾；回流即記一次往返延遲近似值）。
     const offData = ipc.pty.onData(({ termId: t, chunk }) => {
       if (t !== termId) return;
+      const buf = term.buffer.active;
+      const pinned = buf.viewportY === buf.baseY;
       // 顯示層 keycap 正規化（REQ-TERM-009）：在 PTY bytes 上「無狀態」剔除 U+20E3 圍框（含前導 FE0F），
       // 讓 1️⃣2️⃣… 退化成純數字，免得 Consolas 的 U+20E3 圍框 glyph 漏出疊到相鄰字。刻意留在 bytes 層：
       // 維持 xterm 原生 Uint8Array 解碼路徑不變，不在 PTY→xterm 間插 stateful 緩衝（那會扣住輸出尾端、
       // 卡死 PSReadLine 貼上/OSC52 鏈路）。fast path 保純 ASCII 高頻路徑零拷貝。
-      term.write(stripEnclosingKeycap(chunk));
+      term.write(stripEnclosingKeycap(chunk), pinned ? repinIfDrifted : undefined);
       if (keyTsRef.current !== null) {
         record('keyLatency', performance.now() - keyTsRef.current);
         keyTsRef.current = null;
