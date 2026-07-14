@@ -97,6 +97,8 @@ export interface GitWorktree {
 /** 無 remote/upstream/detached/新分支未 push → 對應欄位 null（顯示 N/A，REQ-MON-003）。 */
 export interface GitStatus {
   isRepo: boolean;
+  /** HEAD commit；空 repository / 非 repo 為 null。供偵測外部 commit、pull、checkout。 */
+  head: string | null;
   branch: string | null;
   ahead: number | null;
   behind: number | null;

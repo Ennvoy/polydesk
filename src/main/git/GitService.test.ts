@@ -60,6 +60,7 @@ describe('GitService（真 git）', () => {
     const st = await svc.status(ctx.wsId);
     expect(st.isRepo).toBe(true);
     expect(st.branch).toBe('main');
+    expect(st.head).toBeNull(); // 尚無 commit（branch.oid=(initial)）
     expect(st.detached).toBe(false);
     expect(st.changedCount).toBe(1);
     expect(st.ahead).toBeNull(); // 新 repo 無 upstream
@@ -84,6 +85,7 @@ describe('GitService（真 git）', () => {
     if ('ok' in res) expect(res.hash).toMatch(/^[0-9a-f]{7,40}$/);
     const st = await svc.status(ctx.wsId);
     expect(st.changedCount).toBe(0);
+    expect(st.head).toMatch(/^[0-9a-f]{40}$/);
   });
 
   it('log 回 commit 紀錄；空 repo 回 []', async () => {

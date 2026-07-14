@@ -82,6 +82,7 @@ function isNotARepo(e: unknown): boolean {
 
 const NOT_REPO: GitStatus = {
   isRepo: false,
+  head: null,
   branch: null,
   ahead: null,
   behind: null,
@@ -185,6 +186,7 @@ export function parseLogRefs(d: string): GitLogRef[] {
  */
 export function parseStatus(stdout: string): { status: GitStatus; changes: GitChange[] } {
   const tokens = stdout.split('\0');
+  let head: string | null = null;
   let branch: string | null = null;
   let detached = false;
   let ahead: number | null = null;
@@ -198,7 +200,10 @@ export function parseStatus(stdout: string): { status: GitStatus; changes: GitCh
 
     if (t.startsWith('# ')) {
       const body = t.slice(2);
-      if (body.startsWith('branch.head ')) {
+      if (body.startsWith('branch.oid ')) {
+        const oid = body.slice('branch.oid '.length);
+        head = oid === '(initial)' ? null : oid;
+      } else if (body.startsWith('branch.head ')) {
         const h = body.slice('branch.head '.length);
         if (h === '(detached)') {
           detached = true;
@@ -235,7 +240,7 @@ export function parseStatus(stdout: string): { status: GitStatus; changes: GitCh
   }
 
   return {
-    status: { isRepo: true, branch, ahead, behind, changedCount: changedFiles, detached },
+    status: { isRepo: true, head, branch, ahead, behind, changedCount: changedFiles, detached },
     changes,
   };
 }

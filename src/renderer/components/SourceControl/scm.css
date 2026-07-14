@@ -351,7 +351,14 @@
   text-overflow: ellipsis;
 }
 .pd-scm-ref.is-head { background: var(--accent); border-color: var(--accent); color: var(--accent-on); font-weight: 600; }
-.pd-scm-ref.is-remote { border-style: dashed; }
+.pd-scm-ref.is-remote {
+  width: 24px;
+  height: 20px;
+  justify-content: center;
+  padding: 1px 4px;
+  border-style: dashed;
+}
+.pd-scm-ref-cloud { width: 14px; height: 14px; flex: 0 0 auto; }
 .pd-scm-ref.is-detached { border-color: var(--danger); color: var(--danger); }
 
 /* PE-1：commit hover 卡片（完整訊息 + 作者/時間/完整 hash）*/

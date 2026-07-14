@@ -82,8 +82,12 @@ test('C ref 徽章：本地 main（HEAD）與遠端 origin/main 各標在所在 
   const headBadge = rows.nth(0).locator('.pd-scm-ref.is-head');
   await expect(headBadge).toHaveText(/main/);
   expect((await headBadge.boundingBox())?.width ?? 0).toBeGreaterThan(36); // 不得被長 commit 主旨擠成細條
-  // 第二列（first）：遠端 origin/main ＋ tag v1.0 徽章 → 一眼看出本地領先遠端 1
-  await expect(rows.nth(1).locator('.pd-scm-ref.is-remote')).toHaveText(/origin\/main/);
+  // 第二列（first）：遠端僅顯示固定寬度雲端圖示，完整名稱保留於 tooltip/aria，避免擠壓主旨。
+  const remoteBadge = rows.nth(1).locator('.pd-scm-ref.is-remote');
+  await expect(remoteBadge).toHaveText('');
+  await expect(remoteBadge).toHaveAttribute('title', '遠端分支 origin/main');
+  await expect(remoteBadge).toHaveAttribute('aria-label', '遠端分支 origin/main');
+  expect((await remoteBadge.boundingBox())?.width ?? 99).toBeLessThanOrEqual(26);
   await expect(rows.nth(1).locator('.pd-scm-ref.is-tag')).toHaveText(/v1\.0/);
   await page.screenshot({ path: join(shotDir, 'ui-gitgraph-refs.png') });
 

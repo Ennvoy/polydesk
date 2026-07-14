@@ -14,6 +14,7 @@ import { CreateWorktreeDialog } from '../Worktree/CreateWorktreeDialog';
 import { parseWorktreeConflict, resolveJumpTarget } from '../Worktree/worktreeModel';
 import { neutralizeBidi } from '../Dialogs/TrustConfirm';
 import type { GitStatus, GitChange, GitLogEntry, GitLogRef, AiEngine } from '../../../shared/types';
+import { DEFAULT_BACKGROUND_POLL_MS } from '../../../shared/constants';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
 
 type Tab = 'changes' | 'history' | 'branches' | 'worktree';
@@ -73,9 +74,18 @@ function GitGraphCell({ row, width }: { row: GitGraphRow; width: number }): Reac
 }
 
 // ── commit ref 徽章（本地/遠端分支位置、tag，like VSCode Graph）──
-const REF_GLYPH: Record<GitLogRef['kind'], string> = { local: '⎇', remote: '☁', tag: '◈', detached: '⌖' };
+const REF_GLYPH: Record<Exclude<GitLogRef['kind'], 'remote'>, string> = { local: '⎇', tag: '◈', detached: '⌖' };
 const REF_KIND_LABEL: Record<GitLogRef['kind'], string> = { local: '本地分支', remote: '遠端分支', tag: '標籤', detached: '分離 HEAD' };
 const refLabel = (r: GitLogRef): string => `${REF_KIND_LABEL[r.kind]} ${r.name}${r.head && r.kind === 'local' ? '（HEAD）' : ''}`;
+
+/** 固定尺寸的 outline cloud；遠端 ref 不顯示文字，以免擠壓 commit 主旨。 */
+function RemoteRefIcon(): React.JSX.Element {
+  return (
+    <svg className="pd-scm-ref-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M17.5 19H9a7 7 0 1 1 6.71-9h.79a4.5 4.5 0 1 1 1 9Z" />
+    </svg>
+  );
+}
 
 /** commit 列尾端的 ref 徽章列：HEAD 所在分支 accent 實底、遠端虛線框、tag/分離 HEAD 各有記號。 */
 function RefBadges({ refs }: { refs: GitLogRef[] }): React.JSX.Element {
@@ -88,8 +98,14 @@ function RefBadges({ refs }: { refs: GitLogRef[] }): React.JSX.Element {
           title={refLabel(r)}
           aria-label={refLabel(r)}
         >
-          <span aria-hidden="true">{REF_GLYPH[r.kind]}</span>
-          {r.name}
+          {r.kind === 'remote' ? (
+            <RemoteRefIcon />
+          ) : (
+            <>
+              <span aria-hidden="true">{REF_GLYPH[r.kind]}</span>
+              {r.name}
+            </>
+          )}
         </span>
       ))}
     </span>
@@ -122,6 +138,19 @@ function nOrNA(n: number | null): string {
   return n === null ? 'N/A' : String(n);
 }
 
+/** SCM 畫面需要關心的 Git 狀態是否相同；HEAD 納入才能偵測外部 commit/pull。 */
+function sameGitStatus(a: GitStatus, b: GitStatus): boolean {
+  return (
+    a.isRepo === b.isRepo &&
+    a.head === b.head &&
+    a.branch === b.branch &&
+    a.ahead === b.ahead &&
+    a.behind === b.behind &&
+    a.changedCount === b.changedCount &&
+    a.detached === b.detached
+  );
+}
+
 export function SourceControlPanel(): React.JSX.Element {
   const { activeWorkspaceId, workspaces } = useAppState();
   const wsId = activeWorkspaceId;
@@ -144,6 +173,7 @@ export function SourceControlPanel(): React.JSX.Element {
   const [expanded, setExpanded] = useState<string | null>(null); // PE-1 展開檔案清單的 commit hash
   const [cFiles, setCFiles] = useState<Record<string, { path: string; status: string }[]>>({}); // commit→檔案清單快取
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null); // hover 延遲關閉計時器（滑入卡片可取消）
+  const statusRef = useRef<GitStatus | null>(null);
 
   // 世代號取消 stale 載入：大 repo 的 git status/changes 各要 ~1.5-2s 且 git 走 serial queue。快速連切
   // 工作區時，若不取消，切到最新工作區還得等前面每個 stale 載入跑完、且 stale 結果會回頭覆蓋當前 →
@@ -171,6 +201,10 @@ export function SourceControlPanel(): React.JSX.Element {
       if (gen === loadGen.current) setLoading(false);
     }
   }, [wsId]);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   // 工作區切換 → 回變更分頁並刷新。防抖 120ms：快速連切只載入「最終停留」的工作區，中間掠過的
   // 不發 git 載入 → 不堆積 serial queue（實測連切 5 個大 repo 的 git status 會累積到 ~10s）。
@@ -203,6 +237,57 @@ export function SourceControlPanel(): React.JSX.Element {
     return () => {
       if (t) clearTimeout(t);
       off();
+    };
+  }, [wsId, status?.isRepo, refresh]);
+
+  // 整合終端／外部工具的 Git 操作多半只修改 .git（一般 FileWatcher 刻意忽略），fs:change 收不到。
+  // SCM 面板掛載且視窗可見時，以低頻 status-only 探測；狀態真的改變才做完整 refresh。
+  // recursive timeout 保證前一輪未完成時不重疊，大 repo 不會堆積 git serial queue。
+  useEffect(() => {
+    if (!wsId || !status?.isRepo) return undefined;
+    let stopped = false;
+    let checking = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = (): void => {
+      if (stopped) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => void check(), DEFAULT_BACKGROUND_POLL_MS);
+    };
+    const check = async (): Promise<void> => {
+      if (stopped || checking) return;
+      if (document.visibilityState !== 'visible') {
+        schedule();
+        return;
+      }
+      checking = true;
+      try {
+        const next = await ipc.git.status({ wsId });
+        const current = statusRef.current;
+        if (!stopped && current && !sameGitStatus(current, next)) await refresh();
+      } catch {
+        // 背景探測失敗不覆蓋面板既有資料；使用者手動刷新時仍會看到正式錯誤。
+      } finally {
+        checking = false;
+        schedule();
+      }
+    };
+    const wake = (): void => {
+      if (document.visibilityState === 'visible') {
+        if (timer) clearTimeout(timer);
+        timer = null;
+        void check();
+      }
+    };
+
+    schedule();
+    window.addEventListener('focus', wake);
+    document.addEventListener('visibilitychange', wake);
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      window.removeEventListener('focus', wake);
+      document.removeEventListener('visibilitychange', wake);
     };
   }, [wsId, status?.isRepo, refresh]);
 
