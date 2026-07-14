@@ -138,6 +138,26 @@
   content: ''; position: absolute; left: -2px; top: 8px; bottom: 8px; width: 2px;
   background: var(--accent); border-radius: var(--radius-pill);
 }
+.pd-activity-badge {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-on);
+  border: 1px solid var(--surface);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
 
 /* ── status bar ── */
 .pd-statusbar {

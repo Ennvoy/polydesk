@@ -25,6 +25,7 @@ export const INVOKE_CHANNELS = [
   'fs:openExternal',
   'fs:readImage',
   'fs:reveal',
+  'editor:setTextFocus',
   'git:status',
   'git:changes',
   'git:diff',
@@ -81,6 +82,7 @@ export const INVOKE_CHANNELS = [
 ] as const satisfies readonly InvokeChannel[];
 
 export const EVENT_CHANNELS = [
+  'editor:pasteShortcut',
   'workspace:activate',
   'claude:status',
   'fs:change',

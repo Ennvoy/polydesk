@@ -12,6 +12,7 @@ import { closeGate } from './window/windowControls';
 import { mark, measure, getMeasures } from '../shared/perf';
 import { APP_NAME, STATE_FILE_NAME } from '../shared/constants';
 import type { WindowBounds } from '../shared/types';
+import { isEditorPasteShortcut } from './window/pasteShortcut';
 
 mark('main:start'); // 冷啟動量測起點（REQ-PERF-001）
 // 診斷 seam（X-1 perf harness 經 electronApp.evaluate 讀 main 埋點；非 IPC、不影響執行期）。
@@ -93,6 +94,17 @@ function createWindow(): void {
   });
 
   setMainWindow(mainWindow);
+  // closed 事件觸發時 WebContents 已銷毀；先保存純數值 id，清理時不可再讀 mainWindow.webContents。
+  const webContentsId = mainWindow.webContents.id;
+
+  // Electron 無原生 application menu 時，Monaco 的 Ctrl/Cmd+V 會在 renderer keydown 前被攔下，
+  // 並可能把焦點/選取移到側欄。只有 renderer 已回報 Monaco 文字焦點時才取消原始事件並接手貼上；
+  // 終端機與一般輸入框仍走各自既有的貼上路徑。
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (!isEditorPasteShortcut(input) || !services.editorPasteFocus.has(mainWindow!.webContents.id)) return;
+    event.preventDefault();
+    emit('editor:pasteShortcut', {});
+  });
 
   // 最大化狀態變動 → 推給自訂標題列同步 max/restore 圖示（OS 快捷鍵/雙擊也會觸發）。
   mainWindow.on('maximize', () => emit('window:maximizedChange', { maximized: true }));
@@ -139,6 +151,7 @@ function createWindow(): void {
     emit('app:closeRequest', { wsIds });
   });
   mainWindow.on('closed', () => {
+    services.editorPasteFocus.clear(webContentsId);
     setMainWindow(null);
     mainWindow = null;
   });

@@ -19,6 +19,10 @@ import { registerClipboardHandlers } from '../clipboard/clipboardHandlers';
 import { ClaudeStatusMonitor } from '../monitor/ClaudeStatusMonitor';
 import { registerUpdateHandlers } from '../update/AutoUpdater';
 import { registerWindowControls } from '../window/windowControls';
+import {
+  EditorPasteFocusState,
+  registerEditorPasteFocusHandler,
+} from '../window/pasteShortcut';
 import { registerPlaywrightHandlers } from './stubHandlers';
 
 /** main 端服務（供 app 生命週期 teardown / 後續波次取用）。 */
@@ -28,11 +32,13 @@ export interface MainServices {
   pty: PtyManager;
   fileWatcher: FileWatcher;
   monitor: ClaudeStatusMonitor;
+  editorPasteFocus: EditorPasteFocusState;
 }
 
 export function registerIpcHandlers(store: StateStore, userDataDir: string): MainServices {
   const lifecycle = new WorkspaceLifecycle();
   const workspaces = new WorkspaceManager(store, lifecycle, userDataDir);
+  const editorPasteFocus = new EditorPasteFocusState();
 
   // 真實實作
   registerStoreHandlers(ipcMain, store);
@@ -54,8 +60,9 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
 
   registerUpdateHandlers(ipcMain); // update:*（electron-updater）
   registerWindowControls(ipcMain); // window:*（自訂無框標題列 min/max/close）
+  registerEditorPasteFocusHandler(ipcMain, editorPasteFocus);
   // 空樁：playwright（無接線、缺件偵測於 F-3 終端機提示）
   registerPlaywrightHandlers(ipcMain);
 
-  return { lifecycle, workspaces, pty, fileWatcher, monitor };
+  return { lifecycle, workspaces, pty, fileWatcher, monitor, editorPasteFocus };
 }

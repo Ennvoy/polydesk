@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { appStore, useAppState, type ActivityView } from '../state/appStore';
+import { ipc } from '../ipc/client';
 import { dialog } from './Dialogs/host';
 import { SettingsPanel } from './Settings/SettingsPanel';
 
@@ -47,26 +48,73 @@ const ITEMS: Item[] = [
 function IconButton(props: {
   label: string;
   active?: boolean;
+  badge?: number;
   onClick: () => void;
   children: React.ReactNode;
 }): React.JSX.Element {
+  const badgeText = props.badge && props.badge > 99 ? '99+' : String(props.badge ?? '');
+  const title = props.badge ? `${props.label}（${props.badge} 個未提交變更）` : props.label;
   return (
     <button
       className={`pd-activity-btn${props.active ? ' is-active' : ''}`}
       aria-label={props.label}
       aria-pressed={props.active}
-      title={props.label}
+      title={title}
       onClick={props.onClick}
     >
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         {props.children}
       </svg>
+      {props.badge ? (
+        <span className="pd-activity-badge" aria-hidden="true" data-testid="scm-change-count">
+          {badgeText}
+        </span>
+      ) : null}
     </button>
   );
 }
 
 export function ActivityBar(): React.JSX.Element {
-  const { activeView } = useAppState();
+  const { activeView, activeWorkspaceId } = useAppState();
+  const [scmChangeCount, setScmChangeCount] = React.useState(0);
+
+  React.useEffect(() => {
+    let alive = true;
+    let generation = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const load = (): void => {
+      if (!activeWorkspaceId) {
+        setScmChangeCount(0);
+        return;
+      }
+      const gen = ++generation;
+      void ipc.git
+        .status({ wsId: activeWorkspaceId })
+        .then((status) => {
+          if (alive && gen === generation) setScmChangeCount(status.isRepo ? status.changedCount : 0);
+        })
+        .catch(() => {
+          if (alive && gen === generation) setScmChangeCount(0);
+        });
+    };
+
+    // 切換工作區時先清掉前一個數字；短暫防抖避免快速掠過多個工作區時堆積 git status。
+    setScmChangeCount(0);
+    timer = setTimeout(load, 120);
+    const off = ipc.events.fs.change(({ wsId }) => {
+      if (wsId !== activeWorkspaceId) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(load, 300);
+    });
+    return () => {
+      alive = false;
+      generation += 1;
+      if (timer) clearTimeout(timer);
+      off();
+    };
+  }, [activeWorkspaceId]);
+
   return (
     <nav className="pd-activitybar" aria-label="活動列">
       <div className="pd-activity-group">
@@ -75,6 +123,7 @@ export function ActivityBar(): React.JSX.Element {
             key={it.view}
             label={it.label}
             active={activeView === it.view}
+            badge={it.view === 'scm' ? scmChangeCount : undefined}
             onClick={() => appStore.setActiveView(it.view)}
           >
             {it.icon}

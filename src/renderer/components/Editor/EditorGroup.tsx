@@ -412,10 +412,21 @@ export function EditorGroup(): React.JSX.Element {
     const ed = monaco.editor.create(primaryElRef.current, { ...EDITOR_OPTIONS, fontFamily: monoFontFamily() });
     primaryEdRef.current = ed;
     const d = ed.onDidChangeCursorPosition((e) => setCursor({ line: e.position.lineNumber, col: e.position.column }));
+    const syncFocus = (): void => {
+      queueMicrotask(() => {
+        const focused = Boolean(primaryEdRef.current?.hasTextFocus() || secondaryEdRef.current?.hasTextFocus());
+        void ipc.editor.setTextFocus({ focused }).catch(() => undefined);
+      });
+    };
+    const focusD = ed.onDidFocusEditorText(syncFocus);
+    const blurD = ed.onDidBlurEditorText(syncFocus);
     return () => {
       d.dispose();
+      focusD.dispose();
+      blurD.dispose();
       ed.dispose();
       primaryEdRef.current = null;
+      syncFocus();
     };
     // 主題切換另由下方 effect 處理；此處僅建立一次。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -474,9 +485,20 @@ export function EditorGroup(): React.JSX.Element {
     if (!secondaryElRef.current) return;
     const ed = monaco.editor.create(secondaryElRef.current, { ...EDITOR_OPTIONS, fontFamily: monoFontFamily() });
     secondaryEdRef.current = ed;
+    const syncFocus = (): void => {
+      queueMicrotask(() => {
+        const focused = Boolean(primaryEdRef.current?.hasTextFocus() || secondaryEdRef.current?.hasTextFocus());
+        void ipc.editor.setTextFocus({ focused }).catch(() => undefined);
+      });
+    };
+    const focusD = ed.onDidFocusEditorText(syncFocus);
+    const blurD = ed.onDidBlurEditorText(syncFocus);
     return () => {
+      focusD.dispose();
+      blurD.dispose();
       ed.dispose();
       secondaryEdRef.current = null;
+      syncFocus();
     };
   }, [split]);
 
@@ -488,6 +510,26 @@ export function EditorGroup(): React.JSX.Element {
     if (ed.getModel() !== model) ed.setModel(model ?? null);
     ed.updateOptions({ readOnly: active?.readonly ?? false });
   }, [active, split]);
+
+  // Electron main 的 before-input-event 會在 renderer keydown 前捕捉 Ctrl/Cmd+V。
+  // 僅焦點位於 Monaco 時接手，交回 Monaco paste handler 以保留選取取代、多游標與 undo stack。
+  useEffect(() => {
+    return ipc.events.editor.pasteShortcut(() => {
+      const ed = primaryEdRef.current?.hasTextFocus()
+        ? primaryEdRef.current
+        : secondaryEdRef.current?.hasTextFocus()
+          ? secondaryEdRef.current
+          : null;
+      if (!ed) return;
+      void ipc.clipboard
+        .readText()
+        .then(({ text }) => {
+          if (!text || !ed.hasTextFocus()) return;
+          ed.trigger('keyboard', 'paste', { text, pasteOnNewLine: false, multicursorText: null });
+        })
+        .catch(() => undefined);
+    });
+  }, []);
 
   // ── editorBus 訂閱（開檔 + 開差異）──
   useEffect(() => {

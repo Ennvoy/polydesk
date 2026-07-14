@@ -4,8 +4,8 @@
 //      clipboard-read/clipboard-sanitized-write」例外放行（renderer 本就有 clipboard IPC，不增攻擊面）。
 //   2. monaco-editor 0.55 standalone 漏註冊 productService，Paste 命令進場即拋 unknown service
 //      且被選單 action runner 吞掉（無聲失敗）→ monacoSetup 註冊 ProductServiceStub。
-// 鍵盤 Ctrl+V 走 Chromium 原生 paste 管線，e2e 以 webContents.paste() 代表（CDP 合成按鍵無
-// user activation、拿不到 trusted paste，非產品問題）。
+// Playwright/CDP 與 webContents.sendInputEvent() 在測試模式都不產生 before-input-event；
+// 此處直接觸發該 Electron 事件，驗證 main → renderer → Monaco 貼上整條產品路徑。
 // 剪貼簿衛生：測試會動真系統剪貼簿——先快照、finally 還原（同 terminal-clipboard.spec）。
 import { test, expect } from '@playwright/test';
 import { writeFileSync, rmSync } from 'node:fs';
@@ -81,7 +81,7 @@ test('複製：鍵盤 Ctrl+C 與右鍵選單 Copy 都寫進系統剪貼簿', asy
   }
 });
 
-test('貼上：右鍵選單 Paste 與原生貼上管線（等同實體 Ctrl+V）都貼進編輯器', async () => {
+test('貼上：右鍵選單 Paste 與 Ctrl+V 都貼進編輯器', async () => {
   const root = makeTempDir();
   const dir = makeSubDir(root, 'clipedit2');
   writeFileSync(join(dir, 'note.md'), 'COPYME_ALPHA line one\nsecond line\n');
@@ -97,12 +97,25 @@ test('貼上：右鍵選單 Paste 與原生貼上管線（等同實體 Ctrl+V）
     await clickContextMenuItem(page, editor, /^(Paste|貼上)$/);
     await expect.poll(() => modelContent(page), { timeout: 8000, message: '右鍵選單 Paste 未貼進編輯器' }).toContain('PASTED_CONTEXTMENU_QQQ');
 
-    // 原生貼上管線（Chromium Paste edit command＝實體鍵盤 Ctrl+V 走的路）
-    await app.evaluate(({ clipboard }) => clipboard.writeText('PASTED_NATIVE_WC'));
-    await editor.click();
+    // 觸發實體 Ctrl+V 會進入的 Electron 事件；不可用 webContents.paste() 直接跳到結果。
+    await app.evaluate(({ clipboard }) => clipboard.writeText('PASTED_CTRL_V'));
+    const editorInput = editor.getByRole('textbox', { name: 'Editor content' });
+    await editor.locator('.view-lines').click();
+    await expect(editorInput).toBeFocused();
     await page.keyboard.press('Control+a');
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.webContents.paste());
-    await expect.poll(() => modelContent(page), { timeout: 8000, message: '原生貼上管線未貼進編輯器' }).toContain('PASTED_NATIVE_WC');
+    const prevented = await app.evaluate(({ BrowserWindow }) => {
+      const wc = BrowserWindow.getAllWindows()[0]?.webContents;
+      let wasPrevented = false;
+      wc?.emit(
+        'before-input-event',
+        { preventDefault() { wasPrevented = true; } } as Electron.Event,
+        { type: 'keyDown', control: true, meta: false, alt: false, shift: false, key: 'v' } as Electron.Input,
+      );
+      return wasPrevented;
+    });
+    expect(prevented, 'Monaco 有焦點時應取消 Electron 原始 Ctrl+V，避免選取跳到側欄').toBe(true);
+    await expect.poll(() => modelContent(page), { timeout: 8000, message: 'Ctrl+V 未貼進編輯器' }).toContain('PASTED_CTRL_V');
+    await expect(editorInput, '貼上後焦點應留在編輯器').toBeFocused();
   } finally {
     await restore?.();
     await app.close();

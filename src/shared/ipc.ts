@@ -75,6 +75,8 @@ export interface InvokeChannels {
     res: { dataUri: string; bytes: number } | { error: string };
   };
   'fs:reveal': { req: { wsId: string; path: string }; res: { ok: true } | { error: string } };
+  /** 同步 main 端的 Monaco 文字焦點，供 before-input-event 精準攔截 Ctrl/Cmd+V。 */
+  'editor:setTextFocus': { req: { focused: boolean }; res: { ok: true } };
   // git
   'git:status': { req: { wsId: string }; res: GitStatus };
   'git:changes': { req: { wsId: string }; res: GitChange[] };
@@ -188,6 +190,8 @@ export interface StreamChannels {
 
 /** event 通道：main 主動 `webContents.send` 推播；payload 一律帶 wsId 以路由面板。 */
 export interface EventChannels {
+  /** Electron 攔截 Ctrl/Cmd+V 後通知 renderer；EditorGroup 僅在 Monaco 有文字焦點時處理。 */
+  'editor:pasteShortcut': Record<string, never>;
   /** 桌面通知點擊 → main 聚焦視窗後叫 renderer 切到該工作區（PE-2：通知可回跳）。 */
   'workspace:activate': { wsId: string };
   'claude:status': { wsId: string; tool: AiTool; status: ClaudeStatus };
