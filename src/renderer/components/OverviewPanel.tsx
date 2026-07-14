@@ -1,4 +1,4 @@
-// 總覽面板（overlay）：toolbar「總覽」開，最大化並排顯示——上半用量（claude/codex 的 5h/週額度），
+// 總覽面板（overlay）：toolbar「總覽」開，最大化並排顯示——上半用量（依來源實際回傳的短期/週額度），
 // 下半各工作區的 AI 詳細狀態。訂閱 claude:status（每工作區每工具）+ 開啟時查 ai:usage。Esc / 點外 / × 關閉。
 
 import React, { useEffect, useState } from 'react';
@@ -49,6 +49,7 @@ function WindowRow({ label, win }: { label: string; win?: RateWindow }): React.J
 
 function UsageCard({ title, fiveHour, sevenDay, plan }: { title: string; fiveHour?: RateWindow; sevenDay?: RateWindow; plan?: string }): React.JSX.Element {
   const has = fiveHour || sevenDay;
+  const codexWithoutShortWindow = title === 'Codex' && !fiveHour && Boolean(sevenDay);
   return (
     <div style={{ flex: 1, minWidth: 240, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 8px)', padding: 'var(--space-4)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -57,8 +58,13 @@ function UsageCard({ title, fiveHour, sevenDay, plan }: { title: string; fiveHou
       </div>
       {has ? (
         <>
-          <WindowRow label="5 小時" win={fiveHour} />
-          <WindowRow label="每週" win={sevenDay} />
+          {fiveHour ? <WindowRow label="短期（5 小時）" win={fiveHour} /> : null}
+          {sevenDay ? <WindowRow label="每週" win={sevenDay} /> : null}
+          {codexWithoutShortWindow ? (
+            <div style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--meta)', lineHeight: 1.5 }}>
+              目前帳號未回傳 5 小時視窗；短期限制可能依方案或限時活動調整。
+            </div>
+          ) : null}
         </>
       ) : (
         <div style={{ marginTop: 10, fontSize: 'var(--text-xs)', color: 'var(--meta)', lineHeight: 1.6 }}>
@@ -134,7 +140,7 @@ export function OverviewPanel(): React.JSX.Element | null {
         </div>
 
         {/* 用量 */}
-        <h3 style={{ margin: '0 0 8px', fontSize: 'var(--text-sm)', color: 'var(--meta)' }}>服務用量（5 小時 / 每週）</h3>
+        <h3 style={{ margin: '0 0 8px', fontSize: 'var(--text-sm)', color: 'var(--meta)' }}>服務用量（依帳號目前回傳視窗）</h3>
         <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
           <UsageCard title="Claude" fiveHour={usage?.claude?.fiveHour} sevenDay={usage?.claude?.sevenDay} />
           <UsageCard title="Codex" fiveHour={usage?.codex?.fiveHour} sevenDay={usage?.codex?.sevenDay} plan={usage?.codex?.planType} />

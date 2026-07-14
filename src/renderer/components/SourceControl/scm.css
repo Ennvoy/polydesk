@@ -298,6 +298,7 @@
 .pd-scm-graph { flex: 0 0 auto; display: block; }
 .pd-scm-logtext {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   justify-content: center;
   gap: 1px;
@@ -323,9 +324,18 @@
    subject flex:1 把徽章推到列尾右緣；HEAD 分支＝accent 實底、遠端＝虛線框、分離 HEAD＝danger。 */
 .pd-scm-logline1 { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .pd-scm-logline1 .pd-scm-logsubject { flex: 1 1 auto; min-width: 40px; }
-.pd-scm-refs { display: inline-flex; align-items: center; gap: 4px; flex: 0 1 auto; min-width: 0; overflow: hidden; }
+.pd-scm-refs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  max-width: min(55%, 320px);
+  min-width: 0;
+  overflow: hidden;
+}
 .pd-scm-ref {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 3px;
   padding: 1px 6px;

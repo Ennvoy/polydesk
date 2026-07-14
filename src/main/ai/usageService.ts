@@ -48,21 +48,34 @@ async function readTail(path: string, size: number, bytes: number): Promise<stri
   }
 }
 
-/** 從 rollout 尾端找最後的 token_count.rate_limits（primary=5h、secondary=週）。 */
+/**
+ * 從 rollout 尾端找最後的 token_count.rate_limits。
+ * 舊格式通常 primary=5h、secondary=週；新格式可能只回 primary=週，故必須以 window_minutes
+ * 判斷實際週期，不能再用欄位名稱硬套，否則會把每週用量誤標成「5 小時」。
+ */
 export function parseCodexRateLimits(tail: string): AiUsage['codex'] {
+  type RawWindow = { used_percent?: number; resets_at?: number; window_minutes?: number };
   const lines = tail.split('\n');
   for (let i = lines.length - 1; i >= 0; i--) {
     const s = lines[i].trim();
     if (!s || !s.includes('rate_limits')) continue;
     try {
-      const j = JSON.parse(s) as { payload?: { type?: string; rate_limits?: Record<string, { used_percent?: number; resets_at?: number }> } };
+      const j = JSON.parse(s) as { payload?: { type?: string; rate_limits?: Record<string, RawWindow> } };
       const rl = j.payload?.rate_limits;
       if (rl) {
-        const win = (w?: { used_percent?: number; resets_at?: number }): RateWindow | undefined =>
+        const win = (w?: RawWindow): RateWindow | undefined =>
           w && typeof w.used_percent === 'number' ? { usedPercent: w.used_percent, resetsAt: w.resets_at } : undefined;
+        const primary = rl.primary;
+        const secondary = rl.secondary;
+        const entries = [primary, secondary].filter((w): w is RawWindow => Boolean(w));
+        const byMinutes = (test: (minutes: number) => boolean): RateWindow | undefined => {
+          const raw = entries.find((w) => typeof w.window_minutes === 'number' && test(w.window_minutes));
+          return win(raw);
+        };
+        const hasWindowMetadata = entries.some((w) => typeof w.window_minutes === 'number');
         return {
-          fiveHour: win(rl.primary),
-          sevenDay: win(rl.secondary),
+          fiveHour: hasWindowMetadata ? byMinutes((minutes) => minutes > 0 && minutes < 24 * 60) : win(primary),
+          sevenDay: hasWindowMetadata ? byMinutes((minutes) => minutes >= 24 * 60) : win(secondary),
           planType: typeof (rl as { plan_type?: unknown }).plan_type === 'string' ? (rl as { plan_type: string }).plan_type : undefined,
         };
       }

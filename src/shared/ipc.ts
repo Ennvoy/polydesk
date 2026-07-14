@@ -128,7 +128,7 @@ export interface InvokeChannels {
   };
   // AI 智慧 commit message（取 staged diff → 選定引擎產生；只回填訊息框、不自動 commit）
   'ai:generateCommitMessage': { req: { wsId: string }; res: { message: string } | { error: string } };
-  // 總覽面板：claude/codex 的 5h/週用量額度
+  // 總覽面板：claude/codex 依帳號實際回傳的用量額度視窗
   'ai:usage': { req: void; res: AiUsage };
   /** 目前所有（工作區×工具）AI 狀態快照：徽章/計數掛載先拉現況再訂閱 claude:status（重掛不丟燈）。 */
   'claude:states': { req: void; res: { wsId: string; tool: AiTool; status: ClaudeStatus }[] };

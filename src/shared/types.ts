@@ -15,12 +15,12 @@ export type ClaudeState = 'running' | 'stopped-await' | 'done' | 'idle';
 /** 受監控的 AI 工具（claude 由 hook 狀態檔；codex 由解析其 rollout JSONL）。 */
 export type AiTool = 'claude' | 'codex';
 
-/** 單一額度視窗（5 小時 / 週）：已用百分比 + reset 時間（unix 秒）。 */
+/** 單一額度視窗：已用百分比 + reset 時間（unix 秒）。 */
 export interface RateWindow {
   usedPercent: number;
   resetsAt?: number;
 }
-/** claude/codex 的用量額度（5h + 週）；欄位缺＝該來源尚無資料。 */
+/** claude/codex 的用量額度；短期視窗可能依方案或活動不回傳，欄位缺不代表解析失敗。 */
 export interface AiUsage {
   claude?: { fiveHour?: RateWindow; sevenDay?: RateWindow };
   codex?: { fiveHour?: RateWindow; sevenDay?: RateWindow; planType?: string };

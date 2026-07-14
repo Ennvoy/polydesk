@@ -1,4 +1,4 @@
-// usageService：codex rollout token_count.rate_limits 解析（primary=5h、secondary=週、plan）+ claude usage.json BOM 容錯。
+// usageService：codex rollout token_count.rate_limits 依 window_minutes 辨識週期 + claude usage.json BOM 容錯。
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -26,6 +26,17 @@ describe('parseCodexRateLimits', () => {
       tokenCount({ primary: { used_percent: 42, resets_at: 999 }, secondary: { used_percent: 7, resets_at: 888 } }),
     ].join('\n');
     expect(parseCodexRateLimits(tail)?.fiveHour?.usedPercent).toBe(42);
+  });
+
+  it('新格式只回 primary=每週時，不誤標成 5 小時', () => {
+    const tail = tokenCount({
+      primary: { used_percent: 26, window_minutes: 10080, resets_at: 1784509528 },
+      secondary: null,
+      plan_type: 'plus',
+    });
+    const u = parseCodexRateLimits(tail);
+    expect(u?.fiveHour).toBeUndefined();
+    expect(u?.sevenDay).toEqual({ usedPercent: 26, resetsAt: 1784509528 });
   });
 
   it('無 rate_limits / 半行 → undefined，不崩', () => {

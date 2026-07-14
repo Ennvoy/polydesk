@@ -68,7 +68,7 @@ test('C ref 徽章：本地 main（HEAD）與遠端 origin/main 各標在所在 
   commit(repo, 'a.txt', 'v1\n', 'first');
   git(repo, 'update-ref', 'refs/remotes/origin/main', 'HEAD'); // 假遠端 ref（真 ref、無需網路）
   git(repo, 'tag', 'v1.0');
-  commit(repo, 'b.txt', 'v2\n', 'second'); // 本地 main 前進 → 領先遠端 1
+  commit(repo, 'b.txt', 'v2\n', 'feat(editor): 這是一段很長的提交主旨用來驗證右側分支徽章不會被擠壓'); // 本地 main 前進 → 領先遠端 1
 
   const { app, page, userData } = await launchApp();
   await stubFolderPicker(app, [repo]);
@@ -79,7 +79,9 @@ test('C ref 徽章：本地 main（HEAD）與遠端 origin/main 各標在所在 
   await expect(rows.first()).toBeVisible({ timeout: 15000 });
 
   // 第一列（second）：HEAD 所在本地分支徽章 main（accent 實底）
-  await expect(rows.nth(0).locator('.pd-scm-ref.is-head')).toHaveText(/main/);
+  const headBadge = rows.nth(0).locator('.pd-scm-ref.is-head');
+  await expect(headBadge).toHaveText(/main/);
+  expect((await headBadge.boundingBox())?.width ?? 0).toBeGreaterThan(36); // 不得被長 commit 主旨擠成細條
   // 第二列（first）：遠端 origin/main ＋ tag v1.0 徽章 → 一眼看出本地領先遠端 1
   await expect(rows.nth(1).locator('.pd-scm-ref.is-remote')).toHaveText(/origin\/main/);
   await expect(rows.nth(1).locator('.pd-scm-ref.is-tag')).toHaveText(/v1\.0/);
