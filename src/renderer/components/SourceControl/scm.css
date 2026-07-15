@@ -111,7 +111,7 @@
 
 /* 小圖示鈕（重整 / push / pull / back） */
 .pd-scm-icon {
-  position: relative; /* 供 push 鈕右上角未推送數字角標定位 */
+  position: relative; /* 供 push/pull 鈕右上角數字角標定位 */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -153,7 +153,18 @@
 .pd-scm-ab { color: var(--meta); white-space: nowrap; }
 /* 未推送強調（方案 B）：ahead>0 染 accent＋「未推送」字樣、push 鈕右上角標數字（對齊 VSCode 的未同步提示）。 */
 .pd-scm-ahead { color: var(--accent); font-weight: 600; white-space: nowrap; }
-.pd-scm-behind { color: var(--fg-2); }
+/* PE-4 未拉取強調：behind>0 比照 ahead（accent＋「未拉取」字樣＋pull 鈕角標）。 */
+.pd-scm-behind { color: var(--accent); font-weight: 600; white-space: nowrap; }
+/* PE-4 手動取回失敗小字提示（非錯誤橫幅；離線/認證失敗屬常態情境）。 */
+.pd-scm-fetch-hint {
+  padding: 2px var(--space-3) 4px;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--fg-2);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .pd-scm-count {
   position: absolute;
   top: -5px;

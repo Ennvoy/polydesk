@@ -14,6 +14,8 @@ export const GIT_NETWORK_TIMEOUT_MS = 30_000;
 export const GIT_CLONE_TIMEOUT_MS = 5 * 60_000;
 /** git 本機操作逾時。 */
 export const GIT_LOCAL_TIMEOUT_MS = 10_000;
+/** PE-4：切工作區自動 fetch 的同工作區冷卻（事件驅動、不背景輪詢；防連切狂觸網）。 */
+export const FETCH_COOLDOWN_MS = 60_000;
 /** AI 產生 commit message 的引擎呼叫逾時（codex 等 agentic loop 較慢，實測約 45s，給足餘裕）。 */
 export const AI_COMMIT_TIMEOUT_MS = 90_000;
 /** 餵給 AI 的 staged diff 字元上限（超量截斷，避免 token 爆/變慢；超量時附 --stat 摘要）。 */

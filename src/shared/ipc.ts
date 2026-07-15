@@ -95,6 +95,8 @@ export interface InvokeChannels {
   'git:commit': { req: { wsId: string; message: string }; res: { ok: true; hash: string } | { error: string } };
   'git:push': { req: { wsId: string }; res: { ok: true } | { error: string; code: GitPushErrorCode } };
   'git:pull': { req: { wsId: string }; res: { ok: true } | { error: string } };
+  /** PE-4：fetch——只更新 remote-tracking ref（不動工作樹、不合併），讓 behind（未拉取數）跟上遠端。 */
+  'git:fetch': { req: { wsId: string }; res: { ok: true } | { error: string } };
   /** DF-12：gh CLI 建 GitHub repo＋加 origin＋push 一氣呵成（Polydesk 不碰 token）。 */
   'git:publishGitHub': { req: GitPublishInput; res: GitPublishResult };
   'git:branch': {

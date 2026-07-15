@@ -15,7 +15,8 @@ import { CreateWorktreeDialog } from '../Worktree/CreateWorktreeDialog';
 import { parseWorktreeConflict, resolveJumpTarget } from '../Worktree/worktreeModel';
 import { neutralizeBidi } from '../Dialogs/TrustConfirm';
 import type { GitStatus, GitChange, GitLogEntry, GitLogRef, AiEngine, GitPushErrorCode } from '../../../shared/types';
-import { DEFAULT_BACKGROUND_POLL_MS } from '../../../shared/constants';
+import { DEFAULT_BACKGROUND_POLL_MS, FETCH_COOLDOWN_MS } from '../../../shared/constants';
+import { shouldAutoFetch } from './fetchCooldown';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
 
 type Tab = 'changes' | 'history' | 'branches' | 'worktree';
@@ -139,6 +140,9 @@ function nOrNA(n: number | null): string {
   return n === null ? 'N/A' : String(n);
 }
 
+/** PE-4：切工作區自動 fetch 的冷卻時計——放模組層，面板卸載重掛不歸零（避免切視圖就重置冷卻）。 */
+const autoFetchAt = new Map<string, number>();
+
 /** SCM 畫面需要關心的 Git 狀態是否相同；HEAD 納入才能偵測外部 commit/pull。 */
 function sameGitStatus(a: GitStatus, b: GitStatus): boolean {
   return (
@@ -162,6 +166,8 @@ export function SourceControlPanel(): React.JSX.Element {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fetching, setFetching] = useState(false); // PE-4 取回遠端狀態中
+  const [fetchHint, setFetchHint] = useState<string | null>(null); // PE-4 手動 fetch 失敗小字提示（非錯誤橫幅）
   const [message, setMessage] = useState('');
   const [genBusy, setGenBusy] = useState(false); // ✨ 智慧產生進行中（與 commit busy 分離，不互卡）
   const [engine, setEngine] = useState<AiEngine>('claude');
@@ -207,13 +213,40 @@ export function SourceControlPanel(): React.JSX.Element {
     statusRef.current = status;
   }, [status]);
 
+  // PE-4：事件驅動 fetch（拍板不背景輪詢）——只更新 remote-tracking ref，behind（未拉取數）才跟得上遠端。
+  // 非 repo／無 remote 不觸發；自動路徑（切工作區）失敗靜默，手動路徑（⟳）顯示小字提示；成功後 refresh 補數字。
+  const fetchRemote = useCallback(
+    async (manual: boolean): Promise<void> => {
+      if (!wsId) return;
+      try {
+        const st = await ipc.git.status({ wsId });
+        if (!st.isRepo || st.hasRemote === false) return;
+        if (!manual && !shouldAutoFetch(autoFetchAt, wsId, Date.now(), FETCH_COOLDOWN_MS)) return;
+        setFetching(true);
+        const r = await ipc.git.fetch({ wsId });
+        if ('error' in r) {
+          if (manual) setFetchHint(`取回失敗：${r.error}`);
+        } else {
+          setFetchHint(null);
+          await refresh();
+        }
+      } catch (e) {
+        if (manual) setFetchHint(`取回失敗：${errText(e)}`);
+      } finally {
+        setFetching(false);
+      }
+    },
+    [wsId, refresh],
+  );
+
   // 工作區切換 → 回變更分頁並刷新。防抖 120ms：快速連切只載入「最終停留」的工作區，中間掠過的
   // 不發 git 載入 → 不堆積 serial queue（實測連切 5 個大 repo 的 git status 會累積到 ~10s）。
+  // 刷新後順帶自動 fetch（PE-4；同 wsId 60s 冷卻，連切不狂觸網）。
   useEffect(() => {
     setTab('changes');
-    const t = setTimeout(() => void refresh(), 120);
+    const t = setTimeout(() => void refresh().then(() => fetchRemote(false)), 120);
     return () => clearTimeout(t);
-  }, [refresh]);
+  }, [refresh, fetchRemote]);
 
   // 掛載時讀回持久化的「智慧產生引擎」設定。
   useEffect(() => {
@@ -716,10 +749,14 @@ export function SourceControlPanel(): React.JSX.Element {
             </span>
           )}
           <button
-            className={`pd-scm-icon${loading ? ' is-loading' : ''}`}
-            aria-label={loading ? '讀取中' : '重新整理'}
-            title={loading ? '讀取中…' : '重新整理'}
-            onClick={() => void refresh()}
+            className={`pd-scm-icon${loading || fetching ? ' is-loading' : ''}`}
+            aria-label={loading || fetching ? '讀取中' : '重新整理'}
+            title={fetching ? '取回遠端狀態中…' : loading ? '讀取中…' : '重新整理（含取回遠端狀態）'}
+            onClick={() => {
+              // PE-4：本地刷新先行不等網路，fetch 綠了自己再補一次 refresh。
+              void refresh();
+              void fetchRemote(true);
+            }}
             disabled={busy}
           >
             ⟳
@@ -745,7 +782,11 @@ export function SourceControlPanel(): React.JSX.Element {
           ) : (
             <>↑{nOrNA(status?.ahead ?? null)}</>
           )}{' '}
-          <span className={(status?.behind ?? 0) > 0 ? 'pd-scm-behind' : undefined}>↓{nOrNA(status?.behind ?? null)}</span>
+          {(status?.behind ?? 0) > 0 ? (
+            <span className="pd-scm-behind">↓{status?.behind} 未拉取</span>
+          ) : (
+            <>↓{nOrNA(status?.behind ?? null)}</>
+          )}
         </span>
         <span className="pd-scm-syncbtns">
           {status?.isRepo && status.hasRemote === false ? (
@@ -761,8 +802,14 @@ export function SourceControlPanel(): React.JSX.Element {
             </button>
           ) : (
             <>
-              <button className="pd-scm-icon" aria-label="拉取（pull）" title="拉取" onClick={() => void onPull()} disabled={busy}>
-                ↓
+              <button
+                className="pd-scm-icon"
+                aria-label={(status?.behind ?? 0) > 0 ? `拉取（pull）：${status?.behind} 個 commit 未拉取` : '拉取（pull）'}
+                title={(status?.behind ?? 0) > 0 ? `拉取 ${status?.behind} 個未拉取的 commit` : '拉取'}
+                onClick={() => void onPull()}
+                disabled={busy}
+              >
+                ↓{(status?.behind ?? 0) > 0 && <span className="pd-scm-count" aria-hidden="true">{status?.behind}</span>}
               </button>
               <button
                 className="pd-scm-icon"
@@ -777,6 +824,13 @@ export function SourceControlPanel(): React.JSX.Element {
           )}
         </span>
       </div>
+
+      {/* PE-4：手動取回失敗的小字提示（離線/認證屬常態情境，不佔錯誤橫幅）。 */}
+      {fetchHint && (
+        <div className="pd-scm-fetch-hint" role="status">
+          {fetchHint}
+        </div>
+      )}
 
       {/* 分頁 */}
       <div className="pd-scm-tabs" role="tablist" aria-label="原始碼控制分頁">

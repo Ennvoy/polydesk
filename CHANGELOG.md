@@ -7,6 +7,16 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.4.0（2026-07-15）
+
+未拉取可視化批次：遠端有新 commit 不再無感——SCM 以事件驅動 fetch（⟳ 重新整理與切工作區觸發、不背景輪詢）更新遠端狀態，同步列與 pull 鈕出現「↓N 未拉取」數字提示。v0.4.0 tag 打在本版收尾提交。
+
+### 2026-07-15｜未拉取數字提示與事件驅動 fetch
+
+- 未拉取提示（PE-4）：同步列 behind>0 顯示「↓N 未拉取」強調字、pull 鈕右上角數字角標（與未推送同款）；數字來源是 `git fetch` 後的 remote-tracking ref——fetch 只更新遠端狀態，不動工作樹、不自動合併。
+- 事件驅動 fetch：按 ⟳ 重新整理順便取回（本地刷新先行、不等網路）；切工作區自動取回（同工作區 60 秒冷卻，連切不狂觸網）。拍板不做背景定時輪詢——平常零觸網（VS Code 預設也關 autofetch，同一派）。
+- 取回失敗（離線／認證）不跳錯誤橫幅：自動路徑靜默、手動路徑於同步列下方顯示小字提示，成功即清。
+
 ## v0.3.0（2026-07-15）
 
 發佈到 GitHub 與 push 體驗批次：GitHub 還沒建 repo 也能從 Polydesk 一鍵發佈（VS Code「Publish to GitHub」同款體驗、以 gh CLI 實作故 app 不碰 token）。v0.3.0 tag 打在本版收尾提交。

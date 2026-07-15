@@ -36,6 +36,7 @@ export const INVOKE_CHANNELS = [
   'git:commit',
   'git:push',
   'git:pull',
+  'git:fetch',
   'git:branch',
   'git:log',
   'git:show',

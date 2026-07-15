@@ -575,6 +575,11 @@ export class GitService {
     return this.network(wsId, ['pull'], '拉取');
   }
 
+  /** PE-4：fetch——只更新 remote-tracking ref（不動工作樹、不合併），讓 behind（未拉取數）跟上遠端。 */
+  async fetch(wsId: string): Promise<{ ok: true } | { error: string }> {
+    return this.network(wsId, ['fetch'], '取回');
+  }
+
   private async network(
     wsId: string,
     args: string[],
@@ -1034,6 +1039,9 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
   );
   ipc.handle('git:pull', (_e, req: InvokeReq<'git:pull'>) =>
     enqueue(req.wsId, () => svc.pull(req.wsId)),
+  );
+  ipc.handle('git:fetch', (_e, req: InvokeReq<'git:fetch'>) =>
+    enqueue(req.wsId, () => svc.fetch(req.wsId)),
   );
   ipc.handle('git:branch', (_e, req: InvokeReq<'git:branch'>) =>
     enqueue(req.wsId, () => svc.branch(req.wsId, req.op, req.name, req.startPoint)),

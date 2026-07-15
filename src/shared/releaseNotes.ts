@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.4.0',
+    date: '2026-07-15',
+    highlights: [
+      '未拉取數字提示：遠端有新 commit 時，同步列顯示「↓N 未拉取」、pull 鈕右上角數字角標（與未推送同款）',
+      '事件驅動 fetch：⟳ 重新整理順便取回遠端狀態、切工作區自動取回（60 秒冷卻）；不背景輪詢、平常零觸網',
+      '取回只更新遠端狀態：不動工作樹、不自動合併；離線／認證失敗以小字提示，不跳錯誤橫幅',
+    ],
+  },
+  {
     version: '0.3.0',
     date: '2026-07-15',
     highlights: [
