@@ -7,6 +7,15 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.3.0（2026-07-15）
+
+發佈到 GitHub 與 push 體驗批次：GitHub 還沒建 repo 也能從 Polydesk 一鍵發佈（VS Code「Publish to GitHub」同款體驗、以 gh CLI 實作故 app 不碰 token）。v0.3.0 tag 打在本版收尾提交。
+
+### 2026-07-15｜發佈到 GitHub 與 push 智慧補救
+
+- 發佈到 GitHub（DF-12）：SCM 同步列偵測「沒有 remote」時顯示「發佈」——對話框選名稱與公開／私有後，gh 建 repository、設 origin、推送一氣呵成；gh 未裝／未登入／名稱已存在皆給人話引導。
+- push 智慧補救：新分支沒 upstream 自動改跑 `push -u`（不再噴 fatal 原文）；失敗分類為認證／網路／逾時／無 remote／遠端 repo 不存在，SCM 錯誤區給對應指引。
+
 ## v0.2.0（2026-07-15）
 
 第二功能批次：Git 工作流（Clone、外部狀態同步）、AI 狀態整合（Codex／Agy）、跨終端複製、終端機輸出跟捲自癒，以及版本可視化（「關於」視窗＋狀態列版本＋本檔版本分節）。v0.2.0 tag 打在本版收尾提交。

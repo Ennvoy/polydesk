@@ -26,6 +26,9 @@ import type {
   ConflictInfo,
   GitCloneInput,
   GitCloneResult,
+  GitPublishInput,
+  GitPublishResult,
+  GitPushErrorCode,
 } from './types';
 
 /** invoke 通道：renderer 經 preload 呼叫、main `ipcMain.handle` 回應（一次性 Promise）。 */
@@ -90,8 +93,10 @@ export interface InvokeChannels {
   /** 將路徑加入工作區根 .gitignore。 */
   'git:ignore': { req: { wsId: string; paths: string[] }; res: { ok: true } };
   'git:commit': { req: { wsId: string; message: string }; res: { ok: true; hash: string } | { error: string } };
-  'git:push': { req: { wsId: string }; res: { ok: true } | { error: string } };
+  'git:push': { req: { wsId: string }; res: { ok: true } | { error: string; code: GitPushErrorCode } };
   'git:pull': { req: { wsId: string }; res: { ok: true } | { error: string } };
+  /** DF-12：gh CLI 建 GitHub repo＋加 origin＋push 一氣呵成（Polydesk 不碰 token）。 */
+  'git:publishGitHub': { req: GitPublishInput; res: GitPublishResult };
   'git:branch': {
     req: { wsId: string; op: 'list' | 'create' | 'checkout'; name?: string; startPoint?: string };
     res: { branches: string[]; current: string; remotes?: string[] } | { ok: true };

@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.3.0',
+    date: '2026-07-15',
+    highlights: [
+      '發佈到 GitHub：無 remote 時一鍵以 gh CLI 建立 repository、設定 origin 並推送（Polydesk 不碰 token）',
+      'push 智慧補救：新分支沒 upstream 自動 push -u；失敗依認證／網路／repo 不存在給人話引導',
+      '版本可視化：「說明 → 關於」視窗、狀態列常駐版本號、CHANGELOG 版本分節',
+    ],
+  },
+  {
     version: '0.2.0',
     date: '2026-07-15',
     highlights: [

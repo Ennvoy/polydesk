@@ -17,7 +17,7 @@ import {
 } from 'node:child_process';
 import { shell, type IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
-import type { GitStatus, GitChange, GitLogEntry, GitLogRef, GitWorktree, GitCloneInput, GitCloneResult, GitCloneErrorCode } from '../../shared/types';
+import type { GitStatus, GitChange, GitLogEntry, GitLogRef, GitWorktree, GitCloneInput, GitCloneResult, GitCloneErrorCode, GitPublishInput, GitPublishResult, GitPushErrorCode } from '../../shared/types';
 import type { InvokeReq } from '../../shared/ipc';
 import { GIT_CLONE_TIMEOUT_MS, GIT_LOCAL_TIMEOUT_MS, GIT_NETWORK_TIMEOUT_MS } from '../../shared/constants';
 import {
@@ -35,6 +35,8 @@ import { realpathSync, existsSync, rmSync, statSync } from 'node:fs';
 import { join as pathJoin, resolve as pathResolve, dirname as pathDirname } from 'node:path';
 import { validateWorktreeTarget, resolveTargetPath } from './worktreePath';
 import { cloneDirectoryNameError, cloneUrlError } from '../../shared/gitClone';
+import { publishRepoNameError } from '../../shared/gitPublish';
+import { classifyPushError, classifyGhError, isNoUpstreamError } from './gitErrorClassify';
 
 const GIT_BIN = 'git';
 const MAX_BUFFER = 64 * 1024 * 1024;
@@ -88,6 +90,7 @@ const NOT_REPO: GitStatus = {
   behind: null,
   changedCount: 0,
   detached: false,
+  hasRemote: null,
 };
 
 /** porcelain v2 status code → GitChange.status。 */
@@ -240,7 +243,8 @@ export function parseStatus(stdout: string): { status: GitStatus; changes: GitCh
   }
 
   return {
-    status: { isRepo: true, head, branch, ahead, behind, changedCount: changedFiles, detached },
+    // hasRemote 由 status() 補值（porcelain 輸出不含 remote 清單）；純解析層一律 null。
+    status: { isRepo: true, head, branch, ahead, behind, changedCount: changedFiles, detached, hasRemote: null },
     changes,
   };
 }
@@ -260,6 +264,11 @@ export class GitService {
   }
 
   private run(args: string[], opts: RunOpts): Promise<{ stdout: string; stderr: string }> {
+    return this.runBin(GIT_BIN, args, opts);
+  }
+
+  /** git 之外的工具（gh）走同一條 execFile 硬化路徑（白名單 env、timeout、buffer 上限、DI 可注入）。 */
+  private runBin(bin: string, args: string[], opts: RunOpts): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       const options: ExecFileOptionsWithBufferEncoding = {
         cwd: opts.cwd,
@@ -271,7 +280,7 @@ export class GitService {
         maxBuffer: MAX_BUFFER,
         encoding: 'buffer',
       };
-      const child = this.exec(GIT_BIN, args, options, (err, stdout, stderr) => {
+      const child = this.exec(bin, args, options, (err, stdout, stderr) => {
         const out = toStr(stdout);
         const errOut = toStr(stderr);
         if (err) {
@@ -295,10 +304,24 @@ export class GitService {
     if (!cwd) return NOT_REPO;
     try {
       const { stdout } = await this.run([...STATUS_ARGS], { cwd, env: readEnv() });
-      return parseStatus(stdout).status;
+      const st = parseStatus(stdout).status;
+      // hasRemote（DF-12）：有 upstream（ahead 非 null）必有 remote、免查；
+      // 只在 upstream 缺席（新 repo/新分支/detached）才多跑一次便宜的 `git remote` 判定。
+      if (st.ahead !== null) return { ...st, hasRemote: true };
+      return { ...st, hasRemote: (await this.firstRemote(cwd)) !== null };
     } catch (e) {
       if (isNotARepo(e)) return NOT_REPO;
       throw e;
+    }
+  }
+
+  /** 第一個 remote 名稱（通常 origin）；無 remote / 查詢失敗 → null。 */
+  private async firstRemote(cwd: string): Promise<string | null> {
+    try {
+      const { stdout } = await this.run([...readHardeningArgs(), 'remote'], { cwd, env: readEnv() });
+      return stdout.split(/\r?\n/).map((s) => s.trim()).find((s) => s.length > 0) ?? null;
+    } catch {
+      return null;
     }
   }
 
@@ -463,9 +486,88 @@ export class GitService {
     }
   }
 
-  /** REQ-SCM-007：push（程式組、無使用者 refspec；逾時/失敗回明確 error）。 */
-  async push(wsId: string): Promise<{ ok: true } | { error: string }> {
-    return this.network(wsId, ['push'], '推送');
+  /** REQ-SCM-007：push（程式組、無使用者 refspec；逾時/失敗回明確 error）。
+   *  DF-12 升級：失敗分類成 code（UI 給人話引導）；「分支沒 upstream」不當錯誤——
+   *  自動改跑 `push -u <remote> HEAD` 補救（VS Code 同款默默處理，新分支免手動設定）。 */
+  async push(wsId: string): Promise<{ ok: true } | { error: string; code: GitPushErrorCode }> {
+    const cwd = this.path(wsId);
+    if (!cwd) return { error: 'workspace not found', code: 'failed' };
+    try {
+      await this.run(['push'], { cwd, env: networkEnv(), timeoutMs: GIT_NETWORK_TIMEOUT_MS });
+      return { ok: true };
+    } catch (e) {
+      const timedOut = e instanceof GitError && e.timedOut;
+      const message = errMsg(e, '推送失敗');
+      if (!timedOut && isNoUpstreamError(message)) {
+        const remote = await this.firstRemote(cwd);
+        if (!remote) return { error: message, code: 'no-remote' };
+        try {
+          await this.run(['push', '--set-upstream', remote, 'HEAD'], { cwd, env: networkEnv(), timeoutMs: GIT_NETWORK_TIMEOUT_MS });
+          return { ok: true };
+        } catch (e2) {
+          const t2 = e2 instanceof GitError && e2.timedOut;
+          const m2 = errMsg(e2, '推送失敗');
+          return { error: t2 ? '推送逾時' : m2, code: classifyPushError(m2, t2) };
+        }
+      }
+      return { error: timedOut ? '推送逾時' : message, code: classifyPushError(message, timedOut) };
+    }
+  }
+
+  /** 發佈到 GitHub（DF-12）：gh CLI 建 repo＋加 origin＋push 一氣呵成。
+   *  Polydesk 不碰也不存 token（認證全在 gh 的系統 keyring，REQ-SEC 現狀不變）；
+   *  名稱先純函式驗證（未過永不執行 gh），前置條件逐項給人話 code。 */
+  async publishGitHub(input: GitPublishInput): Promise<GitPublishResult> {
+    const nameErr = publishRepoNameError(input.name);
+    if (nameErr) return { error: nameErr, code: 'invalid-name' };
+    const name = input.name.trim();
+    const cwd = this.path(input.wsId);
+    if (!cwd) return { error: 'workspace not found', code: 'failed' };
+    try {
+      await this.run([...readHardeningArgs(), 'rev-parse', '--is-inside-work-tree'], { cwd, env: readEnv() });
+    } catch {
+      return { error: '此工作區還不是 Git repository，請先在原始碼控制面板初始化。', code: 'not-a-repo' };
+    }
+    try {
+      await this.run([...readHardeningArgs(), 'rev-parse', '--verify', 'HEAD'], { cwd, env: readEnv() });
+    } catch {
+      return { error: '還沒有任何 commit——請先完成第一個 commit 再發佈。', code: 'no-commit' };
+    }
+    if ((await this.firstRemote(cwd)) !== null) {
+      return { error: '此 repository 已設定 remote；發佈只適用於尚未連結遠端的 repo。', code: 'remote-exists' };
+    }
+    try {
+      await this.runGh(['--version'], cwd, GIT_LOCAL_TIMEOUT_MS);
+    } catch {
+      return { error: '找不到 GitHub CLI（gh）。請先安裝（winget install GitHub.cli）並重新啟動 Polydesk。', code: 'gh-not-found' };
+    }
+    try {
+      await this.runGh(['auth', 'status'], cwd, GIT_NETWORK_TIMEOUT_MS);
+    } catch {
+      return { error: 'GitHub CLI 尚未登入。請在終端機執行 gh auth login 完成登入後再試一次。', code: 'gh-not-authed' };
+    }
+    try {
+      const vis = input.visibility === 'public' ? '--public' : '--private';
+      // gh 會：API 建 repo → git remote add origin → git push -u。--source 用工作區絕對路徑。
+      const { stdout, stderr } = await this.runGh(
+        ['repo', 'create', name, vis, '--source', cwd, '--remote', 'origin', '--push'],
+        cwd,
+        GIT_CLONE_TIMEOUT_MS,
+      );
+      const url = ((stdout + '\n' + stderr).match(/https:\/\/github\.com\/\S+/)?.[0] ?? '').replace(/\.git$/, '');
+      return { ok: true, url };
+    } catch (e) {
+      const timedOut = e instanceof GitError && e.timedOut;
+      const message = errMsg(e, '發佈失敗');
+      return { error: timedOut ? '發佈逾時（超過五分鐘）。' : message, code: classifyGhError(message, timedOut) };
+    }
+  }
+
+  /** 跑 gh CLI：同 run() 的白名單 env 硬化＋networkEnv（gh --push 會 shell 出 git，一併關互動提示、
+   *  留 system config 讓認證 helper 生效）。POLYDESK_GH_BIN 為測試 seam（e2e 換受控二進位，
+   *  與 POLYDESK_USER_DATA 同信任層級：能設 env 者本就能控制整個程序）。 */
+  private runGh(args: string[], cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
+    return this.runBin(process.env.POLYDESK_GH_BIN ?? 'gh', args, { cwd, env: networkEnv(), timeoutMs });
   }
 
   /** REQ-SCM-007：pull。 */
@@ -953,6 +1055,9 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
   );
   ipc.handle('git:clone', (_e, req: InvokeReq<'git:clone'>) =>
     enqueue(`clone:${pathResolve(req?.parentPath ?? '', req?.directoryName ?? '')}`, () => svc.clone(req)),
+  );
+  ipc.handle('git:publishGitHub', (_e, req: InvokeReq<'git:publishGitHub'>) =>
+    enqueue(req.wsId, () => svc.publishGitHub(req)),
   );
 
   // ── Git Worktree（REQ-WT）──

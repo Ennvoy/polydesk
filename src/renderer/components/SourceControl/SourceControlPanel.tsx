@@ -10,10 +10,11 @@ import { dialog } from '../Dialogs/host';
 import { editorBus } from '../../state/editorBus';
 import { appStore } from '../../state/appStore';
 import { WorktreePanel } from '../Worktree/WorktreePanel';
+import { PublishGitHubDialog } from './PublishGitHubDialog';
 import { CreateWorktreeDialog } from '../Worktree/CreateWorktreeDialog';
 import { parseWorktreeConflict, resolveJumpTarget } from '../Worktree/worktreeModel';
 import { neutralizeBidi } from '../Dialogs/TrustConfirm';
-import type { GitStatus, GitChange, GitLogEntry, GitLogRef, AiEngine } from '../../../shared/types';
+import type { GitStatus, GitChange, GitLogEntry, GitLogRef, AiEngine, GitPushErrorCode } from '../../../shared/types';
 import { DEFAULT_BACKGROUND_POLL_MS } from '../../../shared/constants';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
 
@@ -396,13 +397,38 @@ export function SourceControlPanel(): React.JSX.Element {
     void ipc.store.setAiCommit({ cfg: { engine: next } }).catch(() => undefined);
   }, []);
 
+  // push 錯誤碼 → 人話前綴（DF-12；比照 CloneRepositoryDialog 的 code 分流慣例）。
+  const pushErrorText = (r: { error: string; code: GitPushErrorCode }): string => {
+    const prefix =
+      r.code === 'no-remote'
+        ? '尚未設定遠端（remote）。可用同步列的「發佈到 GitHub」建立遠端 repo 並直接推送。'
+        : r.code === 'remote-not-found'
+          ? 'GitHub 上找不到 remote 指向的 repository（可能尚未建立、已改名或無權限）。'
+          : r.code === 'auth'
+            ? '認證失敗。請確認 Git Credential Manager 或 SSH 金鑰可用。'
+            : r.code === 'network'
+              ? '網路連線失敗。請確認網路、VPN 或代理伺服器設定。'
+              : '';
+    return prefix ? `${prefix}\n${r.error}` : r.error;
+  };
+
   const onPush = (): Promise<void> =>
     run(async () => {
       if (!wsId) return;
       const r = await ipc.git.push({ wsId });
-      if ('error' in r) setError(r.error);
+      if ('error' in r) setError(pushErrorText(r));
       else await refresh();
     });
+
+  // 發佈到 GitHub（DF-12）：無 remote 時同步列的主要動作；對話框關閉後刷新（成功＝origin 已設、已推送）。
+  const onPublish = async (): Promise<void> => {
+    if (!wsId) return;
+    const wsName = workspaces.find((w) => w.id === wsId)?.name ?? '';
+    await dialog.open((close) => (
+      <PublishGitHubDialog wsId={wsId} wsName={wsName} onClose={(published) => close(published)} />
+    ), { dismissable: false });
+    await refresh();
+  };
 
   const onPull = (): Promise<void> =>
     run(async () => {
@@ -722,18 +748,33 @@ export function SourceControlPanel(): React.JSX.Element {
           <span className={(status?.behind ?? 0) > 0 ? 'pd-scm-behind' : undefined}>↓{nOrNA(status?.behind ?? null)}</span>
         </span>
         <span className="pd-scm-syncbtns">
-          <button className="pd-scm-icon" aria-label="拉取（pull）" title="拉取" onClick={() => void onPull()} disabled={busy}>
-            ↓
-          </button>
-          <button
-            className="pd-scm-icon"
-            aria-label={(status?.ahead ?? 0) > 0 ? `推送（push）：${status?.ahead} 個 commit 未推送` : '推送（push）'}
-            title={(status?.ahead ?? 0) > 0 ? `推送 ${status?.ahead} 個未推送的 commit` : '推送'}
-            onClick={() => void onPush()}
-            disabled={busy}
-          >
-            ↑{(status?.ahead ?? 0) > 0 && <span className="pd-scm-count" aria-hidden="true">{status?.ahead}</span>}
-          </button>
+          {status?.isRepo && status.hasRemote === false ? (
+            // DF-12：沒有 remote 時 push 必失敗——改給「發佈到 GitHub」一鍵建 repo＋推送（VS Code 同款）。
+            <button
+              className="pd-scm-icon pd-scm-publish"
+              aria-label="發佈到 GitHub"
+              title="發佈到 GitHub（用 gh 建立遠端 repository 並推送）"
+              onClick={() => void onPublish()}
+              disabled={busy}
+            >
+              ⇪ 發佈
+            </button>
+          ) : (
+            <>
+              <button className="pd-scm-icon" aria-label="拉取（pull）" title="拉取" onClick={() => void onPull()} disabled={busy}>
+                ↓
+              </button>
+              <button
+                className="pd-scm-icon"
+                aria-label={(status?.ahead ?? 0) > 0 ? `推送（push）：${status?.ahead} 個 commit 未推送` : '推送（push）'}
+                title={(status?.ahead ?? 0) > 0 ? `推送 ${status?.ahead} 個未推送的 commit` : '推送'}
+                onClick={() => void onPush()}
+                disabled={busy}
+              >
+                ↑{(status?.ahead ?? 0) > 0 && <span className="pd-scm-count" aria-hidden="true">{status?.ahead}</span>}
+              </button>
+            </>
+          )}
         </span>
       </div>
 

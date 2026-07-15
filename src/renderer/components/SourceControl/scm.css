@@ -489,3 +489,10 @@
   font-size: var(--text-xs);
   word-break: break-word;
 }
+
+/* DF-12 發佈到 GitHub（無 remote 時取代 pull/push 的主要動作；文字鈕沿用 icon 鈕的互動樣式） */
+.pd-scm-publish {
+  font-size: var(--text-xs);
+  gap: 4px;
+  color: var(--accent);
+}

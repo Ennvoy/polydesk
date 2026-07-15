@@ -80,6 +80,29 @@ export type GitCloneResult =
   | { wsId: string; path: string }
   | { error: string; code: GitCloneErrorCode };
 
+/** 發佈到 GitHub（DF-12：gh CLI 建 repo＋加 remote＋push 一氣呵成；Polydesk 不碰 token）。 */
+export interface GitPublishInput {
+  wsId: string;
+  /** GitHub repository 名稱（純名稱，不含 owner；gh 用登入帳號）。 */
+  name: string;
+  visibility: 'private' | 'public';
+}
+export type GitPublishErrorCode =
+  | 'invalid-name'
+  | 'not-a-repo'
+  | 'no-commit'
+  | 'remote-exists'
+  | 'gh-not-found'
+  | 'gh-not-authed'
+  | 'name-exists'
+  | 'network'
+  | 'timeout'
+  | 'failed';
+export type GitPublishResult = { ok: true; url: string } | { error: string; code: GitPublishErrorCode };
+
+/** push 失敗分類（DF-12：比照 clone 的 code 分流，UI 據此給人話引導）。 */
+export type GitPushErrorCode = 'auth' | 'network' | 'timeout' | 'no-remote' | 'remote-not-found' | 'failed';
+
 /** git worktree 清單項（REQ-WT-008；`git worktree list --porcelain -z` 解析）。 */
 export interface GitWorktree {
   path: string;
@@ -104,6 +127,8 @@ export interface GitStatus {
   behind: number | null;
   changedCount: number;
   detached: boolean;
+  /** 是否已設定任何 remote（DF-12：false → SCM 同步列顯示「發佈到 GitHub」）；非 repo/未知 → null。 */
+  hasRemote: boolean | null;
 }
 export interface GitChange {
   path: string;
