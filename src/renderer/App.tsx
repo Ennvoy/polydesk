@@ -5,8 +5,9 @@ import React from 'react';
 import { ActivityBar } from './components/ActivityBar';
 import { TitleBar } from './components/TitleBar';
 import { DockLayout } from './layout/DockLayout';
-import { DialogHost } from './components/Dialogs/host';
+import { DialogHost, dialog } from './components/Dialogs/host';
 import { confirmCloseApp } from './components/Dialogs/CloseConfirm';
+import { AboutDialog } from './components/Dialogs/AboutDialog';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { RailResizer } from './components/RailResizer';
 import { OverviewPanel } from './components/OverviewPanel';
@@ -15,6 +16,7 @@ import { appStore, useAppState } from './state/appStore';
 import { useClaudeCounts } from './state/claudeCounts';
 import { ipc } from './ipc/client';
 import type { GitStatus } from '../shared/types';
+import { APP_VERSION } from '../shared/releaseNotes';
 
 /** 狀態列 git 分支（底部常駐顯示目前分支＋領先/落後，像 VSCode 左下角）。查 git status、訂閱 fs 變動更新；切換工作區以 alive 旗標丟棄 stale。 */
 function StatusBarBranch({ wsId }: { wsId: string }): React.JSX.Element | null {
@@ -84,6 +86,15 @@ function StatusBar(): React.JSX.Element {
           </span>
         )}
         <span>工作區 {workspaces.length}</span>
+        {/* 版本可視化（PE-3）：常駐版本號，點擊開「關於」（版本唯一來源 shared/releaseNotes）。 */}
+        <button
+          type="button"
+          className="pd-statusbar-version"
+          onClick={() => void dialog.open((close) => <AboutDialog onClose={() => close()} />)}
+          aria-label={`Polydesk 版本 v${APP_VERSION}，點擊開啟關於視窗`}
+        >
+          v{APP_VERSION}
+        </button>
       </span>
     </footer>
   );

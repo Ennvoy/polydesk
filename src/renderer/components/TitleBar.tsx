@@ -5,6 +5,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ipc } from '../ipc/client';
 import { dialog } from './Dialogs/host';
+import { AboutDialog } from './Dialogs/AboutDialog';
 import { SettingsPanel } from './Settings/SettingsPanel';
 import { resetLayout, toggleLayoutPanel, toggleTerminalMax } from '../layout/DockLayout';
 
@@ -86,6 +87,13 @@ export function TitleBar(): React.JSX.Element {
         { label: '最大化／還原終端機', onClick: () => toggleTerminalMax() },
         { label: '', separator: true },
         { label: '重設版面', onClick: () => resetLayout() },
+      ],
+    },
+    {
+      label: '說明',
+      items: [
+        // 版本可視化（PE-3）：版本號/更新重點的唯一入口之一（另一個在狀態列右下）。
+        { label: '關於 Polydesk', onClick: () => void dialog.open((close) => <AboutDialog onClose={() => close()} />) },
       ],
     },
   ];

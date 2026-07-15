@@ -152,6 +152,7 @@
 
 - [x] **PE-1 git 線圖 GitLens 級互動**（F-7 增強；commit 011f2da）— ① Hover 卡片：commit 列指過去顯示完整訊息（subject+body）+ 作者/時間/完整 hash（`git:log` 加 `%b` → `GitLogEntry.body`）。② 右鍵選單：複製雜湊 / 複製訊息 / 開啟此 commit 變更（新 `git:show` → 編輯器 commit diff 分頁，重用 diff-in-editor）/ 簽出此 commit（detached + 確認）/ 從此 commit 建立分支（`git:branch` 加 startPoint）；皆 validateRef 擋注入。e2e git-commit-actions 綠。
 - [x] **PE-2 Claude 多專案狀態強化**（F-8 增強；commit 6161db6）— ① 狀態文字標籤（badge 非 idle 顯示 執行中/待接手）。② 待接手桌面通知（monitor running→stopped-await → Electron Notification；可注入測試）。③ 狀態總覽計數（status bar useClaudeCounts 顯示 N 執行中·M 待接手）。e2e/單元（monitor 通知轉移）綠。
+- [x] **PE-3 版本可視化＋版本規則**（2026-07-15 使用者提出、AskUserQuestion 定版：跳 0.2.0／關於視窗＋狀態列版本＋CHANGELOG 版本分節＋README 徽章／每批交付 bump+tag）— ① `shared/releaseNotes.ts` 為版本顯示唯一來源（頂端＝目前版本），`releaseNotes.test.ts` 釘死與 `package.json` 同步（bump 漏改任一邊紅燈＝確定性閘門）。② 標題列新增「說明」選單 →「關於 Polydesk」（版本＋釋出日期＋近 3 版重點，走既有 dialog host）。③ 狀態列右下常駐版本鈕（點擊開關於）。④ CHANGELOG 改版本傘節（v0.2.0／v0.1.0），README 版本徽章。⑤ 版本釋出規則落 repo CLAUDE.md（每批交付：bump＋releaseNotes＋CHANGELOG＋徽章＋tag）。about-version e2e、releaseNotes 單測、typecheck、build 全綠。
 
 ## Backlog（本輪不做）
 

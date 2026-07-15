@@ -2,13 +2,21 @@
 
 本文件依 Git 歷史整理 Polydesk 從專案骨架到目前 dogfood 版本的演進。內容以使用者可感知的功能、修正、安全性、效能及驗證為主；單純同步 `.flow` journal、ledger 或回填 SHA 的維護 commit 不另列為產品更新。
 
-- 歷史範圍：2026-06-28 至 2026-07-14
+- 歷史範圍：2026-06-28 起
 - 來源：`git log --reverse --no-merges`
-- 整理時的歷史總量：125 個 commit
-- 正式標籤：`v0.1.0`，位於 `e6b803b`（2026-07-01）
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
+- 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
-## 2026-07-14｜Git 工作流、AI 狀態與跨終端操作
+## v0.2.0（2026-07-15）
+
+第二功能批次：Git 工作流（Clone、外部狀態同步）、AI 狀態整合（Codex／Agy）、跨終端複製、終端機輸出跟捲自癒，以及版本可視化（「關於」視窗＋狀態列版本＋本檔版本分節）。v0.2.0 tag 打在本版收尾提交。
+
+### 2026-07-15｜終端機輸出跟捲自癒與版本可視化
+
+- `1b28bb3` 修正 claude 展開 Shell details 後底部被吃掉：xterm 6 孤兒 `isUserScrolling` 旗標會把大量輸出時的 viewport 凍在原地，TerminalView 加自癒不變量「寫入前在底部 ⇒ 寫入後仍在底部」（DF-11）。
+- 版本可視化（PE-3）：版本跳 0.2.0；「說明 → 關於 Polydesk」顯示版本與近版重點、狀態列右下常駐版本號；`releaseNotes.ts` 單測擋版本不同步。
+
+### 2026-07-14｜Git 工作流、AI 狀態與跨終端操作
 
 - `4cc6b84` 修正 Monaco 貼上焦點與 `Ctrl/Cmd+V` 攔截，並在 SCM 顯示目前工作區的未提交檔案數。
 - `0d7be5f` 調整歷史列伸縮規則，避免長 commit 主旨壓縮徽章；同時依額度週期正確標示 Codex 用量。
@@ -18,35 +26,35 @@
 - `2ba1d69` SCM 改以低頻 status-only 探測 `HEAD`、分支及 ahead／behind，外部 commit 或 push 後可自動刷新；遠端 ref 改為固定寬度雲端圖示並保留 tooltip／aria 名稱。
 - `84e9684` 補齊 README、DF-10 與本更新旅程的文件入口。
 
-## 2026-07-11｜Git 歷史徽章去重
+### 2026-07-11｜Git 歷史徽章去重
 
 - `88aa77e` 過濾 `<remote>/HEAD` 符號 ref，避免遠端預設分支在歷史面板顯示兩顆內容重複的徽章。
 
-## 2026-07-10｜編輯器叫回與版面落檔
+### 2026-07-10｜編輯器叫回與版面落檔
 
 - `aa244d0` 硬化從側欄或 SCM 開檔時的編輯器叫回鏈：隔離 bus listener 錯誤、重新顯示隱藏面板、切到正確 dock tab，並涵蓋 diff 分頁。
 - `b02723a` 關窗與退出前同步保存當下 dockview 狀態，修正快速切換面板後立即離開導致版面設定遺失。
 
-## 2026-07-09｜拖放匯入與終端機自癒
+### 2026-07-09｜拖放匯入與終端機自癒
 
 - `dcb5a75` 找到 Claude TUI 右鍵偶發雙貼的根因，阻擋右鍵滑鼠回報進入 PTY，只保留一次實際貼上。
 - `d198eb3` 支援從 Windows 檔案總管把檔案或資料夾拖入 Explorer，依游標位置匯入工作區並處理重名。
 - `04b83c4` 建立 PTY 與 xterm 尺寸自癒同步，resize 失敗可重試，修正 Claude 展開內容時底部輸入區被裁掉。
 
-## 2026-07-08｜拖曳路徑、剪貼簿與完整退出
+### 2026-07-08｜拖曳路徑、剪貼簿與完整退出
 
 - `927f7a3` 支援從 Explorer 或作業系統拖檔到終端機，自動依 PowerShell、cmd、Git Bash、WSL 產生安全引用的絕對路徑。
 - `d44e166` 修正 Monaco 複製／貼上受權限策略與缺少 product service 影響而失效，僅對自家主視窗開放必要剪貼簿能力。
 - `281e019` 重做應用程式退出流程：等待 PTY／LSP／watcher teardown，必要時顯示執行中程序確認，避免關窗後殘留整棵程序樹。
 
-## 2026-07-07｜Windows 通知、共用剪貼簿與圖片預覽
+### 2026-07-07｜Windows 通知、共用剪貼簿與圖片預覽
 
 - `280fc72` 設定 Windows AUMID 並保留通知物件引用，改善點擊通知回到 Polydesk 的可靠性。
 - `1b01e21` Explorer 複製路徑與 SCM 複製雜湊／訊息統一改走 Electron clipboard IPC，修正瀏覽器剪貼簿權限被拒後靜默失效。
 - `38bb38d` 為終端機右鍵貼上增加 300ms 防抖，避免裝置重複觸發或連點造成雙貼。
 - `20c23fe` 新增 PNG、JPG、GIF、WebP、BMP、ICO、SVG 唯讀圖片預覽，提供符合視窗／實際大小切換與檔案資訊。
 
-## 2026-07-06｜搜尋、文件預覽與 Git ref
+### 2026-07-06｜搜尋、文件預覽與 Git ref
 
 - `6bf103a`、`d953b09` 修正多終端機拖曳雙向排序、拖曳來源、Escape 取消改名及 rail splitter 的動態 aria 數值。
 - `a6ac067` 在 Git 線圖標示本地與遠端分支位置，形成接近 VS Code 的 ref 徽章體驗。
@@ -56,7 +64,7 @@
 - `56f4c0e` 編輯器分頁依工作區隔離，切換工作區不再混雜，切回時還原最後聚焦分頁。
 - `c348a94`、`4dfd0ca` 更新 Git 與工作區 E2E selector／前提，讓測試符合新版 UI 並維持決定性。
 
-## 2026-07-03｜終端體驗、工作區切換與 SCM 回饋
+### 2026-07-03｜終端體驗、工作區切換與 SCM 回饋
 
 - `12b876d` 修正終端機 keycap 項目編號顯示成數字加空框。
 - `35e2c84` 修正點擊工作區列的 Claude／Codex 徽章區無法切換工作區。
@@ -71,7 +79,7 @@
 - `961fb45` SCM 讀取與載入期間加入動態回饋。
 - `73bd2c1` 為工作區欄 splitter 補上 `aria-valuenow`、`aria-valuemin` 與 `aria-valuemax`。
 
-## 2026-07-02｜品牌、Git Worktree 第二迭代與終端相容性
+### 2026-07-02｜品牌、Git Worktree 第二迭代與終端相容性
 
 - `b3537bc` 全站換成 Polydesk 疊層星芒品牌圖示。
 - `be100df` 讓終端機底色填滿 pane，已開啟終端機也會即時跟隨主題。
@@ -88,7 +96,11 @@
 - `6adbf19` 視窗座標離開所有螢幕工作區時自動重設置中，處理拔除外接螢幕與解析度變更。
 - `18db9ff` 修正 emoji 亂碼並加入終端機字型設定。
 
-## 2026-07-01｜總覽、檔案操作、預覽與 portable 基線
+## v0.1.0（2026-07-01）
+
+首個可用版：多工作區、終端機多開（真 PTY）、檔案總管／Monaco 編輯器、Git 原始碼控制、三主題與 portable 打包。tag `v0.1.0` 位於 `e6b803b`。
+
+### 2026-07-01｜總覽、檔案操作、預覽與 portable 基線
 
 - `cc88c2d` 集中修正 AI 監控與 Explorer dogfood 問題。
 - `297532f`、`bbdca44` 將 Claude 與 Codex 狀態改為真實 process 偵測，降低殘留狀態誤判。
@@ -104,7 +116,7 @@
 - `be3fa2e` 補記 typecheck 與 Playwright 驗證嘗試，讓後續能追蹤測試結果與失敗脈絡。
 - `50125c9` 加入 MIT License、README 與 portable 打包設定；`e6b803b` 修正 native 模組重編與 asarUnpack，並在此 commit 標記 `v0.1.0`。
 
-## 2026-06-30｜終端編碼、版面操作、Git 認證與 Codex 監控
+### 2026-06-30｜終端編碼、版面操作、Git 認證與 Codex 監控
 
 - `16aeb28` 修正終端機亂碼、banner 洪水與 PowerShell 中文顯示。
 - `d005ec9` 加入面板拖曳換位、標頭整併、真隱藏及可拖曳工作區寬度。
@@ -113,7 +125,7 @@
 - `0dd1eb4` 以 rollout JSONL 零侵入監控 Codex 狀態。
 - `dea41f8` 新增 VS Code 風格 Explorer 右鍵新增、改名、刪除與剪貼操作。
 
-## 2026-06-29｜第一次 dogfood、效能、安全與互動深化
+### 2026-06-29｜第一次 dogfood、效能、安全與互動深化
 
 - `5208903` 版面工具列新增「編輯器」顯示／隱藏。
 - `dda9413` Git 歷史加入 swimlane commit 線圖；`ddfbe8c` 修正跨列斷線、拓撲排序及 dirty tree 切分支流程。
@@ -133,7 +145,7 @@
 - `49c3a55` 手動 stash 改為包含 untracked 檔案。
 - `bb9478e` 整併終端機標頭，面板真隱藏時序列化保留 scrollback。
 
-## 2026-06-28｜從零建立 Polydesk
+### 2026-06-28｜從零建立 Polydesk
 
 - `adcc4b8` 建立 Electron／React／TypeScript 三進程骨架、typed IPC、StateStore、單一實例、安全基線與效能埋點。
 - `30668eb` 完成 dockview 版面、深／淺／暖三主題、設定匯出入、dialog host 與 workspace 模型。

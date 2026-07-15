@@ -1,5 +1,7 @@
 # Polydesk
 
+![version](https://img.shields.io/badge/version-v0.2.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
 Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案、每個專案各自跑 AI CLI（Claude Code / Codex / Agy）」的工作流設計。一個視窗管理所有工作區的終端機、程式碼、版本控制與 AI 執行狀態。
