@@ -1,7 +1,7 @@
 // PTY↔xterm 尺寸自癒（dogfood：claude 展開時最下方被擋、滾不出來）：
 // ConPTY 行數一旦與 xterm 漂移（resize 失敗被吞/任何原因），TUI 會把底部 UI 畫在不存在的列上。
 // 修法＝自癒管線：renderer 每次 fit 都送尺寸、main 以「實際套用成功」的尺寸去重（失敗不記帳→自動重試）。
-// 本測驗證：人為把 PTY 調成 rows+6（模擬漂移）→ 點擊終端機（focusin 觸發 fit）→ ConPTY 行數回到與 xterm 一致。
+// 本測驗證：人為把 PTY 調成 rows+6（模擬漂移）→ 保持焦點並產生輸出 → ConPTY 行數自動回到與 xterm 一致。
 import { test, expect, type Page } from '@playwright/test';
 import { mkdtempSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -37,7 +37,7 @@ async function readConptyRows(page: Page, dir: string, tag: string): Promise<num
   return v;
 }
 
-test('PTY 尺寸漂移後點擊終端機即自癒（ConPTY rows 回到 xterm rows）', async () => {
+test('PTY 尺寸漂移後持續輸出即自癒（不必重新點擊，ConPTY rows 回到 xterm rows）', async () => {
   const dir = seedDir('heal-ws');
   const { app, page, userData } = await launchApp();
   try {
@@ -69,13 +69,9 @@ test('PTY 尺寸漂移後點擊終端機即自癒（ConPTY rows 回到 xterm row
         | null;
       await w.pty.resize({ termId: terms[0].termId, cols: host!.__pdTerm!.cols, rows: host!.__pdTerm!.rows + extra });
     }, 6);
-    expect(await readConptyRows(page, dir, 'drift')).toBe(xtermRows + 6); // 漂移已生效
-
-    // 自癒：把焦點移走再點回終端機（focusin → fit → 重送尺寸；main 依「實際套用」去重不擋）
-    await page.locator('button[aria-label="重新整理檔案樹"]').click(); // 焦點移出終端機
-    await page.waitForTimeout(300);
-    await page.locator('.pd-term-view').first().click();
-    await page.waitForTimeout(800); // fit debounce + resize IPC
+    // 不移動焦點；resize/SIGWINCH 或既有 workflow 的下一段輸出會讓 renderer 節流補送 xterm
+    // 真實尺寸。若先用 shell 指令讀「漂移值」，該指令本身的 echo 就已觸發自癒，因此直接驗證終態。
+    await page.waitForTimeout(800);
 
     expect(await readConptyRows(page, dir, 'healed')).toBe(xtermRows);
   } finally {

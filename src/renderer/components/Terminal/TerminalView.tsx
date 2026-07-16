@@ -54,6 +54,9 @@ const MIN_FIT_COLS = 8;
 const FIT_DEBOUNCE_MS = 60;
 // 反震盪容差（px）：> 捲軸寬（~17）。ResizeObserver 回彈在此範圍內視為 fit 自身造成、不再 fit（斷迴圈）。
 const RESIZE_TOLERANCE_PX = 24;
+// workflow/TUI 持續輸出期間的尺寸自癒節流（ms）。ResizeObserver 與 focusin 可能都不再觸發，
+// 但 ConPTY 曾短暫 resize 失敗或漂移時，仍要靠後續輸出把 xterm 的真實尺寸補送回去。
+const OUTPUT_SIZE_HEAL_MS = 500;
 
 // 淺色/暖色主題的終端機 ANSI 16 色（深色系，淺背景可讀）。xterm 內建 ANSI 是為深背景設計的「亮色」，
 // 在淺/暖背景（--bg 淺）上對比極差 → Claude Code 等 TUI 的彩色輸出（含它畫的選項/標題）難瀏覽。
@@ -250,9 +253,31 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
       const b = term.buffer.active;
       if (b.viewportY !== b.baseY) term.scrollToBottom();
     };
+    // workflow 長時間維持焦點並持續輸出時，ResizeObserver/focusin 都可能沒有新事件；若 PTY 尺寸
+    // 曾短暫漂移，Claude 等 TUI 會一直把底部畫在可視範圍外。輸出期間節流補送 xterm 當下尺寸，
+    // main 端會依「實際套用成功」尺寸去重，所以正常狀態不會反覆呼叫 ConPTY resize。
+    let lastOutputSizeHealAt = 0;
+    let outputSizeHealTimer: ReturnType<typeof setTimeout> | null = null;
+    const sendCurrentSize = (): void => {
+      outputSizeHealTimer = null;
+      lastOutputSizeHealAt = performance.now();
+      void ipc.pty.resize({ termId, cols: term.cols, rows: term.rows });
+    };
+    const healSizeOnOutput = (): void => {
+      const now = performance.now();
+      const remaining = OUTPUT_SIZE_HEAL_MS - (now - lastOutputSizeHealAt);
+      if (remaining <= 0) {
+        if (outputSizeHealTimer) clearTimeout(outputSizeHealTimer);
+        sendCurrentSize();
+      } else if (!outputSizeHealTimer) {
+        // trailing 保證：短促輸出即使落在節流窗內，最後一段也不會永久漏掉尺寸校正。
+        outputSizeHealTimer = setTimeout(sendCurrentSize, remaining);
+      }
+    };
     // 輸出：main → term（依 termId 過濾；回流即記一次往返延遲近似值）。
     const offData = ipc.pty.onData(({ termId: t, chunk }) => {
       if (t !== termId) return;
+      healSizeOnOutput();
       const buf = term.buffer.active;
       const pinned = buf.viewportY === buf.baseY;
       // 顯示層 keycap 正規化（REQ-TERM-009）：在 PTY bytes 上「無狀態」剔除 U+20E3 圍框（含前導 FE0F），
@@ -397,6 +422,7 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
       cancelAnimationFrame(raf);
       if (fitTimer) clearTimeout(fitTimer);
       if (fitRetryTimer) clearTimeout(fitRetryTimer);
+      if (outputSizeHealTimer) clearTimeout(outputSizeHealTimer);
       themeObserver.disconnect();
       ro.disconnect();
       host.removeEventListener('focusin', onFocusIn);
