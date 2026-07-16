@@ -28,8 +28,14 @@ export interface OpenDiffRequest {
 
 type Listener = (req: OpenFileRequest) => void;
 type DiffListener = (req: OpenDiffRequest) => void;
+// 一般 listeners（DockLayout 叫回、LSP probe）可在 EditorGroup 不存在時常駐；真正開檔 consumer
+// 獨立註冊，才能判斷「panel 被關閉、尚無 EditorGroup」並暫存本次請求，待重建後補送。
 const listeners = new Set<Listener>();
 const diffListeners = new Set<DiffListener>();
+const editorListeners = new Set<Listener>();
+const editorDiffListeners = new Set<DiffListener>();
+let pendingFile: OpenFileRequest | null = null;
+let pendingDiff: OpenDiffRequest | null = null;
 
 // 派送隔離：訂閱者依註冊順序同步執行（DockLayout 叫回編輯器排在 EditorGroup 開檔之前），
 // 任一訂閱者 throw 不得炸斷派送鏈，否則後面的開檔訂閱者收不到＝點檔無反應。
@@ -46,17 +52,48 @@ function dispatch<T>(subs: Set<(req: T) => void>, req: T): void {
 export const editorBus = {
   openFile(req: OpenFileRequest): void {
     dispatch(listeners, req);
+    if (editorListeners.size > 0) dispatch(editorListeners, req);
+    else pendingFile = req; // panel 被 dockview 關閉：保留最新一次點擊，重建 EditorGroup 後補送
   },
   subscribe(l: Listener): () => void {
     listeners.add(l);
     return () => listeners.delete(l);
   },
+  /** EditorGroup 專用 consumer；新掛載時補收 panel 不存在期間最後一次開檔請求。 */
+  subscribeEditor(l: Listener): () => void {
+    editorListeners.add(l);
+    // 延到 microtask：React StrictMode 初次 effect 會 setup→cleanup→setup；只交給仍存活的訂閱者。
+    if (pendingFile) {
+      queueMicrotask(() => {
+        if (!editorListeners.has(l) || !pendingFile) return;
+        const req = pendingFile;
+        pendingFile = null;
+        dispatch(new Set([l]), req);
+      });
+    }
+    return () => editorListeners.delete(l);
+  },
   /** 在編輯器區開啟差異分頁（編輯器 F-4 訂閱）。 */
   openDiff(req: OpenDiffRequest): void {
     dispatch(diffListeners, req);
+    if (editorDiffListeners.size > 0) dispatch(editorDiffListeners, req);
+    else pendingDiff = req;
   },
   subscribeDiff(l: DiffListener): () => void {
     diffListeners.add(l);
     return () => diffListeners.delete(l);
+  },
+  /** EditorGroup 專用 diff consumer；panel 重建後補送最後一次差異請求。 */
+  subscribeEditorDiff(l: DiffListener): () => void {
+    editorDiffListeners.add(l);
+    if (pendingDiff) {
+      queueMicrotask(() => {
+        if (!editorDiffListeners.has(l) || !pendingDiff) return;
+        const req = pendingDiff;
+        pendingDiff = null;
+        dispatch(new Set([l]), req);
+      });
+    }
+    return () => editorDiffListeners.delete(l);
   },
 };

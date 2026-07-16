@@ -33,4 +33,29 @@ describe('editorBus 派送隔離', () => {
     expect(seen).toEqual(['diff:b.ts:true']); // off2 退訂後不再累積
     off1();
   });
+
+  it('EditorGroup 不存在時暫存最新開檔請求，重新掛載後補送一次', async () => {
+    editorBus.openFile({ wsId: 'w1', path: 'first.md' });
+    editorBus.openFile({ wsId: 'w1', path: 'latest.md' });
+    const seen: string[] = [];
+    const off = editorBus.subscribeEditor((req) => seen.push(req.path));
+
+    await Promise.resolve(); // 等待 StrictMode-safe microtask replay
+    expect(seen).toEqual(['latest.md']);
+    off();
+  });
+
+  it('EditorGroup 已掛載時同步收到請求，不殘留到下次掛載', async () => {
+    const seen: string[] = [];
+    const off = editorBus.subscribeEditor((req) => seen.push(req.path));
+    editorBus.openFile({ wsId: 'w1', path: 'now.md' });
+    expect(seen).toEqual(['now.md']);
+    off();
+
+    const replayed: string[] = [];
+    const off2 = editorBus.subscribeEditor((req) => replayed.push(req.path));
+    await Promise.resolve();
+    expect(replayed).toEqual([]);
+    off2();
+  });
 });

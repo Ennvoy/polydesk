@@ -40,6 +40,11 @@ const SELF_WRITE_ECHO_MS = 1500;
 
 const EDITOR_OPTIONS: monaco.editor.IStandaloneEditorConstructionOptions = {
   automaticLayout: true,
+  // 跟隨編輯器可視寬度自動換行；automaticLayout 只會調整 Monaco 容器尺寸，不會改變預設 wordWrap=off。
+  // advanced 使用瀏覽器分行規則，中文與英文混排的 Markdown／文件內容換行較自然。
+  wordWrap: 'on',
+  wrappingStrategy: 'advanced',
+  wrappingIndent: 'same',
   fontSize: 13,
   lineHeight: 20,
   minimap: { enabled: true },
@@ -533,8 +538,10 @@ export function EditorGroup(): React.JSX.Element {
 
   // ── editorBus 訂閱（開檔 + 開差異）──
   useEffect(() => {
-    const offFile = editorBus.subscribe((req) => void openFile(req));
-    const offDiff = editorBus.subscribeDiff((req) => void openDiff(req));
+    // 使用 EditorGroup 專用 consumer：dockview 分頁被關閉後，第一次點檔會先重建 panel，
+    // consumer 掛載時再補收暫存請求，不再只顯示編輯器卻要點第二次才開檔。
+    const offFile = editorBus.subscribeEditor((req) => void openFile(req));
+    const offDiff = editorBus.subscribeEditorDiff((req) => void openDiff(req));
     return () => {
       offFile();
       offDiff();

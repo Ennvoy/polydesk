@@ -247,7 +247,9 @@ export function DockLayout(): React.JSX.Element {
       try {
         const p = api.getPanel(EDITOR_ID);
         if (!p) {
-          addEditor(api); // panel 不存在（legacy/壞檔還原殘局）→ 重建；本次請求無從投遞，下次點擊即正常
+          // panel 不存在（使用者按 dock tab 的 ×、legacy/壞檔還原殘局）→ 重建；editorBus 會暫存
+          // 本次請求，待新 EditorGroup consumer 掛載後補送，第一次點擊即可真正開檔。
+          addEditor(api);
         } else {
           p.api.group.api.setVisible(true);
           if (p.api.group.activePanel?.id !== EDITOR_ID) p.api.setActive();
