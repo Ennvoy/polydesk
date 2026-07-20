@@ -17,7 +17,7 @@ import {
 } from 'node:child_process';
 import { shell, type IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
-import type { GitStatus, GitChange, GitLogEntry, GitLogRef, GitWorktree, GitCloneInput, GitCloneResult, GitCloneErrorCode, GitPublishInput, GitPublishResult, GitPushErrorCode } from '../../shared/types';
+import type { GitStatus, GitChange, GitLogEntry, GitLogRef, GitWorktree, GitCloneInput, GitCloneResult, GitCloneErrorCode, GitHubLoginResult, GitPublishInput, GitPublishResult, GitPushErrorCode } from '../../shared/types';
 import type { InvokeReq } from '../../shared/ipc';
 import { GIT_CLONE_TIMEOUT_MS, GIT_LOCAL_TIMEOUT_MS, GIT_NETWORK_TIMEOUT_MS } from '../../shared/constants';
 import {
@@ -34,7 +34,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { realpathSync, existsSync, rmSync, statSync } from 'node:fs';
 import { join as pathJoin, resolve as pathResolve, dirname as pathDirname } from 'node:path';
 import { validateWorktreeTarget, resolveTargetPath } from './worktreePath';
-import { cloneDirectoryNameError, cloneUrlError } from '../../shared/gitClone';
+import { cloneDirectoryNameError, cloneUrlError, isGitHubHttpsCloneUrl } from '../../shared/gitClone';
 import { publishRepoNameError } from '../../shared/gitPublish';
 import { classifyPushError, classifyGhError, isNoUpstreamError } from './gitErrorClassify';
 
@@ -570,6 +570,30 @@ export class GitService {
     return this.runBin(process.env.POLYDESK_GH_BIN ?? 'gh', args, { cwd, env: networkEnv(), timeoutMs });
   }
 
+  /** GitHub 官方 device flow：瀏覽器登入並把一次性 code 複製到剪貼簿；Token 由 gh 保管。 */
+  async loginGitHub(): Promise<GitHubLoginResult> {
+    const cwd = process.cwd();
+    try {
+      await this.runGh(['--version'], cwd, GIT_LOCAL_TIMEOUT_MS);
+    } catch {
+      return { error: '找不到 GitHub CLI（gh）。請先安裝（winget install GitHub.cli）並重新啟動 Polydesk。', code: 'gh-not-found' };
+    }
+    try {
+      await this.runGh(
+        ['auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web', '--clipboard'],
+        cwd,
+        GIT_CLONE_TIMEOUT_MS,
+      );
+      return { ok: true };
+    } catch (e) {
+      const timedOut = e instanceof GitError && e.timedOut;
+      return {
+        error: timedOut ? 'GitHub 登入逾時（超過五分鐘），請重新嘗試。' : errMsg(e, 'GitHub 登入失敗'),
+        code: timedOut ? 'timeout' : 'failed',
+      };
+    }
+  }
+
   /** REQ-SCM-007：pull。 */
   async pull(wsId: string): Promise<{ ok: true } | { error: string }> {
     return this.network(wsId, ['pull'], '拉取');
@@ -779,17 +803,35 @@ export class GitService {
     }
     if (existsSync(target)) return { error: `目標資料夾已存在：${target}`, code: 'target-exists' };
 
+    const isGitHubHttps = isGitHubHttpsCloneUrl(url);
+    let useGitHubAccount = false;
+    if (isGitHubHttps) {
+      try {
+        await this.runGh(['auth', 'status', '--hostname', 'github.com'], parentAbs, GIT_NETWORK_TIMEOUT_MS);
+        useGitHubAccount = true;
+      } catch {
+        // gh 未安裝／未登入時仍先走 git：公開 repository 不應被強迫登入。
+      }
+    }
+
     try {
-      await this.run(['clone', '--', url, target], {
-        cwd: parentAbs,
-        env: networkEnv(),
-        timeoutMs: GIT_CLONE_TIMEOUT_MS,
-      });
+      if (useGitHubAccount) {
+        // --no-upstream 保持與原生 git clone 一致，不替 fork 額外新增 upstream remote。
+        await this.runGh(['repo', 'clone', url, target, '--no-upstream'], parentAbs, GIT_CLONE_TIMEOUT_MS);
+      } else {
+        await this.run(['clone', '--', url, target], {
+          cwd: parentAbs,
+          env: networkEnv(),
+          timeoutMs: GIT_CLONE_TIMEOUT_MS,
+        });
+      }
     } catch (e) {
       const message = errMsg(e, 'Git Clone 失敗');
       let code: GitCloneErrorCode = 'failed';
       if (e instanceof GitError && e.timedOut) code = 'timeout';
-      else if (/authentication failed|permission denied|publickey|could not read username|access denied|repository not found/i.test(message)) code = 'auth';
+      else if (/authentication failed|permission denied|publickey|could not read username|access denied|repository not found/i.test(message)) {
+        code = isGitHubHttps ? 'github-login-required' : 'auth';
+      }
       else if (/could not resolve host|failed to connect|connection (?:timed out|refused)|network is unreachable|unable to access/i.test(message)) code = 'network';
       else if (/enoent|not recognized|not found/i.test(message) && /git/i.test(message)) code = 'git-not-found';
       return { error: message, code };
@@ -1064,6 +1106,7 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
   ipc.handle('git:clone', (_e, req: InvokeReq<'git:clone'>) =>
     enqueue(`clone:${pathResolve(req?.parentPath ?? '', req?.directoryName ?? '')}`, () => svc.clone(req)),
   );
+  ipc.handle('git:loginGitHub', () => enqueue('github:login', () => svc.loginGitHub()));
   ipc.handle('git:publishGitHub', (_e, req: InvokeReq<'git:publishGitHub'>) =>
     enqueue(req.wsId, () => svc.publishGitHub(req)),
   );

@@ -44,6 +44,7 @@ export const INVOKE_CHANNELS = [
   'git:stash',
   'git:init',
   'git:clone',
+  'git:loginGitHub',
   'git:publishGitHub',
   'git:worktreeList',
   'git:worktreeAdd',

@@ -33,6 +33,16 @@ export function cloneUrlError(raw: string): string | null {
   }
 }
 
+/** GitHub HTTPS URL 才能安全切到 gh 的帳號認證流程；SSH 與其他 host 維持原生 Git。 */
+export function isGitHubHttpsCloneUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw.trim());
+    return url.protocol === 'https:' && url.hostname.toLowerCase() === 'github.com';
+  } catch {
+    return false;
+  }
+}
+
 /** 從 URL 推導預設資料夾名；無法推導時回空字串，交由使用者填寫。 */
 export function cloneDirectoryNameFromUrl(raw: string): string {
   const value = raw.trim().replace(/[?#].*$/, '').replace(/[\\/]+$/, '');

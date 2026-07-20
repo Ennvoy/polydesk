@@ -14,6 +14,7 @@ export function CloneRepositoryDialog({ onResult }: { onResult: (wsId: string | 
   const [trusted, setTrusted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsGitHubLogin, setNeedsGitHubLogin] = useState(false);
 
   const urlProblem = url ? cloneUrlError(url) : null;
   const nameProblem = directoryName ? cloneDirectoryNameError(directoryName) : null;
@@ -32,11 +33,15 @@ export function CloneRepositoryDialog({ onResult }: { onResult: (wsId: string | 
     }
     setSubmitting(true);
     setError(null);
+    setNeedsGitHubLogin(false);
     try {
       const res = await ipc.git.clone({ url, parentPath, directoryName });
       if ('error' in res) {
+        if (res.code === 'github-login-required') setNeedsGitHubLogin(true);
         const prefix =
-          res.code === 'auth'
+          res.code === 'github-login-required'
+            ? '這可能是 GitHub 私有 Repository。請先登入有權限的 GitHub 帳號，再自動重試 Clone。'
+            : res.code === 'auth'
             ? '認證失敗。請確認 Git Credential Manager 或 SSH 金鑰可用。'
             : res.code === 'network'
               ? '網路連線失敗。請確認網路、VPN 或代理伺服器設定。'
@@ -53,6 +58,23 @@ export function CloneRepositoryDialog({ onResult }: { onResult: (wsId: string | 
       onResult(res.wsId);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Clone 失敗。');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const loginAndRetry = async (): Promise<void> => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await ipc.git.loginGitHub();
+      if ('error' in result) {
+        setError(result.error);
+        return;
+      }
+      await submit();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'GitHub 登入失敗。');
     } finally {
       setSubmitting(false);
     }
@@ -78,11 +100,12 @@ export function CloneRepositoryDialog({ onResult }: { onResult: (wsId: string | 
             const next = e.target.value;
             setUrl(next);
             setError(null);
+            setNeedsGitHubLogin(false);
             if (!nameEdited) setDirectoryName(cloneDirectoryNameFromUrl(next));
           }}
         />
         <p style={{ margin: '4px 0 0', fontSize: 'var(--text-xs)', color: 'var(--meta)', lineHeight: 1.5 }}>
-          支援 HTTPS、SSH 與 git@host:path；認證使用既有 Git Credential Manager 或 SSH 設定。
+          支援 HTTPS、SSH 與 git@host:path；GitHub 私有 Repository 可用瀏覽器登入，其他主機沿用 Git Credential Manager 或 SSH 設定。
         </p>
       </Field>
 
@@ -138,6 +161,11 @@ export function CloneRepositoryDialog({ onResult }: { onResult: (wsId: string | 
         <p role="alert" style={{ margin: '14px 0 0', color: 'var(--danger)', fontSize: 'var(--text-sm)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
           {neutralizeBidi(error)}
         </p>
+      )}
+      {needsGitHubLogin && !submitting && (
+        <button className="pd-btn" onClick={() => void loginAndRetry()} aria-label="登入 GitHub 並重試 Clone" style={{ marginTop: 10 }}>
+          使用瀏覽器登入 GitHub 並重試
+        </button>
       )}
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>

@@ -7,6 +7,17 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.5.0（2026-07-20）
+
+GitHub 私有倉庫 Clone 批次：已有 `gh` 登入狀態時直接沿用帳號權限；未登入時提供瀏覽器登入並自動重試，不再只顯示 Git Credential Manager／SSH 的泛用錯誤。
+
+### 2026-07-20｜GitHub 私有 Repository 登入與 Clone
+
+- Clone GitHub HTTPS URL 前會檢查 GitHub CLI 登入狀態；已登入時改由 `gh repo clone` 使用帳號權限，並關閉 fork 自動新增 upstream，保持原本 `git clone` 行為。
+- 未登入或未安裝 `gh` 時仍先以原生 Git Clone，確保公開倉庫不被強迫登入；只有 GitHub 認證失敗時才顯示「使用瀏覽器登入 GitHub 並重試」。
+- 登入採 `gh auth login --web --clipboard` 官方 device flow，一次性 code 自動複製到剪貼簿，Token 由系統憑證庫保管，Polydesk 不讀取、不儲存，也不把憑證放進 URL 或程序參數。
+- 新增 GitHub URL 分流、既有登入 Clone、瀏覽器登入參數與缺少權限分類回歸測試；typecheck、517 案 Vitest、正式 build 與工作區 E2E 4 案通過。
+
 ## v0.4.0（2026-07-15）
 
 未拉取可視化批次：遠端有新 commit 不再無感——SCM 以事件驅動 fetch（⟳ 重新整理與切工作區觸發、不背景輪詢）更新遠端狀態，同步列與 pull 鈕出現「↓N 未拉取」數字提示。v0.4.0 tag 打在本版收尾提交。

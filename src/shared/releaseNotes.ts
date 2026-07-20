@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.5.0',
+    date: '2026-07-20',
+    highlights: [
+      'GitHub 私有 Repository Clone：已登入 gh 時直接沿用 GitHub 帳號權限，不再只依賴 Git Credential Manager',
+      '尚未登入時提供「使用瀏覽器登入 GitHub 並重試」，OAuth code 自動複製到剪貼簿，完成後接續 Clone',
+      '認證仍由 GitHub CLI 與系統憑證庫保管；Polydesk 不讀取、不保存 Token，公開倉庫與 SSH 流程維持不變',
+    ],
+  },
+  {
     version: '0.4.0',
     date: '2026-07-15',
     highlights: [

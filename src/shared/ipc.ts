@@ -26,6 +26,7 @@ import type {
   ConflictInfo,
   GitCloneInput,
   GitCloneResult,
+  GitHubLoginResult,
   GitPublishInput,
   GitPublishResult,
   GitPushErrorCode,
@@ -112,6 +113,8 @@ export interface InvokeChannels {
   'git:init': { req: { wsId: string }; res: { ok: true } };
   /** Clone 成功後由 main 直接納管成工作區並回傳 wsId。 */
   'git:clone': { req: GitCloneInput; res: GitCloneResult };
+  /** 以 gh 官方瀏覽器流程登入 github.com；成功後可重試私有倉庫 Clone。 */
+  'git:loginGitHub': { req: void; res: GitHubLoginResult };
   // Git Worktree（REQ-WT，第二迭代）
   'git:worktreeList': { req: { wsId: string }; res: { list: GitWorktree[] } | { error: string } };
   'git:worktreeAdd': {

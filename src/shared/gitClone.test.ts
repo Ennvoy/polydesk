@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cloneDirectoryNameError, cloneDirectoryNameFromUrl, cloneUrlError } from './gitClone';
+import { cloneDirectoryNameError, cloneDirectoryNameFromUrl, cloneUrlError, isGitHubHttpsCloneUrl } from './gitClone';
 
 describe('git clone 輸入規則', () => {
   it('接受 HTTPS、SSH URL 與 scp-like SSH', () => {
@@ -14,6 +14,13 @@ describe('git clone 輸入規則', () => {
     expect(cloneUrlError('http://example.com/open/repo.git')).not.toBeNull();
     expect(cloneUrlError('git://example.com/open/repo.git')).not.toBeNull();
     expect(cloneUrlError('C:\\repo')).not.toBeNull();
+  });
+
+  it('只把 github.com HTTPS URL 導向 GitHub 帳號登入流程', () => {
+    expect(isGitHubHttpsCloneUrl('https://github.com/openai/codex.git')).toBe(true);
+    expect(isGitHubHttpsCloneUrl('https://GITHUB.COM/openai/codex')).toBe(true);
+    expect(isGitHubHttpsCloneUrl('git@github.com:openai/codex.git')).toBe(false);
+    expect(isGitHubHttpsCloneUrl('https://gitlab.com/openai/codex.git')).toBe(false);
   });
 
   it('從常見 URL 推導資料夾名稱', () => {

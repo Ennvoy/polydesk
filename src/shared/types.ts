@@ -72,6 +72,7 @@ export type GitCloneErrorCode =
   | 'invalid-name'
   | 'target-exists'
   | 'auth'
+  | 'github-login-required'
   | 'network'
   | 'timeout'
   | 'git-not-found'
@@ -79,6 +80,11 @@ export type GitCloneErrorCode =
 export type GitCloneResult =
   | { wsId: string; path: string }
   | { error: string; code: GitCloneErrorCode };
+
+/** GitHub CLI 瀏覽器登入；Token 由 gh 存入系統憑證庫，Polydesk 不接觸。 */
+export type GitHubLoginResult =
+  | { ok: true }
+  | { error: string; code: 'gh-not-found' | 'timeout' | 'failed' };
 
 /** 發佈到 GitHub（DF-12：gh CLI 建 repo＋加 remote＋push 一氣呵成；Polydesk 不碰 token）。 */
 export interface GitPublishInput {
