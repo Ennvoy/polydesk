@@ -147,6 +147,21 @@
   border-top: 1px solid var(--border);
 }
 
+/* AI CLI 快捷啟動：維持緊湊工具列，同時讓高風險的 Claude bypass 模式有明確視覺提示。 */
+.pd-term-ai-launchers {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.pd-term-ai-launch {
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.pd-term-ai-launch--claude {
+  color: var(--warning, #d99a2b);
+  border-color: color-mix(in oklab, var(--warning, #d99a2b), var(--border) 48%);
+}
+
 /* 拖曳分隔條：並排（左右）= 直立細條 col-resize；上下 = 橫向細條 row-resize。hover/拖曳時高亮。 */
 .pd-term-handle-h,
 .pd-term-handle-v {

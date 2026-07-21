@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.6.0',
+    date: '2026-07-21',
+    highlights: [
+      '終端機工具列新增 Claude bypass、Codex、Agy 三個快捷按鈕，一鍵建立獨立終端機並啟動對應 AI CLI',
+      '快捷終端機自動以工具名稱標示；啟動命令會等終端畫面完成掛載後送出，避免遺失 CLI 第一段輸出',
+      'Claude 快捷模式會略過所有權限確認，介面以警示色與說明明確標示，僅應用於完全信任的工作區',
+    ],
+  },
+  {
     version: '0.5.0',
     date: '2026-07-20',
     highlights: [

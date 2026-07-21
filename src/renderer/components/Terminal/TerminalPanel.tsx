@@ -47,6 +47,18 @@ const SHELLS: ShellKind[] = ['powershell', 'cmd', 'pwsh', 'gitbash', 'wsl'];
 
 type SplitDir = 'horizontal' | 'vertical';
 
+type AiLauncher = 'claude' | 'codex' | 'agy';
+
+const AI_LAUNCHERS: Record<AiLauncher, { label: string; command: string; title: string }> = {
+  claude: {
+    label: 'Claude bypass',
+    command: 'claude --dangerously-skip-permissions',
+    title: '開啟 Claude（bypass：略過所有權限確認，僅限信任的工作區）',
+  },
+  codex: { label: 'Codex', command: 'codex', title: '開啟 Codex' },
+  agy: { label: 'Agy', command: 'agy', title: '開啟 Agy' },
+};
+
 /**
  * 計算某工作區內每個終端機的顯示名稱：自訂名優先，否則 shell 名；同 shell 有 ≥2 個時附 1-based 序號
  * （依當前順序，故拖曳排序後序號跟著視覺順序走）。
@@ -75,6 +87,8 @@ export function TerminalPanel(): React.JSX.Element {
   const [dir, setDir] = useState<SplitDir>('horizontal'); // 並排（左右）預設；可切上下
   const listedWs = useRef<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  // AI 快捷啟動命令必須等 TerminalView 掛載並訂閱 PTY 輸出後才送，否則 CLI 的第一段畫面可能遺失。
+  const pendingLaunchesRef = useRef<Map<string, string>>(new Map());
 
   // 互動暫態
   const [showHideOpen, setShowHideOpen] = useState(false); // 顯示/隱藏複選清單開合
@@ -155,17 +169,35 @@ export function TerminalPanel(): React.JSX.Element {
     return () => document.removeEventListener('mousedown', onDown, true);
   }, [showHideOpen]);
 
-  const createTerm = useCallback(async (wsId: string, shell: ShellKind): Promise<void> => {
+  const createTerm = useCallback(async (
+    wsId: string,
+    shell: ShellKind,
+    launch?: { name: string; command: string },
+  ): Promise<void> => {
     setBusy(true);
     try {
       const { termId } = await ipc.pty.create({ wsId, shell });
-      setTerms((prev) => [...prev, { termId, wsId, shell, alive: true, exitCode: null }]);
+      if (launch) pendingLaunchesRef.current.set(termId, launch.command);
+      setTerms((prev) => [
+        ...prev,
+        { termId, wsId, shell, alive: true, exitCode: null, name: launch?.name },
+      ]);
     } catch {
       /* create 失敗（如非法 shell / 工作區）：不新增，狀態維持清楚 */
     } finally {
       setBusy(false);
     }
   }, []);
+
+  // React 會先掛載子層 TerminalView 的 effect，再執行此父層 effect；此時送命令可完整接住 CLI 初始輸出。
+  useEffect(() => {
+    for (const t of terms) {
+      const command = pendingLaunchesRef.current.get(t.termId);
+      if (!command) continue;
+      pendingLaunchesRef.current.delete(t.termId);
+      ipc.pty.write(t.termId, `${command}\r`);
+    }
+  }, [terms]);
 
   const closeTerm = useCallback(async (entry: TermEntry): Promise<void> => {
     await ipc.pty.close({ termId: entry.termId }).catch(() => undefined);
@@ -253,7 +285,7 @@ export function TerminalPanel(): React.JSX.Element {
 
   return (
     <div className="pd-term-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      {/* 工具列：N 個並排 / 並排⇄上下 / 顯示-隱藏 / shell 切換 / 新增 / 隱藏面板 */}
+      {/* 工具列：N 個並排 / 並排⇄上下 / 顯示-隱藏 / AI 快捷啟動 / shell 切換 / 新增 / 隱藏面板 */}
       <div
         className="pd-panel-header"
         style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', textTransform: 'none' }}
@@ -316,6 +348,25 @@ export function TerminalPanel(): React.JSX.Element {
                   </>
                 )}
               </div>
+            )}
+          </div>
+
+          <div className="pd-term-ai-launchers" aria-label="AI CLI 快捷啟動">
+            {(Object.entries(AI_LAUNCHERS) as [AiLauncher, (typeof AI_LAUNCHERS)[AiLauncher]][]).map(
+              ([tool, launcher]) => (
+                <button
+                  key={tool}
+                  className={`pd-btn pd-term-ai-launch pd-term-ai-launch--${tool}`}
+                  aria-label={`開啟 ${launcher.label}`}
+                  title={launcher.title}
+                  disabled={busy}
+                  onClick={() =>
+                    void createTerm(activeWs.id, newShell, { name: launcher.label, command: launcher.command })
+                  }
+                >
+                  {launcher.label}
+                </button>
+              ),
             )}
           </div>
 

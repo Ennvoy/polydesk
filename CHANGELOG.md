@@ -7,6 +7,17 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.6.0（2026-07-21）
+
+AI CLI 快捷啟動批次：終端機面板直接提供 Claude bypass、Codex、Agy 三個入口，不必先新增終端機再手動輸入啟動文字。
+
+### 2026-07-21｜終端機 AI CLI 一鍵啟動
+
+- 點擊任一快捷按鈕會沿用目前選定的 shell 建立獨立終端機，自動命名為對應工具，並送出 `claude --dangerously-skip-permissions`、`codex` 或 `agy`。
+- 啟動命令會等待 TerminalView 掛載並開始接收 PTY 資料後才送出，避免快速啟動的 CLI 第一段輸出在畫面訂閱完成前遺失。
+- Claude 按鈕明確標示 `bypass` 並使用警示色與風險說明；此模式略過所有權限確認，只適合完全信任的工作區。
+- 新增真實 Electron／PowerShell E2E：以隔離暫存 PATH 的假 CLI 驗證三個按鈕、終端命名、真 PTY 命令執行與 Claude bypass 參數；既有終端管理 5 案亦全數通過。
+
 ## v0.5.0（2026-07-20）
 
 GitHub 私有倉庫 Clone 批次：已有 `gh` 登入狀態時直接沿用帳號權限；未登入時提供瀏覽器登入並自動重試，不再只顯示 Git Credential Manager／SSH 的泛用錯誤。
