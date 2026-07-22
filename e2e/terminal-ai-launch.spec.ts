@@ -72,6 +72,11 @@ test('Claude bypass / Codex / Agy 按鈕會各開終端機並送出對應命令'
   expect(claudeCols).not.toBeNull();
   expect(claudeBuffer).toContain(`FAKE_CLAUDE_COLS:${claudeCols}`);
 
+  // 首屏穩定窗回歸（DF-19）：命令送出後的短窗內欄數不得再變——遲到的 resize（版面收斂尾巴、
+  // 字型載入改格寬、失敗補送）撞上 TUI 靜態歡迎橫幅繪製，就是「偶發首屏殘影跑版」的病根。
+  await page.waitForTimeout(600);
+  expect(await readTermCols(page, 0)).toBe(claudeCols);
+
   // 啟動後再改版面寬度：xterm 必須重新 fit，後續 shell 程序看到的 ConPTY 欄數也要一致。
   // 這條會抓出「renderer 已改 cols，但 main resize 失敗後沒有重試」造成的靜止畫面永久跑版。
   await page.getByRole('button', { name: '切換工作區列顯示' }).click();

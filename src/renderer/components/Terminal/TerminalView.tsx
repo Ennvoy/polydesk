@@ -49,7 +49,7 @@ interface Props {
   /** 非 null 表示該程序已結束（顯示 exit overlay + 重啟）。 */
   exitCode: number | null;
   onRestart: () => void;
-  /** 首次有效 fit 已同步到 PTY；快捷啟動器用此時機才送出 TUI 命令。 */
+  /** 首次有效 fit 已同步到 PTY 且尺寸靜置穩定（含字型就緒）；快捷啟動器用此時機才送出 TUI 命令。 */
   onInitialSizeReady?: (termId: string) => void;
 }
 
@@ -63,6 +63,11 @@ const RESIZE_TOLERANCE_PX = 24;
 // workflow/TUI 持續輸出期間的尺寸自癒節流（ms）。ResizeObserver 與 focusin 可能都不再觸發，
 // 但 ConPTY 曾短暫 resize 失敗或漂移時，仍要靠後續輸出把 xterm 的真實尺寸補送回去。
 const OUTPUT_SIZE_HEAL_MS = 500;
+// 首屏尺寸穩定窗（ms）：首次 resize 確認後，掛載頭一秒內仍可能再變一次尺寸（版面收斂尾巴、
+// 字型載入改變格寬、resize 失敗 350ms 補送）；遲到的 resize 撞上 Claude 等 TUI 繪製「靜態」
+// 歡迎橫幅，橫幅就以舊寬度定格成殘影（動態區會重畫、靜態區不會，dogfood 截圖鐵證）。
+// 故尺寸確認套用後須靜置此窗無再變動，才通知快捷啟動器送命令；有新確認則重新計時。
+const INITIAL_SIZE_STABLE_MS = 250;
 
 // 淺色/暖色主題的終端機 ANSI 16 色（深色系，淺背景可讀）。xterm 內建 ANSI 是為深背景設計的「亮色」，
 // 在淺/暖背景（--bg 淺）上對比極差 → Claude Code 等 TUI 的彩色輸出（含它畫的選項/標題）難瀏覽。
@@ -129,6 +134,10 @@ export function TerminalView({
   // callback 走 ref，避免父層 render 產生的新函式讓主 effect dispose / 重建整個 xterm。
   const onInitialSizeReadyRef = useRef(onInitialSizeReady);
   onInitialSizeReadyRef.current = onInitialSizeReady;
+  // 字型就緒旗標：fonts.load 完成前格子寬度是後備字型量的、cols 不可信——首屏穩定窗要等它
+  // 才起算（字型 effect 載完會再 fit 一次、觸發新的尺寸確認）。document.fonts 是全域快取，
+  // 後續終端機的 load 會立即 resolve，不會白等。
+  const fontReadyRef = useRef(false);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -240,7 +249,28 @@ export function TerminalView({
     // （漂移＝claude 等 TUI 把底部 UI 畫在不存在的列上、滾也滾不出來，dogfood 回報）。
     let fitRetryTimer: ReturnType<typeof setTimeout> | null = null;
     let initialSizeReady = false;
-    let initialSizeSyncing = false;
+    // 首屏穩定窗（INITIAL_SIZE_STABLE_MS）：新尺寸確認重新計時；「同尺寸」重複確認不重置倒數，
+    // 否則 focusin 等重複 fit 會讓穩定永遠到不了。倒數到點再對一次當下欄列，期間變了就等下一輪。
+    let initialReadyTimer: ReturnType<typeof setTimeout> | null = null;
+    let armedCols = -1;
+    let armedRows = -1;
+    const armInitialReady = (cols: number, rows: number): void => {
+      if (initialSizeReady) return;
+      if (initialReadyTimer) {
+        if (cols === armedCols && rows === armedRows) return;
+        clearTimeout(initialReadyTimer);
+      }
+      armedCols = cols;
+      armedRows = rows;
+      initialReadyTimer = setTimeout(() => {
+        initialReadyTimer = null;
+        if (disposed || initialSizeReady) return;
+        if (term.cols !== cols || term.rows !== rows) return; // 倒數中又變了：等下一次確認重新起算
+        initialSizeReady = true;
+        host.dataset.initialSizeReady = 'true';
+        onInitialSizeReadyRef.current?.(termId);
+      }, INITIAL_SIZE_STABLE_MS);
+    };
     const scheduleFitRetry = (): void => {
       if (fitRetryTimer) return; // single-flight
       fitRetryTimer = setTimeout(() => {
@@ -263,44 +293,26 @@ export function TerminalView({
         // 記下這次 fit 的 host 尺寸：供 ResizeObserver 反震盪比對（即使 cols 未變也更新基準）。
         lastFitBoxRef.current = { w: h.offsetWidth, h: h.offsetHeight };
         const requestedSize = { cols: term.cols, rows: term.rows };
-        const sizeSync = ipc.pty.resize({ termId, ...requestedSize });
-        if (!initialSizeReady && !initialSizeSyncing) {
-          initialSizeSyncing = true;
-          void sizeSync
-            .then((result) => {
-              if (disposed) return;
-              if (
-                !result.applied ||
-                result.cols !== requestedSize.cols ||
-                result.rows !== requestedSize.rows
-              ) {
-                initialSizeSyncing = false;
-                scheduleFitRetry();
-                return;
-              }
-              initialSizeReady = true;
-              initialSizeSyncing = false;
-              host.dataset.initialSizeReady = 'true';
-              onInitialSizeReadyRef.current?.(termId);
-            })
-            .catch(() => {
-              initialSizeSyncing = false;
+        void ipc.pty
+          .resize({ termId, ...requestedSize })
+          .then((result) => {
+            if (disposed) return;
+            if (
+              !result.applied ||
+              result.cols !== requestedSize.cols ||
+              result.rows !== requestedSize.rows
+            ) {
               scheduleFitRetry();
-            });
-        } else {
-          void sizeSync
-            .then((result) => {
-              if (
-                !disposed &&
-                (!result.applied ||
-                  result.cols !== requestedSize.cols ||
-                  result.rows !== requestedSize.rows)
-              ) {
-                scheduleFitRetry();
-              }
-            })
-            .catch(scheduleFitRetry);
-        }
+              return;
+            }
+            // 確認套用後才起算首屏穩定窗；字型就緒前 cols 不可信、不起算（字型載完會再 fit 一次）。
+            if (!initialSizeReady && fontReadyRef.current) {
+              armInitialReady(requestedSize.cols, requestedSize.rows);
+            }
+          })
+          .catch(() => {
+            if (!disposed) scheduleFitRetry();
+          });
       } catch {
         /* 尺寸尚未就緒：略過本次 */
       }
@@ -538,6 +550,7 @@ export function TerminalView({
       cancelAnimationFrame(raf);
       if (fitTimer) clearTimeout(fitTimer);
       if (fitRetryTimer) clearTimeout(fitRetryTimer);
+      if (initialReadyTimer) clearTimeout(initialReadyTimer);
       if (outputSizeHealTimer) clearTimeout(outputSizeHealTimer);
       themeObserver.disconnect();
       ro.disconnect();
@@ -568,6 +581,7 @@ export function TerminalView({
     const term = termRef.current;
     if (!term) return;
     const apply = (): void => {
+      fontReadyRef.current = true; // 字型決議已定（載入成功或後備皆算）：首屏穩定窗可起算
       term.options.fontFamily = buildTerminalFontFamily(font.family);
       term.options.fontSize = clampTerminalFontSize(font.size);
       fitNowRef.current(); // 走同一條 safeFit（含極窄寬守衛）

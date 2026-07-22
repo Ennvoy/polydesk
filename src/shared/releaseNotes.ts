@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.8.0',
+    date: '2026-07-22',
+    highlights: [
+      '修正 Claude bypass 偶發首屏歡迎橫幅殘影：啟動命令改等終端尺寸「靜置穩定」後才送出',
+      '尺寸確認後若版面收斂、字型載入或失敗補送又改了欄寬會重新計時，確保 TUI 首屏用最終尺寸繪製',
+      '快捷啟動約慢 0.25 秒換取首屏穩定；手動終端機與後續版面調整行為不變',
+    ],
+  },
+  {
     version: '0.7.0',
     date: '2026-07-22',
     highlights: [

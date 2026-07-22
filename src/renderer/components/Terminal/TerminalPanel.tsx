@@ -87,8 +87,9 @@ export function TerminalPanel(): React.JSX.Element {
   const [dir, setDir] = useState<SplitDir>('horizontal'); // 並排（左右）預設；可切上下
   const listedWs = useRef<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-  // AI 快捷啟動命令必須等 TerminalView 完成首次有效 fit 並把尺寸同步到 PTY 後才送；
-  // 否則 Claude 等 TUI 會先按 ConPTY 預設 80x24 排版，再切到實際尺寸而造成首屏跑版。
+  // AI 快捷啟動命令必須等 TerminalView 完成首次有效 fit、尺寸同步到 PTY 且「靜置穩定」後才送；
+  // 否則 Claude 等 TUI 會按 ConPTY 預設 80x24 或收斂前的中間尺寸繪製靜態歡迎橫幅，遲到的
+  // resize 會把橫幅定格成殘影（動態區會重畫、靜態區不會）。穩定窗實作在 TerminalView。
   const pendingLaunchesRef = useRef<Map<string, string>>(new Map());
 
   // 互動暫態
