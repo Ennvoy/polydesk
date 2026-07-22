@@ -11,6 +11,14 @@
 
 AI CLI 快捷啟動批次：終端機面板直接提供 Claude bypass、Codex、Agy 三個入口，不必先新增終端機再手動輸入啟動文字。
 
+### 2026-07-22｜加速 SCM 讀取與分支切換
+
+- SCM 改用單次 `git:snapshot` 同時取得分支狀態與變更清單；活動列、底部狀態列與 SCM 面板的同工作區並行讀取再以 single-flight 合併，不再各自把重複的 `git status` 塞進序列佇列。
+- 自動／手動 fetch 直接沿用最新快照判斷 remote，不再為判斷是否需要 fetch 額外掃描一次工作樹；背景狀態探測取得的快照也直接更新畫面，不再偵測到變動後重查。
+- 分支清單由三個 Git 程序合併成單一 `for-each-ref`，一次取得本地、遠端與目前分支；成功 checkout 後直接以新快照更新目前分支，不再追加整份 branch list 查詢。
+- 實測問題工作區只有 292 個追蹤檔案，但單次 Git 程序在目前 Windows 環境仍需約 1–4 秒，因此本修正以減少程序數與佇列等待為主，不透過忽略 `.flow` 等變更犧牲正確性。
+- 驗證包含 snapshot／single-flight／branch list 指令數回歸、完整 Vitest 60 檔 525 案、typecheck、正式 build，以及真 Electron 的 SCM 徽章與 dirty／untracked 分支切換共 5 案。
+
 ### 2026-07-22｜終端機檔案路徑可直接開啟
 
 - 終端機輸出的 Windows 絕對路徑、`~\...`、工作區相對路徑及 `path:line:column` 現在會顯示為可互動連結；按住 `Ctrl` 點擊後，工作區內檔案會在 Polydesk 編輯器開啟並跳到指定行欄。

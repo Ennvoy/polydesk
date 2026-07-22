@@ -4,6 +4,7 @@
 import React from 'react';
 import { appStore, useAppState, type ActivityView } from '../state/appStore';
 import { ipc } from '../ipc/client';
+import { loadGitSnapshot } from '../state/gitSnapshot';
 import { dialog } from './Dialogs/host';
 import { SettingsPanel } from './Settings/SettingsPanel';
 
@@ -89,9 +90,8 @@ export function ActivityBar(): React.JSX.Element {
         return;
       }
       const gen = ++generation;
-      void ipc.git
-        .status({ wsId: activeWorkspaceId })
-        .then((status) => {
+      void loadGitSnapshot(activeWorkspaceId)
+        .then(({ status }) => {
           if (alive && gen === generation) setScmChangeCount(status.isRepo ? status.changedCount : 0);
         })
         .catch(() => {

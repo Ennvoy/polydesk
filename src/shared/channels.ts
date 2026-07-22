@@ -28,6 +28,7 @@ export const INVOKE_CHANNELS = [
   'fs:readImage',
   'fs:reveal',
   'editor:setTextFocus',
+  'git:snapshot',
   'git:status',
   'git:changes',
   'git:diff',

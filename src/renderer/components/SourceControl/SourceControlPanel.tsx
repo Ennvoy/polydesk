@@ -1,5 +1,5 @@
 // 原始碼控制面板（REQ-SCM-001~009、REQ-MON-003、REQ-E2E-003）。
-// 讀 activeWorkspace → git:status/changes；非 repo → git init；變更樹 stage/unstage；commit/push/pull；
+// 讀 activeWorkspace → git:snapshot；非 repo → git init；變更樹 stage/unstage；commit/push/pull；
 // 分支切換/建立；歷史；stash。點檔開 monaco diff。操作進行中顯示「進行中」、失敗顯示明確錯誤。
 // 全用既有 pd-* class + var(--*) token + scm.css；每互動元素具 aria-label 與微狀態。
 
@@ -9,6 +9,7 @@ import { useAppState } from '../../state/appStore';
 import { dialog } from '../Dialogs/host';
 import { editorBus } from '../../state/editorBus';
 import { appStore } from '../../state/appStore';
+import { loadGitSnapshot } from '../../state/gitSnapshot';
 import { WorktreePanel } from '../Worktree/WorktreePanel';
 import { PublishGitHubDialog } from './PublishGitHubDialog';
 import { CreateWorktreeDialog } from '../Worktree/CreateWorktreeDialog';
@@ -190,18 +191,18 @@ export function SourceControlPanel(): React.JSX.Element {
     const gen = ++loadGen.current;
     if (!wsId) {
       setStatus(null);
+      statusRef.current = null;
       setChanges([]);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const st = await ipc.git.status({ wsId });
+      const snapshot = await loadGitSnapshot(wsId);
       if (gen !== loadGen.current) return; // 期間又切了工作區：丟棄 stale
-      setStatus(st);
-      const ch = st.isRepo ? await ipc.git.changes({ wsId }) : [];
-      if (gen !== loadGen.current) return;
-      setChanges(ch);
+      statusRef.current = snapshot.status;
+      setStatus(snapshot.status);
+      setChanges(snapshot.status.isRepo ? snapshot.changes : []);
     } catch (e) {
       if (gen === loadGen.current) setError(errText(e));
     } finally {
@@ -219,7 +220,8 @@ export function SourceControlPanel(): React.JSX.Element {
     async (manual: boolean): Promise<void> => {
       if (!wsId) return;
       try {
-        const st = await ipc.git.status({ wsId });
+        const st = statusRef.current;
+        if (!st) return;
         if (!st.isRepo || st.hasRemote === false) return;
         if (!manual && !shouldAutoFetch(autoFetchAt, wsId, Date.now(), FETCH_COOLDOWN_MS)) return;
         setFetching(true);
@@ -296,9 +298,13 @@ export function SourceControlPanel(): React.JSX.Element {
       }
       checking = true;
       try {
-        const next = await ipc.git.status({ wsId });
+        const next = await loadGitSnapshot(wsId);
         const current = statusRef.current;
-        if (!stopped && current && !sameGitStatus(current, next)) await refresh();
+        if (!stopped && current && !sameGitStatus(current, next.status)) {
+          statusRef.current = next.status;
+          setStatus(next.status);
+          setChanges(next.status.isRepo ? next.changes : []);
+        }
       } catch {
         // 背景探測失敗不覆蓋面板既有資料；使用者手動刷新時仍會看到正式錯誤。
       } finally {
@@ -515,8 +521,7 @@ export function SourceControlPanel(): React.JSX.Element {
         }
       }
       await refresh();
-      const r = await ipc.git.branch({ wsId, op: 'list' });
-      if ('branches' in r) setBranches({ list: r.branches, current: r.current });
+      setBranches((prev) => ({ ...prev, current: statusRef.current?.branch ?? name }));
     });
 
   /**
@@ -753,9 +758,8 @@ export function SourceControlPanel(): React.JSX.Element {
             aria-label={loading || fetching ? '讀取中' : '重新整理'}
             title={fetching ? '取回遠端狀態中…' : loading ? '讀取中…' : '重新整理（含取回遠端狀態）'}
             onClick={() => {
-              // PE-4：本地刷新先行不等網路，fetch 綠了自己再補一次 refresh。
-              void refresh();
-              void fetchRemote(true);
+              // 先以單次 snapshot 更新本地狀態，再依最新 hasRemote 決定是否 fetch；成功後補一次快照。
+              void refresh().then(() => fetchRemote(true));
             }}
             disabled={busy}
           >

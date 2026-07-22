@@ -15,6 +15,7 @@ import { railBus } from './state/railBus';
 import { appStore, useAppState } from './state/appStore';
 import { useClaudeCounts } from './state/claudeCounts';
 import { ipc } from './ipc/client';
+import { loadGitSnapshot } from './state/gitSnapshot';
 import type { GitStatus } from '../shared/types';
 import { APP_VERSION } from '../shared/releaseNotes';
 
@@ -24,10 +25,9 @@ function StatusBarBranch({ wsId }: { wsId: string }): React.JSX.Element | null {
   React.useEffect(() => {
     let alive = true;
     const load = (): void => {
-      void ipc.git
-        .status({ wsId })
-        .then((s) => {
-          if (alive) setSt(s);
+      void loadGitSnapshot(wsId)
+        .then(({ status }) => {
+          if (alive) setSt(status);
         })
         .catch(() => {
           if (alive) setSt(null);

@@ -8,6 +8,7 @@ import type {
   AiTool,
   GitStatus,
   GitChange,
+  GitSnapshot,
   GitLogEntry,
   GitWorktree,
   TermState,
@@ -90,6 +91,8 @@ export interface InvokeChannels {
   /** 同步 main 端的 Monaco 文字焦點，供 before-input-event 精準攔截 Ctrl/Cmd+V。 */
   'editor:setTextFocus': { req: { focused: boolean }; res: { ok: true } };
   // git
+  /** SCM 完整快照：一次 porcelain 同時回傳 status 與 changes，避免重複掃描工作樹。 */
+  'git:snapshot': { req: { wsId: string }; res: GitSnapshot };
   'git:status': { req: { wsId: string }; res: GitStatus };
   'git:changes': { req: { wsId: string }; res: GitChange[] };
   'git:diff': { req: { wsId: string; path: string; staged: boolean }; res: { patch: string } };

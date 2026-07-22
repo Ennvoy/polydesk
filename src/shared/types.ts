@@ -141,6 +141,11 @@ export interface GitChange {
   status: 'M' | 'A' | 'D' | 'R' | 'U' | '?';
   staged: boolean;
 }
+/** SCM 一次讀取的完整快照；status 與 changes 來自同一份 porcelain 輸出。 */
+export interface GitSnapshot {
+  status: GitStatus;
+  changes: GitChange[];
+}
 /** commit 上的 ref 裝飾（線圖徽章：本地/遠端分支位置、tag、分離 HEAD，like VSCode Graph）。 */
 export interface GitLogRef {
   /** 顯示名：main、origin/main、v1.0、HEAD（detached）。 */

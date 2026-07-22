@@ -75,6 +75,22 @@ describe('GitService（真 git）', () => {
     expect(ch.some((c) => c.path === 'a.txt' && c.status === '?' && !c.staged)).toBe(true);
   });
 
+  it('snapshot 只執行一次 status 並同時回傳狀態與變更', async () => {
+    initRepo(ctx.repo);
+    writeFileSync(join(ctx.repo, 'a.txt'), 'hello');
+    const calls: string[][] = [];
+    const exec: GitExecFn = (file, args, options, cb) => {
+      calls.push([...args]);
+      return execFile(file, args, options, cb);
+    };
+    const svc = new GitService(ctx.mgr, exec);
+    const snapshot = await svc.snapshot(ctx.wsId);
+
+    expect(snapshot.status.changedCount).toBe(1);
+    expect(snapshot.changes).toContainEqual({ path: 'a.txt', status: '?', staged: false });
+    expect(calls.filter((args) => args.includes('status'))).toHaveLength(1);
+  });
+
   it('stage → commit → status changedCount 歸零，commit 回 hash', async () => {
     initRepo(ctx.repo);
     writeFileSync(join(ctx.repo, 'a.txt'), 'hello');
@@ -150,6 +166,30 @@ describe('GitService（真 git）', () => {
     expect(r.branches).toContain('feature/x');
     expect(r.branches).toContain('main');
     expect(r.current).toBe('main');
+  });
+
+  it('branch list 以單一 for-each-ref 同時取得本地、遠端與目前分支', async () => {
+    initRepo(ctx.repo);
+    writeFileSync(join(ctx.repo, 'a.txt'), 'x');
+    const seed = new GitService(ctx.mgr);
+    await seed.stage(ctx.wsId, ['a.txt'], true);
+    await seed.commit(ctx.wsId, 'init');
+    execFileSync('git', ['branch', 'feature'], { cwd: ctx.repo, stdio: 'pipe' });
+    execFileSync('git', ['update-ref', 'refs/remotes/origin/main', 'HEAD'], { cwd: ctx.repo, stdio: 'pipe' });
+
+    const calls: string[][] = [];
+    const exec: GitExecFn = (file, args, options, cb) => {
+      calls.push([...args]);
+      return execFile(file, args, options, cb);
+    };
+    const result = await new GitService(ctx.mgr, exec).branch(ctx.wsId, 'list');
+    if (!('branches' in result)) throw new Error('expected list result');
+
+    expect(result.branches).toEqual(expect.arrayContaining(['main', 'feature']));
+    expect(result.remotes).toContain('origin/main');
+    expect(result.current).toBe('main');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain('for-each-ref');
   });
 
   it('A1：惡意分支名 create/checkout 永不執行 git，且回明確 invalid 錯誤', async () => {

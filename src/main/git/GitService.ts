@@ -17,7 +17,7 @@ import {
 } from 'node:child_process';
 import { shell, type IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
-import type { GitStatus, GitChange, GitLogEntry, GitLogRef, GitWorktree, GitCloneInput, GitCloneResult, GitCloneErrorCode, GitHubLoginResult, GitPublishInput, GitPublishResult, GitPushErrorCode } from '../../shared/types';
+import type { GitStatus, GitChange, GitSnapshot, GitLogEntry, GitLogRef, GitWorktree, GitCloneInput, GitCloneResult, GitCloneErrorCode, GitHubLoginResult, GitPublishInput, GitPublishResult, GitPushErrorCode } from '../../shared/types';
 import type { InvokeReq } from '../../shared/ipc';
 import { GIT_CLONE_TIMEOUT_MS, GIT_LOCAL_TIMEOUT_MS, GIT_NETWORK_TIMEOUT_MS } from '../../shared/constants';
 import {
@@ -298,21 +298,29 @@ export class GitService {
     });
   }
 
-  /** REQ-SCM-001 / REQ-MON-003：分支/變更數/ahead-behind（無 .git→isRepo:false；無 upstream→null）。 */
-  async status(wsId: string): Promise<GitStatus> {
+  /** REQ-SCM-001/002：一次 porcelain 同時取得狀態與變更，避免 SCM 重複掃描工作樹。 */
+  async snapshot(wsId: string): Promise<GitSnapshot> {
     const cwd = this.path(wsId);
-    if (!cwd) return NOT_REPO;
+    if (!cwd) return { status: NOT_REPO, changes: [] };
     try {
       const { stdout } = await this.run([...STATUS_ARGS], { cwd, env: readEnv() });
-      const st = parseStatus(stdout).status;
+      const parsed = parseStatus(stdout);
+      const st = parsed.status;
       // hasRemote（DF-12）：有 upstream（ahead 非 null）必有 remote、免查；
       // 只在 upstream 缺席（新 repo/新分支/detached）才多跑一次便宜的 `git remote` 判定。
-      if (st.ahead !== null) return { ...st, hasRemote: true };
-      return { ...st, hasRemote: (await this.firstRemote(cwd)) !== null };
+      const status = st.ahead !== null
+        ? { ...st, hasRemote: true }
+        : { ...st, hasRemote: (await this.firstRemote(cwd)) !== null };
+      return { status, changes: parsed.changes };
     } catch (e) {
-      if (isNotARepo(e)) return NOT_REPO;
+      if (isNotARepo(e)) return { status: NOT_REPO, changes: [] };
       throw e;
     }
+  }
+
+  /** REQ-SCM-001 / REQ-MON-003：分支/變更數/ahead-behind（無 .git→isRepo:false；無 upstream→null）。 */
+  async status(wsId: string): Promise<GitStatus> {
+    return (await this.snapshot(wsId)).status;
   }
 
   /** 第一個 remote 名稱（通常 origin）；無 remote / 查詢失敗 → null。 */
@@ -632,38 +640,26 @@ export class GitService {
 
     if (op === 'list') {
       const { stdout } = await this.run(
-        [...readHardeningArgs(), 'for-each-ref', '--format=%(refname:short)', 'refs/heads'],
+        [
+          ...readHardeningArgs(),
+          'for-each-ref',
+          '--format=%(refname)%09%(refname:short)%09%(HEAD)',
+          'refs/heads',
+          'refs/remotes',
+        ],
         { cwd, env: readEnv() },
       );
-      const branches = stdout
-        .split('\n')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-      // 遠端分支（REQ-WT-002 來源③；排除 origin/HEAD 符號指標）——供 worktree 建立來源選單。
-      let remotes: string[] = [];
-      try {
-        const r = await this.run(
-          [...readHardeningArgs(), 'for-each-ref', '--format=%(refname:short)', 'refs/remotes'],
-          { cwd, env: readEnv() },
-        );
-        remotes = r.stdout
-          .split('\n')
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0 && !/\/HEAD$/.test(s));
-      } catch {
-        remotes = [];
-      }
+      const refs = stdout.split(/\r?\n/).filter((line) => line.length > 0).map((line) => {
+        const [full = '', short = '', head = ''] = line.split('\t');
+        return { full, short, current: head.trim() === '*' };
+      });
+      const branches = refs.filter((ref) => ref.full.startsWith('refs/heads/')).map((ref) => ref.short);
+      // 遠端分支（REQ-WT-002 來源③；排除 origin/HEAD 符號指標）——與本地分支共用一次 for-each-ref。
+      const remotes = refs
+        .filter((ref) => ref.full.startsWith('refs/remotes/') && !ref.full.endsWith('/HEAD'))
+        .map((ref) => ref.short);
       let current = '';
-      try {
-        const r = await this.run([...readHardeningArgs(), 'rev-parse', '--abbrev-ref', 'HEAD'], {
-          cwd,
-          env: readEnv(),
-        });
-        current = r.stdout.trim();
-        if (current === 'HEAD') current = ''; // detached
-      } catch {
-        current = '';
-      }
+      current = refs.find((ref) => ref.full.startsWith('refs/heads/') && ref.current)?.short ?? '';
       return { branches, current, remotes };
     }
 
@@ -1055,6 +1051,9 @@ function errMsg(e: unknown, fallback: string): string {
 export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager): void {
   const svc = new GitService(workspaces);
 
+  ipc.handle('git:snapshot', (_e, req: InvokeReq<'git:snapshot'>) =>
+    enqueue(req.wsId, () => svc.snapshot(req.wsId)),
+  );
   ipc.handle('git:status', (_e, req: InvokeReq<'git:status'>) =>
     enqueue(req.wsId, () => svc.status(req.wsId)),
   );
