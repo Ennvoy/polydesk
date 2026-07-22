@@ -45,6 +45,8 @@ interface Props {
   /** 非 null 表示該程序已結束（顯示 exit overlay + 重啟）。 */
   exitCode: number | null;
   onRestart: () => void;
+  /** 首次有效 fit 已同步到 PTY；快捷啟動器用此時機才送出 TUI 命令。 */
+  onInitialSizeReady?: (termId: string) => void;
 }
 
 // reflow 中間態的極窄寬會讓 fit 提議的 cols 掉到個位數；低於此門檻一律略過 fit/resize，
@@ -90,7 +92,14 @@ function readTerminalTheme(el: HTMLElement): ITheme {
   }
 }
 
-export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Props): React.JSX.Element {
+export function TerminalView({
+  termId,
+  shell,
+  visible,
+  exitCode,
+  onRestart,
+  onInitialSizeReady,
+}: Props): React.JSX.Element {
   const viewRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -112,6 +121,9 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
   const lastFitBoxRef = useRef<{ w: number; h: number }>({ w: -1, h: -1 });
   // 由 visible 切換（useLayoutEffect）呼叫的就地 fit；指向 useEffect 內已掛好接線的 safeFit。
   const fitNowRef = useRef<() => void>(() => {});
+  // callback 走 ref，避免父層 render 產生的新函式讓主 effect dispose / 重建整個 xterm。
+  const onInitialSizeReadyRef = useRef(onInitialSizeReady);
+  onInitialSizeReadyRef.current = onInitialSizeReady;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -163,6 +175,8 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
     // resize 失敗不記帳 → 下次任何 fit 自動重試——PTY↔xterm 行數才不會一次失敗永久漂移
     // （漂移＝claude 等 TUI 把底部 UI 畫在不存在的列上、滾也滾不出來，dogfood 回報）。
     let fitRetryTimer: ReturnType<typeof setTimeout> | null = null;
+    let initialSizeReady = false;
+    let initialSizeSyncing = false;
     const scheduleFitRetry = (): void => {
       if (fitRetryTimer) return; // single-flight
       fitRetryTimer = setTimeout(() => {
@@ -184,7 +198,24 @@ export function TerminalView({ termId, shell, visible, exitCode, onRestart }: Pr
         fit.fit();
         // 記下這次 fit 的 host 尺寸：供 ResizeObserver 反震盪比對（即使 cols 未變也更新基準）。
         lastFitBoxRef.current = { w: h.offsetWidth, h: h.offsetHeight };
-        void ipc.pty.resize({ termId, cols: term.cols, rows: term.rows });
+        const sizeSync = ipc.pty.resize({ termId, cols: term.cols, rows: term.rows });
+        if (!initialSizeReady && !initialSizeSyncing) {
+          initialSizeSyncing = true;
+          void sizeSync
+            .then(() => {
+              if (disposed) return;
+              initialSizeReady = true;
+              initialSizeSyncing = false;
+              host.dataset.initialSizeReady = 'true';
+              onInitialSizeReadyRef.current?.(termId);
+            })
+            .catch(() => {
+              initialSizeSyncing = false;
+              scheduleFitRetry();
+            });
+        } else {
+          void sizeSync.catch(() => undefined);
+        }
       } catch {
         /* 尺寸尚未就緒：略過本次 */
       }

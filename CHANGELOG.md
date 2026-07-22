@@ -11,10 +11,16 @@
 
 AI CLI 快捷啟動批次：終端機面板直接提供 Claude bypass、Codex、Agy 三個入口，不必先新增終端機再手動輸入啟動文字。
 
+### 2026-07-22｜修正快捷啟動 Claude 首屏跑版
+
+- 修正點擊 `Claude bypass` 時，Claude 先以 ConPTY 預設 `80x24` 排版、隨後才切換到面板實際尺寸，造成歡迎畫面與提示區塊橫向錯位；手動輸入因終端早已完成 fit，故不會出現同樣問題。
+- Claude／Codex／Agy 快捷命令現在一律等 xterm 完成首次有效 fit，且 PTY resize IPC 完成後才送出；一般手動建立終端機與後續尺寸自癒流程不變。
+- 更新真 Electron／PowerShell E2E，確認三個快捷終端機皆先進入「首次尺寸已同步」狀態才收到命令；另回歸尺寸自癒、底列可視性與裁切共 5 案。
+
 ### 2026-07-21｜終端機 AI CLI 一鍵啟動
 
 - 點擊任一快捷按鈕會沿用目前選定的 shell 建立獨立終端機，自動命名為對應工具，並送出 `claude --dangerously-skip-permissions`、`codex` 或 `agy`。
-- 啟動命令會等待 TerminalView 掛載並開始接收 PTY 資料後才送出，避免快速啟動的 CLI 第一段輸出在畫面訂閱完成前遺失。
+- 啟動命令會等待 TerminalView 掛載、開始接收 PTY 資料並完成首次有效尺寸同步後才送出，避免初始輸出遺失或 TUI 先按預設 `80x24` 排版而跑版。
 - Claude 按鈕明確標示 `bypass` 並使用警示色與風險說明；此模式略過所有權限確認，只適合完全信任的工作區。
 - 新增真實 Electron／PowerShell E2E：以隔離暫存 PATH 的假 CLI 驗證三個按鈕、終端命名、真 PTY 命令執行與 Claude bypass 參數；既有終端管理 5 案亦全數通過。
 

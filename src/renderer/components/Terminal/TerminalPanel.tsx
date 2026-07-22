@@ -87,7 +87,8 @@ export function TerminalPanel(): React.JSX.Element {
   const [dir, setDir] = useState<SplitDir>('horizontal'); // 並排（左右）預設；可切上下
   const listedWs = useRef<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-  // AI 快捷啟動命令必須等 TerminalView 掛載並訂閱 PTY 輸出後才送，否則 CLI 的第一段畫面可能遺失。
+  // AI 快捷啟動命令必須等 TerminalView 完成首次有效 fit 並把尺寸同步到 PTY 後才送；
+  // 否則 Claude 等 TUI 會先按 ConPTY 預設 80x24 排版，再切到實際尺寸而造成首屏跑版。
   const pendingLaunchesRef = useRef<Map<string, string>>(new Map());
 
   // 互動暫態
@@ -189,15 +190,12 @@ export function TerminalPanel(): React.JSX.Element {
     }
   }, []);
 
-  // React 會先掛載子層 TerminalView 的 effect，再執行此父層 effect；此時送命令可完整接住 CLI 初始輸出。
-  useEffect(() => {
-    for (const t of terms) {
-      const command = pendingLaunchesRef.current.get(t.termId);
-      if (!command) continue;
-      pendingLaunchesRef.current.delete(t.termId);
-      ipc.pty.write(t.termId, `${command}\r`);
-    }
-  }, [terms]);
+  const launchWhenSized = useCallback((termId: string): void => {
+    const command = pendingLaunchesRef.current.get(termId);
+    if (!command) return;
+    pendingLaunchesRef.current.delete(termId);
+    ipc.pty.write(termId, `${command}\r`);
+  }, []);
 
   const closeTerm = useCallback(async (entry: TermEntry): Promise<void> => {
     await ipc.pty.close({ termId: entry.termId }).catch(() => undefined);
@@ -549,6 +547,7 @@ export function TerminalPanel(): React.JSX.Element {
             visible={t.wsId === activeWs.id && !t.hidden}
             exitCode={t.exitCode}
             onRestart={() => void restartTerm(t)}
+            onInitialSizeReady={launchWhenSized}
           />,
           getHost(t.termId),
           t.termId,

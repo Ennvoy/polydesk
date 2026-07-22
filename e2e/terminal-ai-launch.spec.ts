@@ -47,14 +47,17 @@ test('Claude bypass / Codex / Agy 按鈕會各開終端機並送出對應命令'
 
   await page.getByRole('button', { name: '開啟 Claude bypass' }).click();
   await expect(page.locator('.pd-term-pane')).toHaveCount(1, { timeout: 15000 });
+  await expect(page.locator('[data-term-unicode]').nth(0)).toHaveAttribute('data-initial-size-ready', 'true');
   await expect
     .poll(() => readTermBuffer(page, 0), { timeout: 15000 })
     .toContain('FAKE_CLAUDE_ARGS:--dangerously-skip-permissions');
   await page.getByRole('button', { name: '開啟 Codex' }).click();
   await expect(page.locator('.pd-term-pane')).toHaveCount(2, { timeout: 15000 });
+  await expect(page.locator('[data-term-unicode]').nth(1)).toHaveAttribute('data-initial-size-ready', 'true');
   await expect.poll(() => readTermBuffer(page, 1), { timeout: 15000 }).toContain('FAKE_CODEX_STARTED');
   await page.getByRole('button', { name: '開啟 Agy' }).click();
   await expect(page.locator('.pd-term-pane')).toHaveCount(3, { timeout: 15000 });
+  await expect(page.locator('[data-term-unicode]').nth(2)).toHaveAttribute('data-initial-size-ready', 'true');
   await expect.poll(() => readTermBuffer(page, 2), { timeout: 15000 }).toContain('FAKE_AGY_STARTED');
 
   await expect(page.locator('.pd-term-pane-label')).toHaveText(['Claude bypass', 'Codex', 'Agy']);
