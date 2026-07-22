@@ -329,7 +329,12 @@ export class PtyManager {
    *  去重以「實際套用成功」的尺寸為準：renderer 每次 fit 都重送，同尺寸在此擋下（不打擾 ConPTY）；
    *  resize 失敗「不」記帳 → 下一次重送自動重試——避免 PTY↔xterm 行數一次失敗永久漂移
    *  （漂移＝claude 等 TUI 把底部 UI 畫在不存在的列上，dogfood 回報「展開時最下方被擋」）。 */
-  resize(req: { termId: string; cols: number; rows: number }): { ok: true } {
+  resize(req: { termId: string; cols: number; rows: number }): {
+    ok: true;
+    applied: boolean;
+    cols: number;
+    rows: number;
+  } {
     const t = this.terms.get(req.termId);
     if (t && t.alive) {
       const cols = Math.max(1, req.cols | 0);
@@ -343,8 +348,14 @@ export class PtyManager {
           /* 競態/ConPTY 失敗：applied 保持舊值，下次重送重試 */
         }
       }
+      return {
+        ok: true,
+        applied: t.appliedCols === cols && t.appliedRows === rows,
+        cols: t.appliedCols,
+        rows: t.appliedRows,
+      };
     }
-    return { ok: true } as const;
+    return { ok: true, applied: false, cols: 0, rows: 0 } as const;
   }
 
   /** 關閉並刪除 PTY；對已刪/已死 termId 冪等回 {ok:true}（F-3-A4）。 */

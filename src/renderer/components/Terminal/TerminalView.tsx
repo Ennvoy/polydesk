@@ -262,12 +262,22 @@ export function TerminalView({
         fit.fit();
         // 記下這次 fit 的 host 尺寸：供 ResizeObserver 反震盪比對（即使 cols 未變也更新基準）。
         lastFitBoxRef.current = { w: h.offsetWidth, h: h.offsetHeight };
-        const sizeSync = ipc.pty.resize({ termId, cols: term.cols, rows: term.rows });
+        const requestedSize = { cols: term.cols, rows: term.rows };
+        const sizeSync = ipc.pty.resize({ termId, ...requestedSize });
         if (!initialSizeReady && !initialSizeSyncing) {
           initialSizeSyncing = true;
           void sizeSync
-            .then(() => {
+            .then((result) => {
               if (disposed) return;
+              if (
+                !result.applied ||
+                result.cols !== requestedSize.cols ||
+                result.rows !== requestedSize.rows
+              ) {
+                initialSizeSyncing = false;
+                scheduleFitRetry();
+                return;
+              }
               initialSizeReady = true;
               initialSizeSyncing = false;
               host.dataset.initialSizeReady = 'true';
@@ -278,7 +288,18 @@ export function TerminalView({
               scheduleFitRetry();
             });
         } else {
-          void sizeSync.catch(() => undefined);
+          void sizeSync
+            .then((result) => {
+              if (
+                !disposed &&
+                (!result.applied ||
+                  result.cols !== requestedSize.cols ||
+                  result.rows !== requestedSize.rows)
+              ) {
+                scheduleFitRetry();
+              }
+            })
+            .catch(scheduleFitRetry);
         }
       } catch {
         /* 尺寸尚未就緒：略過本次 */

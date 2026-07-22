@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.7.0',
+    date: '2026-07-22',
+    highlights: [
+      '修正 Claude 等 TUI 在側欄、工作區列或最大化狀態切換後，偶發沿用舊欄寬而被右側裁切',
+      '終端尺寸同步現在會核對 ConPTY 是否真的套用成功；失敗會自動重試，不再把 IPC 完成誤當成 resize 成功',
+      'AI 快捷啟動只會在 xterm 與 ConPTY 的欄列完全一致後送出命令，避免歡迎畫面按錯誤寬度繪製',
+    ],
+  },
+  {
     version: '0.6.0',
     date: '2026-07-21',
     highlights: [

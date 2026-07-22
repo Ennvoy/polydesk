@@ -7,6 +7,17 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.7.0（2026-07-22）
+
+終端尺寸同步可靠性批次：修正快捷啟動與版面切換時，IPC 已回覆但 ConPTY 實際 resize 失敗，導致 Claude 等 TUI 仍按舊欄寬繪製並被右側裁切。
+
+### 2026-07-22｜修正 Claude 歡迎畫面偶發沿用舊欄寬
+
+- `pty:resize` 回應新增實際套用狀態與目前欄列；main process 只有在 node-pty resize 成功後才回報 `applied: true`，不再把捕捉到的 ConPTY 例外包成假成功。
+- AI 快捷啟動會逐一核對 xterm 要求的欄列與 ConPTY 已套用欄列，完全一致才送出 Claude／Codex／Agy 命令；首次失敗會延後重試，不讓 TUI 在錯誤尺寸下啟動。
+- 終端機啟動後若工作區列、側欄、編輯器或最大化切換造成 resize 暫時失敗，即使畫面沒有後續輸出也會主動重試，避免靜止的歡迎畫面永久卡在舊欄寬。
+- 回歸測試新增 resize 失敗回應契約，以及假 Claude 從真實 PTY 回報欄數並與 xterm 對賬；PtyManager 21 案、typecheck、正式 build 與 AI launch Electron E2E 皆通過。
+
 ## v0.6.0（2026-07-21）
 
 AI CLI 快捷啟動批次：終端機面板直接提供 Claude bypass、Codex、Agy 三個入口，不必先新增終端機再手動輸入啟動文字。

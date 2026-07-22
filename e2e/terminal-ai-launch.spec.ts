@@ -28,13 +28,29 @@ async function readTermBuffer(page: import('@playwright/test').Page, index: numb
   }, index);
 }
 
+async function readTermCols(page: import('@playwright/test').Page, index: number): Promise<number | null> {
+  return page.evaluate((termIndex) => {
+    const host = document.querySelectorAll('[data-term-unicode]')[termIndex];
+    return (host as unknown as { __pdTerm?: { cols: number } })?.__pdTerm?.cols ?? null;
+  }, index);
+}
+
 test('Claude bypass / Codex / Agy 按鈕會各開終端機並送出對應命令', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pd-ai-launch-'));
   const dir = join(root, 'ai-launch-ws');
   const bin = join(root, 'bin');
   mkdirSync(dir, { recursive: true });
   mkdirSync(bin, { recursive: true });
-  writeFileSync(join(bin, 'claude.cmd'), '@echo off\r\necho FAKE_CLAUDE_ARGS:%*\r\n', 'utf8');
+  writeFileSync(
+    join(bin, 'report-cols.js'),
+    "process.stdout.write(`FAKE_CLAUDE_COLS:${process.stdout.columns ?? 0}\\r\\n`);\n",
+    'utf8',
+  );
+  writeFileSync(
+    join(bin, 'claude.cmd'),
+    '@echo off\r\necho FAKE_CLAUDE_ARGS:%*\r\nnode "%~dp0report-cols.js"\r\n',
+    'utf8',
+  );
   writeFileSync(join(bin, 'codex.cmd'), '@echo off\r\necho FAKE_CODEX_STARTED\r\n', 'utf8');
   writeFileSync(join(bin, 'agy.cmd'), '@echo off\r\necho FAKE_AGY_STARTED\r\n', 'utf8');
 
@@ -51,6 +67,25 @@ test('Claude bypass / Codex / Agy 按鈕會各開終端機並送出對應命令'
   await expect
     .poll(() => readTermBuffer(page, 0), { timeout: 15000 })
     .toContain('FAKE_CLAUDE_ARGS:--dangerously-skip-permissions');
+  const claudeBuffer = await readTermBuffer(page, 0);
+  const claudeCols = await readTermCols(page, 0);
+  expect(claudeCols).not.toBeNull();
+  expect(claudeBuffer).toContain(`FAKE_CLAUDE_COLS:${claudeCols}`);
+
+  // 啟動後再改版面寬度：xterm 必須重新 fit，後續 shell 程序看到的 ConPTY 欄數也要一致。
+  // 這條會抓出「renderer 已改 cols，但 main resize 失敗後沒有重試」造成的靜止畫面永久跑版。
+  await page.getByRole('button', { name: '切換工作區列顯示' }).click();
+  await expect(page.getByRole('button', { name: '切換工作區列顯示' })).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(() => readTermCols(page, 0)).not.toBe(claudeCols);
+  const resizedCols = await readTermCols(page, 0);
+  expect(resizedCols).not.toBeNull();
+  await page.locator('[data-term-unicode]').nth(0).click();
+  await page.keyboard.type(`node "${join(bin, 'report-cols.js')}"`);
+  await page.keyboard.press('Enter');
+  await expect
+    .poll(() => readTermBuffer(page, 0), { timeout: 15000 })
+    .toContain(`FAKE_CLAUDE_COLS:${resizedCols}`);
+
   await page.getByRole('button', { name: '開啟 Codex' }).click();
   await expect(page.locator('.pd-term-pane')).toHaveCount(2, { timeout: 15000 });
   await expect(page.locator('[data-term-unicode]').nth(1)).toHaveAttribute('data-initial-size-ready', 'true');

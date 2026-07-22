@@ -1,6 +1,6 @@
 {
   "name": "polydesk",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Polydesk — 多工作區開發終端機（Electron skeleton）",
   "author": "Polydesk",
   "license": "MIT",

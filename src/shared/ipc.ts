@@ -157,7 +157,11 @@ export interface InvokeChannels {
   'claude:states': { req: void; res: { wsId: string; tool: AiTool; status: ClaudeStatus }[] };
   // 終端機（控制訊息走 invoke；資料流走 stream）
   'pty:create': { req: { wsId: string; shell: ShellKind }; res: { termId: string } };
-  'pty:resize': { req: { termId: string; cols: number; rows: number }; res: { ok: true } };
+  'pty:resize': {
+    req: { termId: string; cols: number; rows: number };
+    /** applied=false 表示 ConPTY 本次未接受尺寸，renderer 必須稍後重試，不能據此啟動 TUI。 */
+    res: { ok: true; applied: boolean; cols: number; rows: number };
+  };
   'pty:close': { req: { termId: string }; res: { ok: true } };
   'pty:list': { req: { wsId: string }; res: TermState[] };
   // 剪貼簿（終端機貼上/複製）：讀取走 main 端 electron clipboard——renderer 的 navigator.clipboard

@@ -471,16 +471,31 @@ describe('PtyManager 關閉時序競態安全（F-3-A4）', () => {
     const { termId } = mgr.create({ wsId: ctx.wsId, shell: 'powershell' });
 
     // 同尺寸重送 → 只打一次 pty（main 端去重，ConPTY 不被重複打擾）
-    mgr.resize({ termId, cols: 120, rows: 40 });
+    expect(mgr.resize({ termId, cols: 120, rows: 40 })).toEqual({
+      ok: true,
+      applied: true,
+      cols: 120,
+      rows: 40,
+    });
     mgr.resize({ termId, cols: 120, rows: 40 });
     mgr.resize({ termId, cols: 120, rows: 40 });
     expect(calls).toBe(1);
 
     // 失敗不記帳：這次 resize 丟例外 → applied 停在 120x40 → 同目標尺寸重送會「再試」
     failNext = true;
-    mgr.resize({ termId, cols: 120, rows: 46 });
+    expect(mgr.resize({ termId, cols: 120, rows: 46 })).toEqual({
+      ok: true,
+      applied: false,
+      cols: 120,
+      rows: 40,
+    });
     expect(calls).toBe(2); // 有嘗試但失敗
-    mgr.resize({ termId, cols: 120, rows: 46 }); // 重送 → 重試成功
+    expect(mgr.resize({ termId, cols: 120, rows: 46 })).toEqual({
+      ok: true,
+      applied: true,
+      cols: 120,
+      rows: 46,
+    }); // 重送 → 重試成功
     expect(calls).toBe(3);
     mgr.resize({ termId, cols: 120, rows: 46 }); // 已套用 → 去重
     expect(calls).toBe(3);
