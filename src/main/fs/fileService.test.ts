@@ -31,6 +31,7 @@ import {
   readSheet,
   readDoc,
   readImage,
+  resolveTerminalLink,
   __resetFileServiceState,
 } from './fileService';
 
@@ -67,6 +68,28 @@ describe('fileService', () => {
 
   // ── A1：路徑越界 / 沙箱逃逸 ──────────────────────────────────────────
   describe('A1 路徑沙箱（realpath + 邊界檢查，禁越界讀寫）', () => {
+    it('終端機連結：工作區內回相對路徑，外部一般檔需確認，高風險類型拒絕', async () => {
+      const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'linkWs');
+      const inside = join(dir, 'src', 'app.ts');
+      mkdirSync(join(dir, 'src'), { recursive: true });
+      writeFileSync(inside, 'export {};', 'utf8');
+      const outside = join(ctx.root, 'outside-link.png');
+      const blocked = join(ctx.root, 'outside-link.cmd');
+      writeFileSync(outside, 'png', 'utf8');
+      writeFileSync(blocked, 'echo unsafe', 'utf8');
+
+      await expect(resolveTerminalLink(ctx.mgr, wsId, 'src\\app.ts')).resolves.toEqual({
+        kind: 'workspace',
+        path: 'src/app.ts',
+      });
+      await expect(resolveTerminalLink(ctx.mgr, wsId, outside)).resolves.toEqual({ kind: 'external', path: outside });
+      await expect(resolveTerminalLink(ctx.mgr, wsId, blocked)).resolves.toEqual({ error: 'blocked-type' });
+      await expect(resolveTerminalLink(ctx.mgr, wsId, 'missing.txt')).resolves.toEqual({ error: 'not-found' });
+      await expect(resolveTerminalLink(ctx.mgr, wsId, `${outside}:payload.exe`)).resolves.toEqual({
+        error: 'invalid-path',
+      });
+    });
+
     it('相對逃逸 / 絕對路徑直用 / 前綴混淆 / UNC 全部拒絕，且不外洩工作區外內容', async () => {
       const { wsId } = addWorkspace(ctx.mgr, ctx.root, 'codeA');
       // 工作區外機密

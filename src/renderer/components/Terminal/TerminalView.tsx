@@ -34,11 +34,15 @@ import { useTerminalFont } from '../../theme/TerminalFontProvider';
 import { classifyClipboardKey } from './clipboardKeys';
 import { stripEnclosingKeycap } from './displayNormalize';
 import { DRAG_PATH_MIME, formatPathsForShell } from './pathDrop';
-import type { ITheme } from '@xterm/xterm';
+import { findTerminalFileLinks } from './terminalFileLinks';
+import { editorBus } from '../../state/editorBus';
+import type { ILink, ITheme } from '@xterm/xterm';
 import type { ShellKind } from '../../../shared/types';
 
 interface Props {
   termId: string;
+  /** 此終端機所屬工作區；檔案連結只能以這個工作區作為相對路徑根。 */
+  wsId: string;
   /** 此終端機的 shell 種類（拖放貼路徑時決定引號策略）。 */
   shell: ShellKind;
   visible: boolean;
@@ -94,6 +98,7 @@ function readTerminalTheme(el: HTMLElement): ITheme {
 
 export function TerminalView({
   termId,
+  wsId,
   shell,
   visible,
   exitCode,
@@ -153,6 +158,65 @@ export function TerminalView({
     term.open(host);
     termRef.current = term;
     fitRef.current = fit;
+
+    // 終端機檔案連結：只在 Ctrl+左鍵時啟用，避免一般點擊干擾文字選取與 TUI 滑鼠操作。
+    // renderer 只辨識文字；存在性、工作區 containment、外部檔確認與危險副檔名封鎖都由 main 執行。
+    // xterm 6 在 WebGL/selection 組合下可能 hover 正常、卻因 mousedown 狀態被 selection 清掉而不呼叫
+    // link.activate；因此 LinkProvider 負責命中/裝飾，Ctrl+左鍵由 host capture 階段確定性接手。
+    type FileLinkMatch = ReturnType<typeof findTerminalFileLinks>[number];
+    const openFileLink = (match: FileLinkMatch): void => {
+      void ipc.fs
+        .openTerminalLink({ wsId, path: match.path })
+        .then((result) => {
+          if ('kind' in result && result.kind === 'workspace') {
+            editorBus.openFile({ wsId, path: result.path, line: match.line, col: match.col });
+          }
+        })
+        .catch(() => undefined);
+    };
+    const onFileLinkMouseDown = (event: MouseEvent): void => {
+      if (event.button !== 0 || !event.ctrlKey) return;
+      const screen = host.querySelector('.xterm-screen');
+      if (!(screen instanceof HTMLElement)) return;
+      const rect = screen.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const col = Math.floor(((event.clientX - rect.left) / rect.width) * term.cols);
+      const viewportRow = Math.floor(((event.clientY - rect.top) / rect.height) * term.rows);
+      if (col < 0 || col >= term.cols || viewportRow < 0 || viewportRow >= term.rows) return;
+      const bufferLine = term.buffer.active.getLine(term.buffer.active.viewportY + viewportRow);
+      if (!bufferLine) return;
+      const match = findTerminalFileLinks(bufferLine.translateToString(true)).find(
+        (candidate) => col >= candidate.start && col < candidate.end,
+      );
+      if (!match) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openFileLink(match);
+    };
+    host.addEventListener('mousedown', onFileLinkMouseDown, true);
+    const linkProviderDisp = term.registerLinkProvider({
+      provideLinks(bufferLineNumber, callback) {
+        const bufferLine = term.buffer.active.getLine(bufferLineNumber - 1);
+        if (!bufferLine) {
+          callback(undefined);
+          return;
+        }
+        const links: ILink[] = findTerminalFileLinks(bufferLine.translateToString(true)).map((match) => ({
+          range: {
+            start: { x: match.start + 1, y: bufferLineNumber },
+            end: { x: match.end, y: bufferLineNumber },
+          },
+          text: match.text,
+          decorations: { pointerCursor: true, underline: true },
+          activate: (event) => {
+            if (event.button !== 0 || !event.ctrlKey) return;
+            event.preventDefault();
+            openFileLink(match); // 非滑鼠或未經 host capture 的 xterm 啟用路徑保底
+          },
+        }));
+        callback(links.length ? links : undefined);
+      },
+    });
 
     // WebGL 加速（可選；不支援則靜默略過，回退 canvas/DOM renderer）。
     let disposed = false;
@@ -457,6 +521,7 @@ export function TerminalView({
       themeObserver.disconnect();
       ro.disconnect();
       host.removeEventListener('focusin', onFocusIn);
+      host.removeEventListener('mousedown', onFileLinkMouseDown, true);
       host.removeEventListener('contextmenu', onContextMenu);
       host.removeEventListener('mousedown', suppressRightButton, true);
       host.removeEventListener('mouseup', suppressRightButton, true);
@@ -467,6 +532,7 @@ export function TerminalView({
       view?.removeEventListener('drop', onDrop);
       clearDropHint();
       onDataDisp.dispose();
+      linkProviderDisp.dispose();
       offData();
       fitNowRef.current = () => {};
       webglDispose?.();
@@ -474,7 +540,7 @@ export function TerminalView({
       termRef.current = null;
       fitRef.current = null;
     };
-  }, [termId]);
+  }, [termId, wsId]);
 
   // 字型設定即時跟隨（設定面板改字型/字級 → 開啟中的終端機就地套用；cell 尺寸變了須重 fit）。
   useEffect(() => {

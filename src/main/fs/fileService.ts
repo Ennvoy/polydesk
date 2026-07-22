@@ -9,13 +9,14 @@
 // 讀檔：stat 先擋目錄/特殊檔與超大檔，避免 OOM / EISDIR / 卡死（紅軍 F-4-A5）。
 
 import { realpathSync, constants as fsConstants, promises as fsp } from 'node:fs';
-import { resolve, relative, isAbsolute, dirname, join, basename } from 'node:path';
+import { resolve, relative, isAbsolute, dirname, join, basename, extname, sep } from 'node:path';
+import { homedir } from 'node:os';
 import jschardet from 'jschardet';
 import iconv from 'iconv-lite';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import WordExtractor from 'word-extractor';
-import { shell } from 'electron';
+import { BrowserWindow, dialog, shell } from 'electron';
 import type { IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
 import type { FileEncoding, Eol } from '../../shared/types';
@@ -44,6 +45,13 @@ let writeSeq = 0;
 
 /** UNC（\\server）或裝置/長路徑前綴（\\?\、\\.\）；正反斜線皆擋。 */
 const UNC_OR_DEVICE = /^[\\/]{2}/;
+
+/** 外部檔不得透過 shell.openPath 啟動的高風險類型；工作區內仍只交給 Polydesk 編輯器。 */
+const BLOCKED_EXTERNAL_EXTENSIONS = new Set([
+  '.appref-ms', '.bat', '.cmd', '.com', '.cpl', '.exe', '.hta', '.inf', '.ins', '.isp', '.js', '.jse',
+  '.lnk', '.msc', '.msi', '.msp', '.mst', '.pif', '.ps1', '.reg', '.scr', '.sct', '.url', '.vb', '.vbe',
+  '.vbs', '.ws', '.wsc', '.wsf', '.wsh',
+]);
 
 /** 解析「存在部分」的 realpath（沿 symlink/junction/短名/大小寫正規化），再接上尚不存在的尾段。 */
 function realpathExisting(p: string): string {
@@ -116,6 +124,57 @@ export function resolveSafeNoFollowLeaf(
   if (UNC_OR_DEVICE.test(abs)) return { error: 'outside-workspace' };
   if (!isInside(realRoot, abs)) return { error: 'outside-workspace' };
   return { ok: true, abs };
+}
+
+export type TerminalLinkTarget =
+  | { kind: 'workspace'; path: string }
+  | { kind: 'external'; path: string }
+  | { error: 'invalid-path' | 'not-found' | 'not-a-file' | 'blocked-type' };
+type TerminalLinkError = Extract<TerminalLinkTarget, { error: string }>['error'];
+
+/**
+ * 解析終端機輸出的檔案路徑。相對路徑以終端機初始 cwd（工作區根）為準；`~` 展開為使用者家目錄。
+ * 工作區內回傳 POSIX 相對路徑；外部只允許既有一般檔案，且封鎖會被 shell.openPath 執行的類型。
+ */
+export async function resolveTerminalLink(
+  mgr: WorkspaceManager,
+  wsId: string,
+  rawPath: string,
+): Promise<TerminalLinkTarget> {
+  if (typeof rawPath !== 'string' || rawPath.length === 0 || rawPath.length > 32_767 || /[\u0000-\u001f\u007f]/.test(rawPath)) {
+    return { error: 'invalid-path' };
+  }
+  if (UNC_OR_DEVICE.test(rawPath)) return { error: 'invalid-path' };
+  // Windows drive letter 的第一個冒號以外不得再有冒號，封鎖 NTFS alternate data stream。
+  const colonTail = /^[A-Za-z]:/.test(rawPath) ? rawPath.slice(2) : rawPath;
+  if (colonTail.includes(':')) return { error: 'invalid-path' };
+  const ws = mgr.get(wsId);
+  if (!ws) return { error: 'invalid-path' };
+
+  const expanded = /^~[\\/]/.test(rawPath) ? resolve(homedir(), rawPath.slice(2)) : resolve(ws.path, rawPath);
+  if (UNC_OR_DEVICE.test(expanded)) return { error: 'invalid-path' };
+
+  let real: string;
+  try {
+    real = realpathSync.native(expanded);
+  } catch {
+    return { error: 'not-found' };
+  }
+  let stat;
+  try {
+    stat = await fsp.stat(real);
+  } catch {
+    return { error: 'not-found' };
+  }
+  if (!stat.isFile()) return { error: 'not-a-file' };
+
+  const safe = resolveSafe(mgr, wsId, real);
+  if ('ok' in safe) {
+    const realRoot = realpathSync.native(ws.path);
+    return { kind: 'workspace', path: relative(realRoot, safe.abs).split(sep).join('/') };
+  }
+  if (BLOCKED_EXTERNAL_EXTENSIONS.has(extname(real).toLowerCase())) return { error: 'blocked-type' };
+  return { kind: 'external', path: real };
 }
 
 // ── 編碼偵測 ──────────────────────────────────────────────────────────────
@@ -651,6 +710,35 @@ export function registerFileService(ipc: IpcMain, workspaces: WorkspaceManager):
     if ('error' in safe) return { error: '路徑超出工作區範圍' } as const;
     const err = await shell.openPath(safe.abs); // '' = 成功，否則為錯誤訊息
     return err ? ({ error: err } as const) : ({ ok: true } as const);
+  });
+  ipc.handle('fs:openTerminalLink', async (event, req: InvokeReq<'fs:openTerminalLink'>) => {
+    const target = await resolveTerminalLink(workspaces, req.wsId, req.path);
+    if ('error' in target) {
+      const messages: Record<TerminalLinkError, string> = {
+        'invalid-path': '路徑格式不安全或工作區不存在',
+        'not-found': '找不到檔案',
+        'not-a-file': '連結不是一般檔案',
+        'blocked-type': '基於安全考量，終端機連結不可啟動執行檔、腳本或捷徑',
+      };
+      return { error: messages[target.error] } as const;
+    }
+    if (target.kind === 'workspace') return target;
+
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const options = {
+      type: 'question' as const,
+      title: '開啟工作區外檔案',
+      message: '這個檔案不在目前工作區內，要使用 Windows 預設程式開啟嗎？',
+      detail: target.path,
+      buttons: ['開啟', '取消'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    };
+    const answer = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);
+    if (answer.response !== 0) return { kind: 'external', opened: false } as const;
+    const error = await shell.openPath(target.path);
+    return error ? ({ error } as const) : ({ kind: 'external', opened: true } as const);
   });
   ipc.handle('fs:reveal', (_e, req: InvokeReq<'fs:reveal'>) => {
     const safe = resolveSafe(workspaces, req.wsId, req.path);

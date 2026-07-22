@@ -543,6 +543,7 @@ export function TerminalPanel(): React.JSX.Element {
         createPortal(
           <TerminalView
             termId={t.termId}
+            wsId={t.wsId}
             shell={t.shell}
             visible={t.wsId === activeWs.id && !t.hidden}
             exitCode={t.exitCode}

@@ -11,6 +11,13 @@
 
 AI CLI 快捷啟動批次：終端機面板直接提供 Claude bypass、Codex、Agy 三個入口，不必先新增終端機再手動輸入啟動文字。
 
+### 2026-07-22｜終端機檔案路徑可直接開啟
+
+- 終端機輸出的 Windows 絕對路徑、`~\...`、工作區相對路徑及 `path:line:column` 現在會顯示為可互動連結；按住 `Ctrl` 點擊後，工作區內檔案會在 Polydesk 編輯器開啟並跳到指定行欄。
+- Claude 等工具產生在工作區外的截圖或一般檔案，會先由主程序顯示完整路徑並要求確認，確認後才交給 Windows 預設程式；取消為預設選項。
+- 外部連結只接受既有一般檔案，並封鎖執行檔、腳本、安裝包、捷徑、UNC／裝置路徑與 NTFS alternate data stream；renderer 仍只取得固定白名單 IPC，不暴露 Node 或原始 `ipcRenderer`。
+- 新增路徑解析單元測試、主程序 containment／危險類型測試及真 Electron E2E；另回歸終端剪貼簿、SIGINT、OSC52、右鍵 TUI 與多終端管理共 13 案。
+
 ### 2026-07-22｜修正快捷啟動 Claude 首屏跑版
 
 - 修正點擊 `Claude bypass` 時，Claude 先以 ConPTY 預設 `80x24` 排版、隨後才切換到面板實際尺寸，造成歡迎畫面與提示區塊橫向錯位；手動輸入因終端早已完成 fit，故不會出現同樣問題。

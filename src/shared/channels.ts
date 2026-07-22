@@ -24,6 +24,7 @@ export const INVOKE_CHANNELS = [
   'fs:readSheet',
   'fs:readDoc',
   'fs:openExternal',
+  'fs:openTerminalLink',
   'fs:readImage',
   'fs:reveal',
   'editor:setTextFocus',
