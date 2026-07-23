@@ -694,17 +694,35 @@ export function __resetFileServiceState(): void {
 }
 
 /** 註冊 fs:read / fs:write（取代 stub 的 fs read/write；fs:tree 由 F-2 提供）。 */
-export function registerFileService(ipc: IpcMain, workspaces: WorkspaceManager): void {
-  ipc.handle('fs:read', (_e, req: InvokeReq<'fs:read'>) => readFileSafe(workspaces, req));
+export function registerFileService(
+  ipc: IpcMain,
+  workspaces: WorkspaceManager,
+  ensureWatch?: (wsId: string) => void,
+): void {
+  const watchBeforeRead = (wsId: string): void => ensureWatch?.(wsId);
+  ipc.handle('fs:read', (_e, req: InvokeReq<'fs:read'>) => {
+    // 先建立 watcher 再讀檔，避免檔案在「讀取完成、分頁掛載」邊界被外部修改卻沒有監看者。
+    watchBeforeRead(req.wsId);
+    return readFileSafe(workspaces, req);
+  });
   ipc.handle('fs:write', (_e, req: InvokeReq<'fs:write'>) => writeFileSafe(workspaces, req));
   ipc.handle('fs:create', (_e, req: InvokeReq<'fs:create'>) => createEntry(workspaces, req.wsId, req.path, req.dir));
   ipc.handle('fs:rename', (_e, req: InvokeReq<'fs:rename'>) => renameEntry(workspaces, req.wsId, req.from, req.to));
   ipc.handle('fs:delete', (_e, req: InvokeReq<'fs:delete'>) => deleteEntry(workspaces, req.wsId, req.path));
   ipc.handle('fs:copy', (_e, req: InvokeReq<'fs:copy'>) => copyEntry(workspaces, req.wsId, req.from, req.to));
   ipc.handle('fs:importFiles', (_e, req: InvokeReq<'fs:importFiles'>) => importFiles(workspaces, req.wsId, req.destDir, req.sources));
-  ipc.handle('fs:readSheet', (_e, req: InvokeReq<'fs:readSheet'>) => readSheet(workspaces, req.wsId, req.path));
-  ipc.handle('fs:readDoc', (_e, req: InvokeReq<'fs:readDoc'>) => readDoc(workspaces, req.wsId, req.path));
-  ipc.handle('fs:readImage', (_e, req: InvokeReq<'fs:readImage'>) => readImage(workspaces, req.wsId, req.path));
+  ipc.handle('fs:readSheet', (_e, req: InvokeReq<'fs:readSheet'>) => {
+    watchBeforeRead(req.wsId);
+    return readSheet(workspaces, req.wsId, req.path);
+  });
+  ipc.handle('fs:readDoc', (_e, req: InvokeReq<'fs:readDoc'>) => {
+    watchBeforeRead(req.wsId);
+    return readDoc(workspaces, req.wsId, req.path);
+  });
+  ipc.handle('fs:readImage', (_e, req: InvokeReq<'fs:readImage'>) => {
+    watchBeforeRead(req.wsId);
+    return readImage(workspaces, req.wsId, req.path);
+  });
   ipc.handle('fs:openExternal', async (_e, req: InvokeReq<'fs:openExternal'>) => {
     const safe = resolveSafe(workspaces, req.wsId, req.path);
     if ('error' in safe) return { error: '路徑超出工作區範圍' } as const;

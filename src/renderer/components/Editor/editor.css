@@ -96,6 +96,35 @@
 .pd-editor-action:disabled { opacity: 0.4; cursor: not-allowed; }
 .pd-editor-action:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
 
+.pd-editor-tab-menu {
+  position: fixed;
+  z-index: 1300;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.45));
+}
+.pd-editor-tab-menuitem {
+  display: block;
+  width: 100%;
+  padding: 7px var(--space-3);
+  color: var(--fg-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.pd-editor-tab-menuitem:hover,
+.pd-editor-tab-menuitem:focus-visible {
+  color: var(--fg);
+  background: var(--surface-warm);
+  outline: none;
+}
+
 /* ── 編輯區（可分割並排） ── */
 .pd-editor-panes {
   position: relative;

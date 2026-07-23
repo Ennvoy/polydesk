@@ -44,7 +44,7 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
   registerStoreHandlers(ipcMain, store);
   registerWorkspaceHandlers(ipcMain, workspaces);
   const fileWatcher = registerFsTreeAndWatch(ipcMain, workspaces, lifecycle); // fs:tree + 監看
-  registerFileService(ipcMain, workspaces); // fs:read / fs:write
+  registerFileService(ipcMain, workspaces, (wsId) => fileWatcher.ensureWatch(wsId)); // fs:read / fs:write；read 前先保證 watcher 已建立
   const pty = registerPtyHandlers(ipcMain, workspaces, lifecycle); // pty:*
   registerClipboardHandlers(ipcMain); // clipboard:*（終端機貼上/複製，繞過 renderer 剪貼簿權限封鎖）
   registerGitHandlers(ipcMain, workspaces); // git:*

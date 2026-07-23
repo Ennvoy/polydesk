@@ -2,7 +2,7 @@
 // + 外部修改衝突處理（REQ-EDIT-001/002/006/007/008/009、REQ-PERF-003、REQ-E2E-002/009）。
 // 註：本元件由 panelRegistry 掛載於 dockview 'editor' 槽（見 ./index.ts）。
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import * as monaco from 'monaco-editor';
 import { ipc } from '../../ipc/client';
 import { useAppState } from '../../state/appStore';
@@ -34,9 +34,15 @@ interface Tab {
   diskChanged?: boolean;
   /** diff 分頁的 unified diff 內容（kind==='diff'）。 */
   patch?: string;
+  /** 唯讀預覽收到磁碟變更時遞增，藉由 React key 重新掛載讀取。 */
+  previewRevision?: number;
 }
 
-const SELF_WRITE_ECHO_MS = 1500;
+interface TabMenuState {
+  key: string;
+  x: number;
+  y: number;
+}
 
 const EDITOR_OPTIONS: monaco.editor.IStandaloneEditorConstructionOptions = {
   automaticLayout: true,
@@ -120,6 +126,7 @@ export function EditorGroup(): React.JSX.Element {
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [split, setSplit] = useState(false);
   const [cursor, setCursor] = useState<{ line: number; col: number }>({ line: 1, col: 1 });
+  const [tabMenu, setTabMenu] = useState<TabMenuState | null>(null);
 
   // DOM 容器
   const primaryElRef = useRef<HTMLDivElement | null>(null);
@@ -133,9 +140,26 @@ export function EditorGroup(): React.JSX.Element {
   // model content 監聽 / 程式化更新抑制 / 自寫回音抑制 / 待捲動行
   const listenersRef = useRef<Map<string, monaco.IDisposable>>(new Map());
   const suppressDirtyRef = useRef<Set<string>>(new Set());
-  const selfWriteRef = useRef<Map<string, number>>(new Map());
+  const lastDiskContentRef = useRef<Map<string, string>>(new Map());
+  const readSequenceRef = useRef<Map<string, number>>(new Map());
   const pendingRevealRef = useRef<{ line: number; col: number; len: number } | null>(null);
   const lastFocusKeyRef = useRef<string | null>(null); // 上次因開檔/切分頁聚焦過的 key（避免背景 metadata 變動搶焦點）
+  const tabMenuRef = useRef<HTMLDivElement | null>(null);
+  const tabElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  const updateTabs = useCallback((updater: (prev: Tab[]) => Tab[]) => {
+    setTabs((prev) => {
+      const next = updater(prev);
+      tabsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const nextReadSequence = useCallback((key: string): number => {
+    const next = (readSequenceRef.current.get(key) ?? 0) + 1;
+    readSequenceRef.current.set(key, next);
+    return next;
+  }, []);
 
   useEffect(() => {
     tabsRef.current = tabs;
@@ -166,23 +190,39 @@ export function EditorGroup(): React.JSX.Element {
     setActiveKey(remembered && list.some((x) => x.key === remembered) ? remembered : (list[0]?.key ?? null));
   }, [activeWorkspaceId]);
 
-  // ── 重載磁碟版本（程式化 setValue，抑制 dirty 標記） ──
-  const reload = useCallback(async (key: string, wsId: string, path: string) => {
+  // ── 對帳磁碟版本：乾淨分頁安全重載；dirty 分頁只標記，並防止較舊 async read 覆蓋新結果 ──
+  const reload = useCallback(async (key: string, wsId: string, path: string, discardLocal = false) => {
+    const sequence = nextReadSequence(key);
     let r: InvokeRes<'fs:read'>;
     try {
       r = await ipc.fs.read({ wsId, path });
     } catch {
       return;
     }
+    if (readSequenceRef.current.get(key) !== sequence) return;
+    const tab = tabsRef.current.find((t) => t.key === key);
     const model = monaco.editor.getModel(modelUri(wsId, path));
-    if (!model) return;
+    if (!tab || tab.kind !== 'file' || !model) return;
+    const lastDiskContent = lastDiskContentRef.current.get(key);
+    const diskDiffers = lastDiskContent === undefined || r.content !== lastDiskContent;
+    if (!diskDiffers) return; // 自寫回音／coarse 對帳相同內容：不重設 Monaco model 與 undo stack
+    const hasLocalEdits = tab.dirty || (lastDiskContent !== undefined && model.getValue() !== lastDiskContent);
+    if (hasLocalEdits && !discardLocal) {
+      if (diskDiffers) {
+        updateTabs((prev) => prev.map((t) => (t.key === key && !t.diskChanged ? { ...t, diskChanged: true } : t)));
+      }
+      return;
+    }
     suppressDirtyRef.current.add(key);
     model.setValue(r.content);
     suppressDirtyRef.current.delete(key);
-    setTabs((prev) =>
-      prev.map((t) => (t.key === key ? { ...t, encoding: r.encoding, eol: r.eol, readonly: r.readonly, dirty: false } : t)),
+    lastDiskContentRef.current.set(key, r.content);
+    updateTabs((prev) =>
+      prev.map((t) =>
+        t.key === key ? { ...t, encoding: r.encoding, eol: r.eol, readonly: r.readonly, dirty: false, diskChanged: false } : t,
+      ),
     );
-  }, []);
+  }, [nextReadSequence, updateTabs]);
 
   // ── 開檔（editorBus 入口） ──
   const openFile = useCallback(async (req: OpenFileRequest) => {
@@ -197,7 +237,7 @@ export function EditorGroup(): React.JSX.Element {
 
     // 試算表（xlsx/xls）→ 唯讀表格預覽，不進 Monaco（避免二進位亂碼）
     if (/\.(xlsx|xls|xlsm|xlsb)$/i.test(req.path)) {
-      setTabs((prev) => [
+      updateTabs((prev) => [
         ...prev,
         { key, wsId: req.wsId, path: req.path, name: baseName(req.path), kind: 'sheet', language: 'xlsx', encoding: 'utf-8', eol: 'lf', readonly: true, dirty: false },
       ]);
@@ -207,7 +247,7 @@ export function EditorGroup(): React.JSX.Element {
 
     // 圖片 → 唯讀圖片預覽，不進 Monaco（避免二進位亂碼）
     if (/\.(png|jpe?g|gif|webp|bmp|ico|svg)$/i.test(req.path)) {
-      setTabs((prev) => [
+      updateTabs((prev) => [
         ...prev,
         { key, wsId: req.wsId, path: req.path, name: baseName(req.path), kind: 'image', language: 'image', encoding: 'utf-8', eol: 'lf', readonly: true, dirty: false },
       ]);
@@ -217,7 +257,7 @@ export function EditorGroup(): React.JSX.Element {
 
     // Word 文件（docx/docm/doc）→ 唯讀文件預覽（mammoth HTML／doc 純文字），不進 Monaco
     if (/\.(docx|docm|doc)$/i.test(req.path)) {
-      setTabs((prev) => [
+      updateTabs((prev) => [
         ...prev,
         { key, wsId: req.wsId, path: req.path, name: baseName(req.path), kind: 'doc', language: 'word', encoding: 'utf-8', eol: 'lf', readonly: true, dirty: false },
       ]);
@@ -244,7 +284,7 @@ export function EditorGroup(): React.JSX.Element {
     if (!listenersRef.current.has(key)) {
       const d = model.onDidChangeContent(() => {
         if (suppressDirtyRef.current.has(key)) return;
-        setTabs((prev) => prev.map((t) => (t.key === key ? { ...t, dirty: true } : t)));
+        updateTabs((prev) => prev.map((t) => (t.key === key ? { ...t, dirty: true } : t)));
       });
       listenersRef.current.set(key, d);
     }
@@ -261,12 +301,13 @@ export function EditorGroup(): React.JSX.Element {
       readonly: r.readonly,
       dirty: false,
     };
-    setTabs((prev) => [...prev, tab]);
+    lastDiskContentRef.current.set(key, r.content);
+    updateTabs((prev) => [...prev, tab]);
     setActiveKey(key);
     if (req.split) setSplit(true);
     if (req.line) pendingRevealRef.current = { line: req.line, col: req.col ?? 1, len: req.selectLen ?? 0 };
     measure('fileOpen', startMark); // REQ-PERF-003：開檔到首屏
-  }, []);
+  }, [updateTabs]);
 
   // ── 開差異分頁（SCM 點變更檔；工作樹 vs HEAD，唯讀 Monaco diff）──
   const openDiff = useCallback(async (req: OpenDiffRequest) => {
@@ -303,9 +344,9 @@ export function EditorGroup(): React.JSX.Element {
       dirty: false,
       patch,
     };
-    setTabs((prev) => [...prev, tab]);
+    updateTabs((prev) => [...prev, tab]);
     setActiveKey(key);
-  }, []);
+  }, [updateTabs]);
 
   // ── 存檔（回 true=已存檔並寫回磁碟；供 Ctrl+S 與關檔前儲存共用） ──
   const saveTab = useCallback(
@@ -314,6 +355,39 @@ export function EditorGroup(): React.JSX.Element {
       if (!tab || tab.kind !== 'file') return false; // diff/sheet 分頁唯讀、不可存
       const model = monaco.editor.getModel(modelUri(tab.wsId, tab.path));
       if (!model) return false;
+
+      // watcher 對帳曾讀過磁碟時，main 的 mtime 指紋也會同步刷新；仍須以 renderer 的
+      // diskChanged 明確守住 VS Code 式衝突流程，不可因對帳 read 而靜默覆寫外部版本。
+      if (tab.diskChanged) {
+        const choice = await dialog.open((close) => (
+          <ExternalChangePrompt name={tab.name} onReload={() => close('reload')} onKeep={() => close('overwrite')} />
+        ));
+        if (choice === 'reload') {
+          await reload(key, tab.wsId, tab.path, true);
+          return false;
+        }
+        if (choice !== 'overwrite') return false;
+        try {
+          await ipc.fs.read({ wsId: tab.wsId, path: tab.path });
+          const overwrite = await ipc.fs.write({
+            wsId: tab.wsId,
+            path: tab.path,
+            content: model.getValue(),
+            encoding: tab.encoding,
+            eol: tab.eol,
+          });
+          if ('ok' in overwrite) {
+            nextReadSequence(key);
+            lastDiskContentRef.current.set(key, model.getValue());
+            updateTabs((prev) => prev.map((t) => (t.key === key ? { ...t, dirty: false, diskChanged: false } : t)));
+            return true;
+          }
+          showError('無法存檔', overwrite.error === 'permission' ? '檔案為唯讀或權限不足。' : '存檔再次發生衝突。');
+        } catch (e) {
+          showError('存檔失敗', e instanceof Error ? e.message : String(e));
+        }
+        return false;
+      }
 
       let res: InvokeRes<'fs:write'>;
       try {
@@ -324,8 +398,9 @@ export function EditorGroup(): React.JSX.Element {
       }
 
       if ('ok' in res) {
-        selfWriteRef.current.set(key, Date.now());
-        setTabs((prev) => prev.map((t) => (t.key === key ? { ...t, dirty: false, diskChanged: false } : t)));
+        nextReadSequence(key);
+        lastDiskContentRef.current.set(key, model.getValue());
+        updateTabs((prev) => prev.map((t) => (t.key === key ? { ...t, dirty: false, diskChanged: false } : t)));
         return true;
       }
       if (res.error === 'permission') {
@@ -337,7 +412,7 @@ export function EditorGroup(): React.JSX.Element {
         <ExternalChangePrompt name={tab.name} onReload={() => close('reload')} onKeep={() => close('overwrite')} />
       ));
       if (choice === 'reload') {
-        await reload(key, tab.wsId, tab.path);
+        await reload(key, tab.wsId, tab.path, true);
         return false; // 載入磁碟版本＝放棄本地編輯，視為「未存我的編輯」
       }
       // overwrite：先重讀刷新 main 的版本指紋（內容不套用、保留我的編輯），再寫回。
@@ -354,14 +429,15 @@ export function EditorGroup(): React.JSX.Element {
         return false;
       }
       if ('ok' in res2) {
-        selfWriteRef.current.set(key, Date.now());
-        setTabs((prev) => prev.map((t) => (t.key === key ? { ...t, dirty: false, diskChanged: false } : t)));
+        nextReadSequence(key);
+        lastDiskContentRef.current.set(key, model.getValue());
+        updateTabs((prev) => prev.map((t) => (t.key === key ? { ...t, dirty: false, diskChanged: false } : t)));
         return true;
       }
       showError('無法存檔', res2.error === 'permission' ? '檔案為唯讀或權限不足。' : '存檔再次發生衝突。');
       return false;
     },
-    [reload],
+    [nextReadSequence, reload, updateTabs],
   );
 
   const saveActive = useCallback(() => {
@@ -379,14 +455,17 @@ export function EditorGroup(): React.JSX.Element {
     }
     if (tab) monaco.editor.getModel(modelUri(tab.wsId, tab.path))?.dispose();
     const remaining = tabsRef.current.filter((t) => t.key !== key);
+    tabsRef.current = remaining;
+    nextReadSequence(key);
+    lastDiskContentRef.current.delete(key);
     setTabs(remaining);
     // 遞補只在同一工作區內找（分頁依工作區分離，不跳到別的工作區的分頁）
     const sameWs = tab ? remaining.filter((t) => t.wsId === tab.wsId) : remaining;
     setActiveKey((prev) => (prev === key ? (sameWs.length ? sameWs[sameWs.length - 1].key : null) : prev));
-  }, []);
+  }, [nextReadSequence]);
 
   const requestClose = useCallback(
-    async (key: string) => {
+    async (key: string): Promise<boolean> => {
       const tab = tabsRef.current.find((t) => t.key === key);
       if (tab?.dirty) {
         const note = tab.diskChanged ? '此檔在外部也被改過（磁碟版本與你的編輯不同）。' : '';
@@ -400,15 +479,51 @@ export function EditorGroup(): React.JSX.Element {
           />
         ));
         if (choice === 'save') {
-          if (!(await saveTab(key))) return; // 存檔失敗/衝突未解 → 不關
+          if (!(await saveTab(key))) return false; // 存檔失敗/衝突未解 → 不關
         } else if (choice !== 'discard') {
-          return; // 取消 / 點外關閉
+          return false; // 取消 / 點外關閉
         }
       }
       closeTab(key);
+      return true;
     },
     [closeTab, saveTab],
   );
+
+  const closeTabBatch = useCallback(
+    async (targetKey: string, mode: 'one' | 'others' | 'all'): Promise<void> => {
+      const target = tabsRef.current.find((t) => t.key === targetKey);
+      if (!target) return;
+      const keys = tabsRef.current
+        .filter((t) => t.wsId === target.wsId)
+        .filter((t) => mode === 'all' || (mode === 'others' ? t.key !== targetKey : t.key === targetKey))
+        .map((t) => t.key);
+      for (const key of keys) {
+        if (!tabsRef.current.some((t) => t.key === key)) continue;
+        if (!(await requestClose(key))) return;
+      }
+    },
+    [requestClose],
+  );
+
+  useLayoutEffect(() => {
+    if (!tabMenu || !tabMenuRef.current) return;
+    const menu = tabMenuRef.current;
+    const rect = menu.getBoundingClientRect();
+    const x = Math.max(8, Math.min(tabMenu.x, window.innerWidth - rect.width - 8));
+    const y = Math.max(8, Math.min(tabMenu.y, window.innerHeight - rect.height - 8));
+    if (x !== tabMenu.x || y !== tabMenu.y) setTabMenu({ ...tabMenu, x, y });
+    menu.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+  }, [tabMenu]);
+
+  useEffect(() => {
+    if (!tabMenu) return;
+    const closeOnOutside = (event: PointerEvent): void => {
+      if (!tabMenuRef.current?.contains(event.target as Node)) setTabMenu(null);
+    };
+    window.addEventListener('pointerdown', closeOnOutside);
+    return () => window.removeEventListener('pointerdown', closeOnOutside);
+  }, [tabMenu]);
 
   // ── 建立主編輯器（一次） ──
   useEffect(() => {
@@ -548,24 +663,35 @@ export function EditorGroup(): React.JSX.Element {
     };
   }, [openFile, openDiff]);
 
-  // ── 外部修改事件（F-2 watcher 發 fs:change） ──
+  // ── 外部修改事件：精準事件更新單檔；coarse 根事件對帳該工作區所有已開文字檔與預覽 ──
   useEffect(() => {
     return ipc.events.fs.change(({ wsId, path, kind }) => {
-      const key = tabKey(wsId, path);
-      if (!tabsRef.current.some((t) => t.key === key)) return;
-      if (kind === 'unlink') return; // 檔案被刪：保留編輯內容、不動作（使用者可另存）
-      // 抑制本程式剛寫入造成的回音事件，避免自我重載迴圈
-      if (Date.now() - (selfWriteRef.current.get(key) ?? 0) < SELF_WRITE_ECHO_MS) return;
-      const tab = tabsRef.current.find((t) => t.key === key);
-      if (!tab) return;
-      if (!tab.dirty) {
-        void reload(key, wsId, path); // 無未存編輯：自動重載（不打斷）
+      if (path === '') {
+        const workspaceTabs = tabsRef.current.filter((t) => t.wsId === wsId);
+        const previews = new Set(workspaceTabs.filter((t) => t.kind === 'sheet' || t.kind === 'doc' || t.kind === 'image').map((t) => t.key));
+        if (previews.size > 0) {
+          updateTabs((prev) =>
+            prev.map((t) => (previews.has(t.key) ? { ...t, previewRevision: (t.previewRevision ?? 0) + 1 } : t)),
+          );
+        }
+        for (const tab of workspaceTabs) {
+          if (tab.kind === 'file') void reload(tab.key, tab.wsId, tab.path);
+        }
         return;
       }
-      // 有未存編輯：不彈窗打斷（外部工具如 codex 會頻繁改檔），只標記「磁碟已變更」，關檔時再提醒。
-      setTabs((prev) => prev.map((t) => (t.key === key && !t.diskChanged ? { ...t, diskChanged: true } : t)));
+      const key = tabKey(wsId, path);
+      const tab = tabsRef.current.find((t) => t.key === key);
+      if (!tab) return;
+      if (kind === 'unlink') return; // 檔案被刪：保留編輯內容、不動作（使用者可另存）
+      if (tab.kind === 'file') {
+        void reload(key, wsId, path);
+        return;
+      }
+      if (tab.kind === 'sheet' || tab.kind === 'doc' || tab.kind === 'image') {
+        updateTabs((prev) => prev.map((t) => (t.key === key ? { ...t, previewRevision: (t.previewRevision ?? 0) + 1 } : t)));
+      }
     });
-  }, [reload]);
+  }, [reload, updateTabs]);
 
   // ── Ctrl/Cmd+S 存檔 ──
   useEffect(() => {
@@ -597,6 +723,10 @@ export function EditorGroup(): React.JSX.Element {
           {visibleTabs.map((t) => (
             <div
               key={t.key}
+              ref={(element) => {
+                if (element) tabElementsRef.current.set(t.key, element);
+                else tabElementsRef.current.delete(t.key);
+              }}
               role="tab"
               tabIndex={0}
               aria-selected={t.key === activeKey}
@@ -604,6 +734,10 @@ export function EditorGroup(): React.JSX.Element {
               className={`pd-editor-tab${t.key === activeKey ? ' is-active' : ''}`}
               title={t.path}
               onMouseDown={() => setActiveKey(t.key)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setTabMenu({ key: t.key, x: event.clientX, y: event.clientY });
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
@@ -649,6 +783,70 @@ export function EditorGroup(): React.JSX.Element {
         </button>
       </div>
 
+      {tabMenu && (
+        <div
+          ref={tabMenuRef}
+          className="pd-editor-tab-menu"
+          role="menu"
+          aria-label="分頁操作"
+          style={{ left: tabMenu.x, top: tabMenu.y }}
+          onKeyDown={(event) => {
+            const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+            const index = items.indexOf(document.activeElement as HTMLButtonElement);
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              const key = tabMenu.key;
+              setTabMenu(null);
+              tabElementsRef.current.get(key)?.focus();
+            } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              const delta = event.key === 'ArrowDown' ? 1 : -1;
+              items[(index + delta + items.length) % items.length]?.focus();
+            } else if (event.key === 'Home' || event.key === 'End') {
+              event.preventDefault();
+              items[event.key === 'Home' ? 0 : items.length - 1]?.focus();
+            }
+          }}
+        >
+          <button
+            type="button"
+            className="pd-editor-tab-menuitem"
+            role="menuitem"
+            onClick={() => {
+              const key = tabMenu.key;
+              setTabMenu(null);
+              void closeTabBatch(key, 'one');
+            }}
+          >
+            關閉
+          </button>
+          <button
+            type="button"
+            className="pd-editor-tab-menuitem"
+            role="menuitem"
+            onClick={() => {
+              const key = tabMenu.key;
+              setTabMenu(null);
+              void closeTabBatch(key, 'others');
+            }}
+          >
+            關閉其他
+          </button>
+          <button
+            type="button"
+            className="pd-editor-tab-menuitem"
+            role="menuitem"
+            onClick={() => {
+              const key = tabMenu.key;
+              setTabMenu(null);
+              void closeTabBatch(key, 'all');
+            }}
+          >
+            關閉全部
+          </button>
+        </div>
+      )}
+
       <div className="pd-editor-panes">
         {/* diff 分頁時隱藏 Monaco 檔案 pane（保持掛載，model 已卸），改 overlay DiffView。 */}
         <div
@@ -674,17 +872,17 @@ export function EditorGroup(): React.JSX.Element {
         )}
         {active?.kind === 'sheet' && (
           <div className="pd-editor-pane" role="group" aria-label={`試算表：${active.name}`}>
-            <SheetView key={active.key} wsId={active.wsId} path={active.path} />
+            <SheetView key={`${active.key}:${active.previewRevision ?? 0}`} wsId={active.wsId} path={active.path} />
           </div>
         )}
         {active?.kind === 'doc' && (
           <div className="pd-editor-pane" role="group" aria-label={`文件：${active.name}`}>
-            <DocView key={active.key} wsId={active.wsId} path={active.path} />
+            <DocView key={`${active.key}:${active.previewRevision ?? 0}`} wsId={active.wsId} path={active.path} />
           </div>
         )}
         {active?.kind === 'image' && (
           <div className="pd-editor-pane" role="group" aria-label={`圖片：${active.name}`}>
-            <ImageView key={active.key} wsId={active.wsId} path={active.path} />
+            <ImageView key={`${active.key}:${active.previewRevision ?? 0}`} wsId={active.wsId} path={active.path} />
           </div>
         )}
         {visibleTabs.length === 0 && (
