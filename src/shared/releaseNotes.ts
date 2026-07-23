@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.9.0',
+    date: '2026-07-23',
+    highlights: [
+      '修正終端輸出前方含中文、全形字或 emoji 時，檔案連結底線與實際可點位置錯位，導致 Ctrl+點擊無法開啟',
+      '連結範圍現在依 xterm 實際格位換算，工作區檔案與行欄定位可穩定命中',
+      '收緊相對路徑判定，不再把 N/A、workflow/subagent、API/資料表等一般文字誤標成檔案連結',
+    ],
+  },
+  {
     version: '0.8.0',
     date: '2026-07-22',
     highlights: [

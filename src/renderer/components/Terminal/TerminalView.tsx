@@ -34,7 +34,7 @@ import { useTerminalFont } from '../../theme/TerminalFontProvider';
 import { classifyClipboardKey } from './clipboardKeys';
 import { stripEnclosingKeycap } from './displayNormalize';
 import { DRAG_PATH_MIME, formatPathsForShell } from './pathDrop';
-import { findTerminalFileLinks } from './terminalFileLinks';
+import { findTerminalFileCellLinks } from './terminalFileLinks';
 import { editorBus } from '../../state/editorBus';
 import type { ILink, ITheme } from '@xterm/xterm';
 import type { ShellKind } from '../../../shared/types';
@@ -172,7 +172,7 @@ export function TerminalView({
     // renderer 只辨識文字；存在性、工作區 containment、外部檔確認與危險副檔名封鎖都由 main 執行。
     // xterm 6 在 WebGL/selection 組合下可能 hover 正常、卻因 mousedown 狀態被 selection 清掉而不呼叫
     // link.activate；因此 LinkProvider 負責命中/裝飾，Ctrl+左鍵由 host capture 階段確定性接手。
-    type FileLinkMatch = ReturnType<typeof findTerminalFileLinks>[number];
+    type FileLinkMatch = ReturnType<typeof findTerminalFileCellLinks>[number];
     const openFileLink = (match: FileLinkMatch): void => {
       void ipc.fs
         .openTerminalLink({ wsId, path: match.path })
@@ -194,8 +194,8 @@ export function TerminalView({
       if (col < 0 || col >= term.cols || viewportRow < 0 || viewportRow >= term.rows) return;
       const bufferLine = term.buffer.active.getLine(term.buffer.active.viewportY + viewportRow);
       if (!bufferLine) return;
-      const match = findTerminalFileLinks(bufferLine.translateToString(true)).find(
-        (candidate) => col >= candidate.start && col < candidate.end,
+      const match = findTerminalFileCellLinks(bufferLine).find(
+        (candidate) => col >= candidate.cellStart && col < candidate.cellEnd,
       );
       if (!match) return;
       event.preventDefault();
@@ -210,10 +210,10 @@ export function TerminalView({
           callback(undefined);
           return;
         }
-        const links: ILink[] = findTerminalFileLinks(bufferLine.translateToString(true)).map((match) => ({
+        const links: ILink[] = findTerminalFileCellLinks(bufferLine).map((match) => ({
           range: {
-            start: { x: match.start + 1, y: bufferLineNumber },
-            end: { x: match.end, y: bufferLineNumber },
+            start: { x: match.cellStart + 1, y: bufferLineNumber },
+            end: { x: match.cellEnd, y: bufferLineNumber },
           },
           text: match.text,
           decorations: { pointerCursor: true, underline: true },

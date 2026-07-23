@@ -11,17 +11,31 @@ export interface TerminalFileLinkMatch {
   col?: number;
 }
 
+export interface TerminalFileCellLinkMatch extends TerminalFileLinkMatch {
+  /** xterm buffer line 內的 0-based 起始格。 */
+  cellStart: number;
+  /** xterm buffer line 內的 0-based exclusive 結束格。 */
+  cellEnd: number;
+}
+
+interface TerminalBufferCellLike {
+  getChars(): string;
+  getWidth(): number;
+}
+
+export interface TerminalBufferLineLike {
+  length: number;
+  getCell(index: number): TerminalBufferCellLike | undefined;
+}
+
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 
 function looksLikeFilePath(value: string): boolean {
   if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(value)) return false;
-  return (
-    /^[A-Za-z]:[\\/]/.test(value) ||
-    /^~[\\/]/.test(value) ||
-    /^\.{1,2}[\\/]/.test(value) ||
-    /[\\/]/.test(value) ||
-    /^[^\\/:*?"<>|]+\.[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value)
-  );
+  if (/^[A-Za-z]:[\\/]/.test(value) || /^~[\\/]/.test(value) || /^\.{1,2}[\\/]/.test(value)) return true;
+  // main 端只會開一般檔案；未明示 ./、../ 的相對 token 必須有副檔名，避免把 N/A、
+  // workflow/subagent、API/資料表這類終端訊息誤畫成可點路徑。
+  return /(^|[\\/])[^\\/:*?"<>|]+\.[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value);
 }
 
 function trimToken(raw: string): { value: string; leading: number } {
@@ -74,4 +88,31 @@ export function findTerminalFileLinks(text: string): TerminalFileLinkMatch[] {
     });
   }
   return matches;
+}
+
+/**
+ * 把字串索引換算成 xterm 實際格位。中文字、全形字與 emoji 會佔兩格，combining sequence
+ * 則可能是多個 JS code unit 共用一格，不能直接拿字串索引當 ILink range。
+ */
+export function findTerminalFileCellLinks(line: TerminalBufferLineLike): TerminalFileCellLinkMatch[] {
+  let text = '';
+  const cells: Array<{ textStart: number; textEnd: number; cellStart: number; cellEnd: number }> = [];
+  for (let cellIndex = 0; cellIndex < line.length; cellIndex++) {
+    const cell = line.getCell(cellIndex);
+    if (!cell) continue;
+    const width = cell.getWidth();
+    if (width === 0) continue; // 寬字元的 continuation cell
+    const chars = cell.getChars() || ' ';
+    const textStart = text.length;
+    text += chars;
+    cells.push({ textStart, textEnd: text.length, cellStart: cellIndex, cellEnd: cellIndex + width });
+  }
+  text = text.replace(/ +$/, '');
+
+  return findTerminalFileLinks(text).flatMap((match) => {
+    const first = cells.find((cell) => match.start >= cell.textStart && match.start < cell.textEnd);
+    const last = cells.find((cell) => match.end > cell.textStart && match.end <= cell.textEnd);
+    if (!first || !last) return [];
+    return [{ ...match, cellStart: first.cellStart, cellEnd: last.cellEnd }];
+  });
 }
