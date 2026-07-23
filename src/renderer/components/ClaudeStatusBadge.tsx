@@ -65,10 +65,10 @@ export function ClaudeStatusBadge({ wsId }: { wsId: string }): React.JSX.Element
 
   // 每工具一個 chip（dot 顏色/脈動＝狀態、文字＝工具名）分開顯示；只顯示非 idle 的工具，都 idle → 不顯示。
   const active = AI_TOOLS.filter((t) => (states[t] ?? 'idle') !== 'idle');
-  if (active.length === 0) return <span aria-hidden="true" />;
+  if (active.length === 0) return <span data-ai-status-badge aria-hidden="true" />;
 
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+    <span data-ai-status-badge style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
       {active.map((t) => {
         const v = VIEW[states[t] as ClaudeState];
         return (

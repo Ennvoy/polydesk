@@ -7,6 +7,17 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.10.0（2026-07-23）
+
+worktree AI 狀態顯示修正：worktree 內執行 Claude、Codex 或 Agy 時，工作區列現在會正常顯示工具與狀態。
+
+### 2026-07-23｜worktree 保留 AI 執行狀態標籤
+
+- 病根：工作區列把「worktree 類型圖示」與 `ClaudeStatusBadge` 寫成互斥條件；一般工作區會掛載 AI 狀態元件，但 worktree 只渲染 `⎇`，即使監控已正確把事件歸戶到 worktree，畫面也沒有元件可以呈現。
+- 修法：`⎇` 只負責描述工作區類型，所有有效工作區都獨立掛載相同的 Claude／Codex／Agy 狀態徽章；資料夾遺失的工作區仍不訂閱狀態。
+- 狀態監控與歸戶規則不變：session cwd 仍採最長工作區路徑匹配，所以主工作樹與各 worktree 會各自顯示，不會互相污染。
+- 驗證：worktree 與狀態歸戶單元測試 15 案、typecheck、正式 build，以及真 Git／Electron 的 worktree 建立、納管與 AI 徽章掛載 E2E 1 案全綠。
+
 ## v0.9.0（2026-07-23）
 
 終端檔案連結可靠性批次：修正中文與 emoji 造成連結裝飾、點擊命中錯位，並降低一般終端文字被誤判為路徑的情況。

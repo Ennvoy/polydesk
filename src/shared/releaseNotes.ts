@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.10.0',
+    date: '2026-07-23',
+    highlights: [
+      '修正 worktree 工作區執行 Claude、Codex 或 Agy 時，工作區列沒有顯示對應狀態標籤',
+      'worktree 的分支圖示與 AI 狀態徽章現在可同時顯示，不再互相取代',
+      '主工作樹與各 worktree 仍依各自路徑獨立歸戶，執行狀態不會顯示到錯誤工作區',
+    ],
+  },
+  {
     version: '0.9.0',
     date: '2026-07-23',
     highlights: [

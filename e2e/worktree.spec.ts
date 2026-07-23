@@ -47,8 +47,11 @@ test('REQ-E2E-012：分支→建立 worktree→納管開啟→終端機 cwd＝wo
   expect(targetPath).toContain('work-worktrees');
   await page.locator('button[aria-label="建立並開啟工作區"]').click();
 
-  // 納管：工作區列表出現 worktree 項（⎇ dev），不重彈信任窗
-  await expect(page.locator('.pdws-item [aria-label="worktree 工作區"]')).toBeVisible({ timeout: 15000 });
+  // 納管：工作區列表出現 worktree 項（⎇ dev），且保留 AI 狀態徽章掛載點，不重彈信任窗。
+  // 狀態為 idle 時徽章刻意不顯示文字，但元件仍須存在，之後 Claude/Codex/Agy 事件才有地方更新。
+  const worktreeRow = page.locator('.pdws-item').filter({ has: page.locator('[aria-label="worktree 工作區"]') });
+  await expect(worktreeRow).toBeVisible({ timeout: 15000 });
+  await expect(worktreeRow.locator('[data-ai-status-badge]')).toHaveCount(1);
   // git 真的建了 worktree
   await expect.poll(() => git(repo, 'worktree', 'list').includes('work-worktrees'), { timeout: 8000 }).toBe(true);
   expect(existsSync(targetPath)).toBe(true);

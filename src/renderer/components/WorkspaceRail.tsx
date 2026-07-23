@@ -471,9 +471,10 @@ export function WorkspaceRail(): React.JSX.Element {
                   <span aria-label="worktree 工作區" title="git worktree" style={{ color: 'var(--accent)', flexShrink: 0 }}>
                     ⎇
                   </span>
-                ) : (
-                  <ClaudeStatusBadge wsId={w.id} />
-                )}
+                ) : null}
+
+                {/* worktree 圖示只描述工作區類型，不得取代 AI 狀態；所有有效工作區都顯示同一套狀態徽章。 */}
+                {!isMissing && <ClaudeStatusBadge wsId={w.id} />}
 
                 {isEditing ? (
                   <input
