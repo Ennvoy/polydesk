@@ -35,6 +35,11 @@ import type {
 
 /** invoke 通道：renderer 經 preload 呼叫、main `ipcMain.handle` 回應（一次性 Promise）。 */
 export interface InvokeChannels {
+  // 應用程式層操作
+  'app:openExternalUrl': {
+    req: { url: string };
+    res: { opened: true } | { error: 'invalid-url' | 'open-failed' };
+  };
   // 工作區管理
   'workspace:list': { req: void; res: Workspace[] };
   'workspace:add': { req: WorkspaceInput; res: Workspace | { error: 'duplicate' | 'invalid' } };

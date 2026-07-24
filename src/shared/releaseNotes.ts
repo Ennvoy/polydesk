@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.12.0',
+    date: '2026-07-24',
+    highlights: [
+      '終端機輸出的 HTTP／HTTPS 網址現在可按住 Ctrl 點擊，並交由 Windows 預設瀏覽器開啟',
+      '中文、全形字或 emoji 出現在網址前方時，底線與實際可點位置仍會依 xterm 格位正確命中',
+      '一般左鍵保留給選字與 TUI 操作；javascript、file、data 與含帳密網址仍會被拒絕',
+    ],
+  },
+  {
     version: '0.11.0',
     date: '2026-07-23',
     highlights: [

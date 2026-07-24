@@ -35,13 +35,13 @@ describe('xterm 安全選項（F-3-A3 escape 硬化）', () => {
     expect(JSON.stringify(opts).toLowerCase()).not.toContain('clipboard');
   });
 
-  it('X-4：allowProposedApi 為 true（僅供載入 Unicode11Addon；非 PTY 防禦邊界），且不設 linkHandler（OSC 8 連結保持 inert）', () => {
+  it('X-4：allowProposedApi 為 true，且 OSC 8 僅接收 HTTP(S) 協定', () => {
     const opts = createSecureTerminalOptions();
     // allowProposedApi 只閘「本 app 程式碼可否呼叫 xterm 實驗性 JS API」（Terminal.unicode 等），
-    // 惡意 PTY 輸出觸不到；防回灌/防導覽仍由 windowOptions 全關＋不設 linkHandler 守（上兩測試）。
+    // 惡意 PTY 輸出觸不到；防回灌/防導覽仍由 windowOptions 全關＋URL 白名單守（上兩測試）。
     expect(opts.allowProposedApi).toBe(true);
-    // 不啟用任何 OSC 8 連結處理器 → 惡意 PTY 無法以 ESC]8;;javascript:/file: 觸發危險導覽
-    expect('linkHandler' in opts).toBe(false);
+    expect(opts.linkHandler).toBeDefined();
+    expect(opts.linkHandler?.allowNonHttpProtocols).toBe(false);
   });
 });
 

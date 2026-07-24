@@ -4,6 +4,7 @@
 import type { InvokeChannel, EventChannel } from './ipc';
 
 export const INVOKE_CHANNELS = [
+  'app:openExternalUrl',
   'workspace:list',
   'workspace:add',
   'workspace:remove',

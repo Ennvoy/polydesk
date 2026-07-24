@@ -11,6 +11,7 @@
 import type { ITerminalOptions, ITheme } from '@xterm/xterm';
 import type { TerminalFontSettings } from '../../../shared/types';
 import { TERMINAL_FONT_SIZE_MAX, TERMINAL_FONT_SIZE_MIN } from '../../../shared/constants';
+import { openTerminalWebLink } from './terminalWebLinks';
 
 /** 預設終端機字型：對齊 VS Code Windows 預設（Consolas 14px，2026-07-02 拍板）。 */
 export const DEFAULT_TERMINAL_FONT: TerminalFontSettings = { family: 'Consolas', size: 14 };
@@ -74,7 +75,7 @@ export function createSecureTerminalOptions(
 ): ITerminalOptions {
   return {
     // allowProposedApi 只閘「本 app 程式碼可否呼叫 xterm 實驗性 JS API」（Terminal.unicode 等），
-    // 不是 PTY 輸出可觸及的防禦邊界——惡意輸出的攻擊面仍由 windowOptions 全關＋不設 linkHandler 守。
+    // 不是 PTY 輸出可觸及的防禦邊界——惡意輸出的攻擊面仍由 windowOptions 全關＋URL 雙層白名單守。
     // 開啟是為載入 Unicode11Addon（emoji 算 2 格，與 Windows ConPTY 一致；修狀態列重繪錯位互蓋），
     // 與 VS Code 終端機同款配置（其 terminal.integrated.unicodeVersion 預設 "11"）。
     allowProposedApi: true,
@@ -84,8 +85,15 @@ export function createSecureTerminalOptions(
     cursorBlink: true,
     scrollback: 5000,
     // renderer 不掛 clipboard addon（OSC52 由 main 端單點攔截處理）；視窗回報全關（防回灌注入）。
-    // 刻意「不設 linkHandler」：OSC 8 超連結因而保持 inert（不可點擊），杜絕惡意 PTY 以
-    // ESC]8;;javascript:/file: 觸發危險導覽。日後若要可點連結，linkHandler 內 SHALL 只放行 http/https。
+    // OSC 8 只允許 HTTP(S)，其他協定由 xterm 先拒絕，activate 再走共用 URL 白名單；main 外開前會複驗。
+    linkHandler: {
+      allowNonHttpProtocols: false,
+      activate: (event, text) => {
+        if (!event.ctrlKey) return;
+        event.preventDefault();
+        openTerminalWebLink(text);
+      },
+    },
     windowOptions: { ...SECURE_WINDOW_OPTIONS },
     theme,
   };

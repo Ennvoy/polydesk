@@ -35,6 +35,7 @@ import { classifyClipboardKey } from './clipboardKeys';
 import { stripEnclosingKeycap } from './displayNormalize';
 import { DRAG_PATH_MIME, formatPathsForShell } from './pathDrop';
 import { findTerminalFileCellLinks } from './terminalFileLinks';
+import { findTerminalWebCellLinks, openTerminalWebLink } from './terminalWebLinks';
 import { editorBus } from '../../state/editorBus';
 import type { ILink, ITheme } from '@xterm/xterm';
 import type { ShellKind } from '../../../shared/types';
@@ -203,6 +204,29 @@ export function TerminalView({
       openFileLink(match);
     };
     host.addEventListener('mousedown', onFileLinkMouseDown, true);
+    // 純文字 HTTP(S) 網址可 Ctrl+點擊；renderer 與 main 各驗一次白名單後交給系統瀏覽器。
+    // 沿用檔案連結手勢，避免一般點擊干擾文字選取與 TUI 滑鼠操作。
+    // capture 路徑避開 xterm 6 WebGL/selection 偶發不呼叫 link.activate 的問題。
+    const onWebLinkMouseDown = (event: MouseEvent): void => {
+      if (event.button !== 0 || !event.ctrlKey) return;
+      const screen = host.querySelector('.xterm-screen');
+      if (!(screen instanceof HTMLElement)) return;
+      const rect = screen.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const col = Math.floor(((event.clientX - rect.left) / rect.width) * term.cols);
+      const viewportRow = Math.floor(((event.clientY - rect.top) / rect.height) * term.rows);
+      if (col < 0 || col >= term.cols || viewportRow < 0 || viewportRow >= term.rows) return;
+      const bufferLine = term.buffer.active.getLine(term.buffer.active.viewportY + viewportRow);
+      if (!bufferLine) return;
+      const match = findTerminalWebCellLinks(bufferLine).find(
+        (candidate) => col >= candidate.cellStart && col < candidate.cellEnd,
+      );
+      if (!match) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openTerminalWebLink(match.url);
+    };
+    host.addEventListener('mousedown', onWebLinkMouseDown, true);
     const linkProviderDisp = term.registerLinkProvider({
       provideLinks(bufferLineNumber, callback) {
         const bufferLine = term.buffer.active.getLine(bufferLineNumber - 1);
@@ -210,7 +234,7 @@ export function TerminalView({
           callback(undefined);
           return;
         }
-        const links: ILink[] = findTerminalFileCellLinks(bufferLine).map((match) => ({
+        const fileLinks: ILink[] = findTerminalFileCellLinks(bufferLine).map((match) => ({
           range: {
             start: { x: match.cellStart + 1, y: bufferLineNumber },
             end: { x: match.cellEnd, y: bufferLineNumber },
@@ -223,6 +247,20 @@ export function TerminalView({
             openFileLink(match); // 非滑鼠或未經 host capture 的 xterm 啟用路徑保底
           },
         }));
+        const webLinks: ILink[] = findTerminalWebCellLinks(bufferLine).map((match) => ({
+          range: {
+            start: { x: match.cellStart + 1, y: bufferLineNumber },
+            end: { x: match.cellEnd, y: bufferLineNumber },
+          },
+          text: match.text,
+          decorations: { pointerCursor: true, underline: true },
+          activate: (event) => {
+            if (!event.ctrlKey) return;
+            event.preventDefault();
+            openTerminalWebLink(match.url);
+          },
+        }));
+        const links = [...fileLinks, ...webLinks].sort((a, b) => a.range.start.x - b.range.start.x);
         callback(links.length ? links : undefined);
       },
     });
@@ -556,6 +594,7 @@ export function TerminalView({
       ro.disconnect();
       host.removeEventListener('focusin', onFocusIn);
       host.removeEventListener('mousedown', onFileLinkMouseDown, true);
+      host.removeEventListener('mousedown', onWebLinkMouseDown, true);
       host.removeEventListener('contextmenu', onContextMenu);
       host.removeEventListener('mousedown', suppressRightButton, true);
       host.removeEventListener('mouseup', suppressRightButton, true);

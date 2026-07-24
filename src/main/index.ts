@@ -13,6 +13,7 @@ import { mark, measure, getMeasures } from '../shared/perf';
 import { APP_NAME, STATE_FILE_NAME } from '../shared/constants';
 import type { WindowBounds } from '../shared/types';
 import { isEditorPasteShortcut } from './window/pasteShortcut';
+import { normalizeExternalHttpUrl } from '../shared/externalUrl';
 
 mark('main:start'); // 冷啟動量測起點（REQ-PERF-001）
 // 診斷 seam（X-1 perf harness 經 electronApp.evaluate 讀 main 埋點；非 IPC、不影響執行期）。
@@ -120,7 +121,8 @@ function createWindow(): void {
 
   // 外開連結一律拒絕 app 內導航，改丟系統瀏覽器（REQ-SEC-001）
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    const safeUrl = normalizeExternalHttpUrl(url);
+    if (safeUrl) void shell.openExternal(safeUrl);
     return { action: 'deny' };
   });
   // 限制導航：dev 只允許回 renderer URL，prod 一律擋。will-redirect 一併綁（重導鏈不觸發 will-navigate）。

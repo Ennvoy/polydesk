@@ -18,6 +18,7 @@ import { registerLspHandlers } from '../lsp/LspManager';
 import { registerClipboardHandlers } from '../clipboard/clipboardHandlers';
 import { ClaudeStatusMonitor } from '../monitor/ClaudeStatusMonitor';
 import { registerUpdateHandlers } from '../update/AutoUpdater';
+import { registerExternalUrlHandlers } from '../window/externalUrl';
 import { registerWindowControls } from '../window/windowControls';
 import {
   EditorPasteFocusState,
@@ -59,6 +60,7 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
   ipcMain.handle('claude:states', () => monitor.snapshot()); // 掛載快照（徽章/計數重掛不丟燈）
 
   registerUpdateHandlers(ipcMain); // update:*（electron-updater）
+  registerExternalUrlHandlers(ipcMain); // app:openExternalUrl（HTTP(S) 白名單後交系統瀏覽器）
   registerWindowControls(ipcMain); // window:*（自訂無框標題列 min/max/close）
   registerEditorPasteFocusHandler(ipcMain, editorPasteFocus);
   // 空樁：playwright（無接線、缺件偵測於 F-3 終端機提示）

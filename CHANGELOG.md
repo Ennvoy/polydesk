@@ -7,6 +7,18 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.12.0（2026-07-24）
+
+終端機網址外開修正：純文字 HTTP／HTTPS 與 OSC 8 超連結現在可安全交給系統預設瀏覽器，不再只能顯示、無法點擊。
+
+### 2026-07-24｜支援終端機網址 Ctrl+點擊外開
+
+- 病根：終端機只註冊檔案路徑 LinkProvider，而檔案解析器又明確排除所有 `scheme://`；main 雖有 `shell.openExternal`，但沒有任何終端點擊流程會送出網址，因此 `http://localhost:3000` 從未成為可啟用連結。
+- 修法：新增獨立的終端網址解析器與 xterm 格位換算，支援純文字 HTTP／HTTPS 及 OSC 8；沿用 `Ctrl+左鍵` 手勢與 host capture，避免一般點擊干擾選字或 Claude／Codex 等 TUI 滑鼠操作，也避開 WebGL／selection 組合下 `link.activate` 偶發未觸發。
+- 安全邊界：renderer 先驗證協定、控制字元、長度與內嵌帳密，再經固定白名單 IPC 送 main 複驗；只有合法 HTTP／HTTPS 會交給 `shell.openExternal`，`javascript:`、`file:`、`data:` 與非標準三斜線輸入維持封鎖。既有 BrowserWindow 外開攔截也改用同一條驗證規則。
+- 中文、全形字與 emoji 出現在網址前方時，連結範圍會依 xterm 實際格位換算；句尾中英文標點不會被誤帶進網址，URL 內成對括號則會保留。
+- 驗證：網址／安全選項單元測試 12 案、typecheck、正式 build，以及真 Electron 網址外開、工作區內檔案定位、工作區外檔案確認與危險腳本封鎖 E2E 共 3 案全綠。
+
 ## v0.11.0（2026-07-23）
 
 編輯器外部同步與分頁管理批次：AI 或其他工具改寫已開啟檔案後會自動對帳與更新，分頁右鍵可安全批次關閉目前工作區的檔案。
