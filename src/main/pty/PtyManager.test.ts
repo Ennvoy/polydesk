@@ -11,14 +11,18 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { win32 as pathWin32 } from 'node:path';
 import { StateStore } from '../store/StateStore';
 import { WorkspaceManager } from '../workspace/WorkspaceManager';
 import { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
 import {
   PtyManager,
+  PtyError,
   stripOsc52,
   resolveShellFile,
+  resolveExecutableOnPath,
   resolveShellArgs,
+  toPtyCreateResult,
   VALID_SHELLS,
   OSC52_WRITE_MAX_B64,
   OSC52_CARRY_CAP,
@@ -143,7 +147,7 @@ describe('PtyManager 安全：shell allowlist（F-3-A1）', () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
-  it('5 個合法 ShellKind 只會以固定執行檔被 spawn（gitbash 只在寫死路徑間選）', () => {
+  it('5 個合法 ShellKind 一律解析為絕對執行檔，不把裸名稱交給 node-pty', () => {
     const calls: string[] = [];
     const spawn = vi.fn<SpawnFn>((file) => {
       calls.push(file);
@@ -151,15 +155,51 @@ describe('PtyManager 安全：shell allowlist（F-3-A1）', () => {
     });
     const mgr = new PtyManager(ctx.workspaces, ctx.lifecycle, { spawn });
     for (const shell of VALID_SHELLS) mgr.create({ wsId: ctx.wsId, shell });
-    expect(calls).toEqual([
-      'powershell.exe',
-      'cmd.exe',
+    expect(calls).toEqual(VALID_SHELLS.map((shell) => resolveShellFile(shell)));
+    expect(calls.every((file) => pathWin32.isAbsolute(file))).toBe(true);
+  });
+
+  it('內建 shell 直接使用 SystemRoot 絕對路徑，不受 PATH 是否含尾分號影響', () => {
+    const env = {
+      SystemRoot: 'D:\\Windows',
+      ProgramFiles: 'D:\\Program Files',
+      Path: 'C:\\Sunlike365;D:\\Windows\\System32',
+    };
+    const fileExists = (): boolean => false;
+    expect(resolveShellFile('cmd', { env, fileExists })).toBe('D:\\Windows\\System32\\cmd.exe');
+    expect(resolveShellFile('powershell', { env, fileExists })).toBe(
+      'D:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+    );
+    expect(resolveShellFile('wsl', { env, fileExists })).toBe('D:\\Windows\\System32\\wsl.exe');
+  });
+
+  it('自有 PATH parser 會檢查沒有尾分號的最後一段（node-pty 1.1.0 回歸）', () => {
+    const expected = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\pwsh.exe';
+    const found = resolveExecutableOnPath(
       'pwsh.exe',
-      resolveShellFile('gitbash'), // 'C:\\Program Files\\Git\\bin\\bash.exe' 或 fallback 'bash.exe'
-      'wsl.exe',
-    ]);
-    // gitbash 解析結果必為兩個寫死值之一，絕不採 caller 字串
-    expect(['C:\\Program Files\\Git\\bin\\bash.exe', 'bash.exe']).toContain(resolveShellFile('gitbash'));
+      'C:\\Sunlike365;C:\\Windows\\System32\\WindowsPowerShell\\v1.0',
+      (candidate) => candidate === expected,
+    );
+    expect(found).toBe(expected);
+  });
+
+  it('spawn 找不到 shell 時回傳可分流錯誤，不再只讓 renderer 收到未分類例外', () => {
+    const spawn = vi.fn<SpawnFn>(() => {
+      throw new Error('File not found: C:\\Windows\\System32\\cmd.exe');
+    });
+    const mgr = new PtyManager(ctx.workspaces, ctx.lifecycle, { spawn });
+    let failure: unknown;
+    try {
+      mgr.create({ wsId: ctx.wsId, shell: 'cmd' });
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(PtyError);
+    expect((failure as PtyError).code).toBe('shell-not-found');
+    expect(toPtyCreateResult(failure, 'cmd')).toEqual({
+      error: '找不到 CMD 執行檔，請確認該 shell 已正確安裝。',
+      code: 'shell-not-found',
+    });
   });
 
   it('resolveShellArgs：powershell/cmd 注入 UTF-8 初始化、pwsh/gitbash/wsl 免動（回 []）', () => {

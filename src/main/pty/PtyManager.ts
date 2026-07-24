@@ -15,12 +15,13 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
+import { win32 as pathWin32 } from 'node:path';
 import * as pty from 'node-pty';
 import type { IpcMain } from 'electron';
 import { emit, emitRaw } from '../ipc/broadcast';
 import { PTY_DATA, PTY_WRITE } from '../../shared/channels';
 import { sanitizeUserEnv } from '../security/spawnEnv';
-import type { ShellKind, TermState } from '../../shared/types';
+import type { PtyCreateErrorCode, PtyCreateResult, ShellKind, TermState } from '../../shared/types';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
 import type { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
 
@@ -32,19 +33,77 @@ export function isShellKind(x: unknown): x is ShellKind {
   return typeof x === 'string' && (VALID_SHELLS as readonly string[]).includes(x);
 }
 
-/** 解析 ShellKind → 寫死的執行檔（gitbash 只在兩個寫死絕對路徑間選，不採 caller 字串）。 */
-export function resolveShellFile(shell: ShellKind): string {
+interface ShellResolutionOptions {
+  env?: NodeJS.ProcessEnv;
+  fileExists?: (file: string) => boolean;
+}
+
+function envValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const match = Object.entries(env).find(([key, value]) => key.toLowerCase() === name.toLowerCase() && value);
+  return match?.[1];
+}
+
+function firstExisting(candidates: string[], fileExists: (file: string) => boolean): string | undefined {
+  return candidates.find((candidate) => pathWin32.isAbsolute(candidate) && fileExists(candidate));
+}
+
+/**
+ * 以自己的 PATH parser 解析可選 shell，刻意保留最後一段。
+ * node-pty 1.1.0 的 Windows parser 只處理後方仍有分號的段落，會漏掉沒有尾分號的最後一段。
+ */
+export function resolveExecutableOnPath(
+  file: string,
+  pathValue: string | undefined,
+  fileExists: (candidate: string) => boolean = existsSync,
+): string | undefined {
+  if (!pathValue) return undefined;
+  for (const rawDir of pathValue.split(';')) {
+    const dir = rawDir.trim().replace(/^"|"$/g, '');
+    if (!dir || !pathWin32.isAbsolute(dir)) continue;
+    const candidate = pathWin32.join(dir, file);
+    if (fileExists(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/** 解析 ShellKind → 絕對執行檔；Windows 內建 shell 不再交給 node-pty 以裸名稱查 PATH。 */
+export function resolveShellFile(shell: ShellKind, options: ShellResolutionOptions = {}): string {
+  const env = options.env ?? process.env;
+  const fileExists = options.fileExists ?? existsSync;
+  const configuredSystemRoot = envValue(env, 'SystemRoot') ?? envValue(env, 'windir');
+  const configuredProgramFiles = envValue(env, 'ProgramFiles');
+  const systemRoot = configuredSystemRoot && pathWin32.isAbsolute(configuredSystemRoot)
+    ? configuredSystemRoot
+    : 'C:\\Windows';
+  const programFiles = configuredProgramFiles && pathWin32.isAbsolute(configuredProgramFiles)
+    ? configuredProgramFiles
+    : 'C:\\Program Files';
+  const system32 = pathWin32.join(systemRoot, 'System32');
+
   switch (shell) {
     case 'powershell':
-      return 'powershell.exe';
+      return pathWin32.join(system32, 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     case 'cmd':
-      return 'cmd.exe';
+      return pathWin32.join(system32, 'cmd.exe');
     case 'pwsh':
-      return 'pwsh.exe';
+      return firstExisting(
+        [
+          pathWin32.join(programFiles, 'PowerShell', '7', 'pwsh.exe'),
+          resolveExecutableOnPath('pwsh.exe', envValue(env, 'Path'), fileExists) ?? '',
+        ],
+        fileExists,
+      ) ?? pathWin32.join(programFiles, 'PowerShell', '7', 'pwsh.exe');
     case 'wsl':
-      return 'wsl.exe';
+      return pathWin32.join(system32, 'wsl.exe');
     case 'gitbash':
-      return existsSync(GIT_BASH_PATH) ? GIT_BASH_PATH : 'bash.exe';
+      return firstExisting(
+        [
+          pathWin32.join(programFiles, 'Git', 'bin', 'bash.exe'),
+          GIT_BASH_PATH,
+          resolveExecutableOnPath('bash.exe', envValue(env, 'Path'), fileExists) ?? '',
+        ],
+        fileExists,
+      ) ?? pathWin32.join(programFiles, 'Git', 'bin', 'bash.exe');
   }
 }
 
@@ -192,9 +251,33 @@ export interface PtyDeps {
 }
 
 export class PtyError extends Error {
-  constructor(public readonly code: 'invalid-shell' | 'no-workspace') {
+  constructor(public readonly code: PtyCreateErrorCode, options?: ErrorOptions) {
     super(`[Polydesk] pty:create 失敗：${code}`);
     this.name = 'PtyError';
+    if (options?.cause !== undefined) this.cause = options.cause;
+  }
+}
+
+const SHELL_DISPLAY_NAME: Record<ShellKind, string> = {
+  powershell: 'Windows PowerShell',
+  cmd: 'CMD',
+  pwsh: 'PowerShell 7',
+  gitbash: 'Git Bash',
+  wsl: 'WSL',
+};
+
+export function toPtyCreateResult(error: unknown, shell: ShellKind): Extract<PtyCreateResult, { error: string }> {
+  const code = error instanceof PtyError ? error.code : 'spawn-failed';
+  const label = SHELL_DISPLAY_NAME[shell];
+  switch (code) {
+    case 'invalid-shell':
+      return { error: '不支援這個終端機類型。請重新選擇 shell。', code };
+    case 'no-workspace':
+      return { error: '工作區不存在或目前無法存取，請先確認資料夾仍然可用。', code };
+    case 'shell-not-found':
+      return { error: `找不到 ${label} 執行檔，請確認該 shell 已正確安裝。`, code };
+    case 'spawn-failed':
+      return { error: `無法啟動 ${label}。請重新開啟 Polydesk；若仍失敗，請檢查系統安全設定。`, code };
   }
 }
 
@@ -280,16 +363,23 @@ export class PtyManager {
     if (!ws || ws.status !== 'ok') throw new PtyError('no-workspace');
 
     const file = resolveShellFile(shell);
-    const p = this.spawn(file, resolveShellArgs(shell), {
-      name: 'xterm-256color',
-      cols: 80,
-      rows: 24,
-      cwd: ws.path,
-      // REQ-SEC-002：使用者 shell 保留其完整環境，只剔除 Electron/Node 注入向量
-      // （ELECTRON_RUN_AS_NODE/NODE_OPTIONS），避免 shell rc/profile 自動執行碼濫用。
-      env: sanitizeUserEnv(),
-      encoding: null,
-    });
+    let p: ManagedPty;
+    try {
+      p = this.spawn(file, resolveShellArgs(shell), {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 24,
+        cwd: ws.path,
+        // REQ-SEC-002：使用者 shell 保留其完整環境，只剔除 Electron/Node 注入向量
+        // （ELECTRON_RUN_AS_NODE/NODE_OPTIONS），避免 shell rc/profile 自動執行碼濫用。
+        env: sanitizeUserEnv(),
+        encoding: null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const code: PtyCreateErrorCode = /file not found/i.test(message) ? 'shell-not-found' : 'spawn-failed';
+      throw new PtyError(code, { cause: error });
+    }
 
     const termId = randomUUID();
     const term: Term = {
@@ -519,7 +609,13 @@ export function registerPtyHandlers(
 ): PtyManager {
   const mgr = new PtyManager(workspaces, lifecycle);
 
-  ipc.handle('pty:create', (_e, req: { wsId: string; shell: ShellKind }) => mgr.create(req));
+  ipc.handle('pty:create', (_e, req: { wsId: string; shell: ShellKind }): PtyCreateResult => {
+    try {
+      return mgr.create(req);
+    } catch (error) {
+      return toPtyCreateResult(error, req.shell);
+    }
+  });
   ipc.handle('pty:resize', (_e, req: { termId: string; cols: number; rows: number }) => mgr.resize(req));
   ipc.handle('pty:close', (_e, req: { termId: string }) => mgr.close(req));
   ipc.handle('pty:list', (_e, req: { wsId: string }) => mgr.list(req.wsId));

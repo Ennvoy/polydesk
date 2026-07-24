@@ -13,6 +13,7 @@ import type {
   GitWorktree,
   TermState,
   ShellKind,
+  PtyCreateResult,
   FileEncoding,
   Eol,
   SearchHit,
@@ -161,7 +162,7 @@ export interface InvokeChannels {
   /** 目前所有（工作區×工具）AI 狀態快照：徽章/計數掛載先拉現況再訂閱 claude:status（重掛不丟燈）。 */
   'claude:states': { req: void; res: { wsId: string; tool: AiTool; status: ClaudeStatus }[] };
   // 終端機（控制訊息走 invoke；資料流走 stream）
-  'pty:create': { req: { wsId: string; shell: ShellKind }; res: { termId: string } };
+  'pty:create': { req: { wsId: string; shell: ShellKind }; res: PtyCreateResult };
   'pty:resize': {
     req: { termId: string; cols: number; rows: number };
     /** applied=false 表示 ConPTY 本次未接受尺寸，renderer 必須稍後重試，不能據此啟動 TUI。 */

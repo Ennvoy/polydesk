@@ -3,6 +3,10 @@
 
 export type ThemeId = 'dark' | 'light' | 'warm';
 export type ShellKind = 'powershell' | 'cmd' | 'pwsh' | 'gitbash' | 'wsl';
+export type PtyCreateErrorCode = 'invalid-shell' | 'no-workspace' | 'shell-not-found' | 'spawn-failed';
+export type PtyCreateResult =
+  | { termId: string }
+  | { error: string; code: PtyCreateErrorCode };
 export type FileEncoding = 'utf-8' | 'utf-8-bom' | 'big5' | 'utf-16le' | 'utf-16be';
 export type Eol = 'crlf' | 'lf';
 

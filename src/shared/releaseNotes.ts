@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.13.0',
+    date: '2026-07-24',
+    highlights: [
+      '修正安裝 Sunlike365 等軟體後 PATH 被重排，導致 PowerShell、CMD 或 WSL 終端機按下後無法開啟',
+      'Windows 內建 shell 改用系統絕對路徑；PowerShell 7 與 Git Bash 也會完整檢查 PATH 最後一段',
+      '終端機建立或重啟失敗時會顯示原因與錯誤代碼，不再只呈現按鈕沒有反應',
+    ],
+  },
+  {
     version: '0.12.0',
     date: '2026-07-24',
     highlights: [

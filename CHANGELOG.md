@@ -7,6 +7,18 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.13.0（2026-07-24）
+
+Windows 終端機啟動相容性修正：安裝其他軟體導致 PATH 重排後，PowerShell、CMD 與 WSL 仍可正常建立；失敗時也會顯示可判讀的原因。
+
+### 2026-07-24｜修正 Sunlike365 安裝後終端機無法開啟
+
+- 病根：Polydesk 原本把 `powershell.exe`、`cmd.exe` 等裸名稱交給 `node-pty 1.1.0`；其 Windows PATH parser 會漏掉沒有尾分號的最後一段。Sunlike365 安裝後若把 `System32` 或 Windows PowerShell 路徑排到最後，外部 shell 仍可正常開啟，但 Polydesk 會回報 `File not found`。
+- 修法：Windows PowerShell、CMD、WSL 改由 `SystemRoot` 組出絕對執行檔路徑，不再依賴 node-pty 查找；PowerShell 7 與 Git Bash 保留安裝位置探測，並使用會完整檢查最後一段的安全 PATH parser，所有合法 shell 最終都以絕對路徑啟動。
+- 錯誤回報：`pty:create` 新增 `invalid-shell`、`no-workspace`、`shell-not-found`、`spawn-failed` 結構化結果；新增與崩潰重啟失敗時，終端機面板會顯示可關閉的就地提示與錯誤代碼，不再靜默吞掉例外。
+- 安全邊界：renderer 仍只能傳固定 `ShellKind`，不能指定任意執行檔或參數；終端機環境清洗、工作區 cwd 驗證與 ConPTY 安全策略維持不變。
+- 驗證：typecheck、正式 build、PTY／環境單元測試 29 案，以及真 Electron E2E 2 案全綠；E2E 直接以 `C:\\Sunlike365;C:\\Windows\\System32` 且無尾分號的 PATH 啟動，確認 PowerShell 可建立，並另驗證缺少 shell 時會顯示 `shell-not-found`。
+
 ## v0.12.0（2026-07-24）
 
 終端機網址外開修正：純文字 HTTP／HTTPS 與 OSC 8 超連結現在可安全交給系統預設瀏覽器，不再只能顯示、無法點擊。

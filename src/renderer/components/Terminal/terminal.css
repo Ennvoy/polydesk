@@ -162,6 +162,43 @@
   border-color: color-mix(in oklab, var(--warning, #d99a2b), var(--border) 48%);
 }
 
+/* 建立／重啟 PTY 失敗時保留可操作的就地提示；不再讓 IPC/native spawn 錯誤看起來像按鈕沒反應。 */
+.pd-term-create-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  padding: 5px var(--space-2);
+  color: var(--danger, #e5484d);
+  background: color-mix(in oklab, var(--danger, #e5484d), transparent 90%);
+  border-bottom: 1px solid color-mix(in oklab, var(--danger, #e5484d), var(--border) 60%);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+.pd-term-create-error span {
+  flex: 1;
+  min-width: 0;
+}
+.pd-term-create-error-close {
+  flex-shrink: 0;
+  padding: 0 4px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-base);
+  line-height: 1;
+}
+.pd-term-create-error-close:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.12));
+}
+.pd-term-create-error-close:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 /* 拖曳分隔條：並排（左右）= 直立細條 col-resize；上下 = 橫向細條 row-resize。hover/拖曳時高亮。 */
 .pd-term-handle-h,
 .pd-term-handle-v {

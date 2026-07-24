@@ -1,6 +1,6 @@
 # Polydesk
 
-![version](https://img.shields.io/badge/version-v0.12.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+![version](https://img.shields.io/badge/version-v0.13.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
 
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
@@ -15,7 +15,7 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 | 功能 | 說明 |
 | --- | --- |
 | **多工作區** | 左側工作區列（可顯示/隱藏）切換專案；可加入既有資料夾，或透過 HTTPS／SSH Clone Git Repository 後直接開啟；GitHub 私有倉庫支援瀏覽器登入帳號並自動重試；每個工作區獨立狀態。 |
-| **終端機多開** | 同一工作區可並排/上下多開終端機、可拖曳調整，支援 PowerShell 等 shell；工具列可一鍵建立並啟動 Claude bypass、Codex 或 Agy，且會核對 xterm 與 ConPTY 的實際欄列一致後才啟動 TUI，尺寸套用失敗會自動重試，避免首屏或版面切換後跑版；選取文字後可用 `Ctrl+C` 在終端機間複製貼上，未選取時仍送出中斷訊號；按住 `Ctrl` 點擊輸出的檔案路徑可直接開檔並跳到指定行欄，點擊 HTTP／HTTPS 網址則交由系統瀏覽器開啟。 |
+| **終端機多開** | 同一工作區可並排/上下多開終端機、可拖曳調整，支援 PowerShell 等 shell；Windows 內建 shell 以絕對路徑啟動，不受其他軟體重排 PATH 影響，啟動失敗會顯示原因；工具列可一鍵建立並啟動 Claude bypass、Codex 或 Agy，且會核對 xterm 與 ConPTY 的實際欄列一致後才啟動 TUI，尺寸套用失敗會自動重試，避免首屏或版面切換後跑版；選取文字後可用 `Ctrl+C` 在終端機間複製貼上，未選取時仍送出中斷訊號；按住 `Ctrl` 點擊輸出的檔案路徑可直接開檔並跳到指定行欄，點擊 HTTP／HTTPS 網址則交由系統瀏覽器開啟。 |
 | **Monaco 編輯器** | 多分頁、分割並排、依視窗寬度自動換行；AI／外部工具改檔後，乾淨分頁與唯讀預覽會自動更新，大批改檔也會對帳；未存檔內容不會被覆蓋。分頁右鍵可關閉、關閉其他或關閉目前工作區的全部分頁。 |
 | **Git 原始碼控制** | status / stage / commit / push / pull / stash / branch / log / diff；SCM、活動列與狀態列共用單次 Git 快照，開啟面板與切換分支不再重複掃描工作樹；整合終端機或外部工具完成 commit / push 後會自動同步分支與未推送狀態；**AI 產生 commit message**（可切換 claude / codex / agy 引擎）。 |
 | **檔案總管** | VSCode 風右鍵編輯（新增/改名/刪除/剪貼）；**從系統剪貼簿 Ctrl+V 貼入外部檔案**；刪除**移到資源回收桶**（可救回）。 |
@@ -35,6 +35,8 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 4. 登入流程需要 [GitHub CLI](https://cli.github.com/)；Token 由 `gh` 與 Windows 憑證庫保管，Polydesk 不會讀取或保存。Clone 完成後即可開終端機、編輯檔案、跑 Git、看 AI 狀態。
 
 終端機面板右上方提供三個 AI CLI 快捷按鈕：`Claude bypass` 會執行 `claude --dangerously-skip-permissions`，`Codex` 會執行 `codex`，`Agy` 會執行 `agy`。每次點擊都會建立一個獨立終端機，沿用目前工作區選定的 shell；Polydesk 會等 xterm 與 Windows ConPTY 回報相同欄列後才啟動工具，若尺寸未實際套用則自動重試，避免 Claude 等 TUI 先用錯誤欄寬排版。Claude bypass 會略過所有工具與檔案操作的權限確認，只能在你完全信任的工作區使用。
+
+Windows PowerShell、CMD 與 WSL 會由 Polydesk 使用系統絕對路徑啟動，即使安裝 Sunlike365 等軟體後 `PATH` 順序改變也不需手動修環境變數。PowerShell 7 或 Git Bash 若未安裝，終端機面板會顯示 `shell-not-found` 錯誤；工作區遺失或 ConPTY 無法建立時也會提供對應代碼，不再只像按鈕沒有反應。
 
 ### 從終端機開啟檔案與網址
 

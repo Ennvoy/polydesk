@@ -87,6 +87,7 @@ export function TerminalPanel(): React.JSX.Element {
   const [dir, setDir] = useState<SplitDir>('horizontal'); // 並排（左右）預設；可切上下
   const listedWs = useRef<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   // AI 快捷啟動命令必須等 TerminalView 完成首次有效 fit、尺寸同步到 PTY 且「靜置穩定」後才送；
   // 否則 Claude 等 TUI 會按 ConPTY 預設 80x24 或收斂前的中間尺寸繪製靜態歡迎橫幅，遲到的
   // resize 會把橫幅定格成殘影（動態區會重畫、靜態區不會）。穩定窗實作在 TerminalView。
@@ -158,7 +159,10 @@ export function TerminalPanel(): React.JSX.Element {
 
   // 工作區切換時，把新建終端機的預設 shell 同步成該工作區預設。
   useEffect(() => {
-    if (activeWs) setNewShell(activeWs.defaultShell);
+    if (activeWs) {
+      setNewShell(activeWs.defaultShell);
+      setCreateError(null);
+    }
   }, [activeWs?.id, activeWs?.defaultShell]);
 
   // 顯示/隱藏 popover：點外面關閉。
@@ -177,15 +181,21 @@ export function TerminalPanel(): React.JSX.Element {
     launch?: { name: string; command: string },
   ): Promise<void> => {
     setBusy(true);
+    setCreateError(null);
     try {
-      const { termId } = await ipc.pty.create({ wsId, shell });
+      const result = await ipc.pty.create({ wsId, shell });
+      if ('error' in result) {
+        setCreateError(`${result.error}（錯誤代碼：${result.code}）`);
+        return;
+      }
+      const { termId } = result;
       if (launch) pendingLaunchesRef.current.set(termId, launch.command);
       setTerms((prev) => [
         ...prev,
         { termId, wsId, shell, alive: true, exitCode: null, name: launch?.name },
       ]);
     } catch {
-      /* create 失敗（如非法 shell / 工作區）：不新增，狀態維持清楚 */
+      setCreateError(`無法啟動 ${SHELL_LABEL[shell]}，請重新開啟 Polydesk 後再試。`);
     } finally {
       setBusy(false);
     }
@@ -205,13 +215,19 @@ export function TerminalPanel(): React.JSX.Element {
 
   // 崩潰重啟（REQ-TERM-006）：以同 shell 同工作區重建，取代該分頁的 termId（沿用名稱/隱藏狀態）。
   const restartTerm = useCallback(async (entry: TermEntry): Promise<void> => {
+    setCreateError(null);
     try {
-      const { termId } = await ipc.pty.create({ wsId: entry.wsId, shell: entry.shell });
+      const result = await ipc.pty.create({ wsId: entry.wsId, shell: entry.shell });
+      if ('error' in result) {
+        setCreateError(`${result.error}（錯誤代碼：${result.code}）`);
+        return;
+      }
+      const { termId } = result;
       setTerms((prev) =>
         prev.map((t) => (t.termId === entry.termId ? { ...t, termId, alive: true, exitCode: null } : t)),
       );
     } catch {
-      /* 重啟失敗：維持結束狀態 */
+      setCreateError(`無法重新啟動 ${SHELL_LABEL[entry.shell]}，請重新開啟 Polydesk 後再試。`);
     }
   }, []);
 
@@ -404,6 +420,21 @@ export function TerminalPanel(): React.JSX.Element {
           </button>
         </div>
       </div>
+
+      {createError && (
+        <div className="pd-term-create-error" role="alert">
+          <span>{createError}</span>
+          <button
+            type="button"
+            className="pd-term-create-error-close"
+            aria-label="關閉終端機錯誤提示"
+            title="關閉提示"
+            onClick={() => setCreateError(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* 並排本體：只放 active 工作區的「可見」終端機為 Panel（各 pane-body 是 host 的 slot）。 */}
       <div className="pd-term-body" style={{ position: 'relative', flex: 1, minHeight: 0 }}>
