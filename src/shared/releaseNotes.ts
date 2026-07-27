@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.14.0',
+    date: '2026-07-27',
+    highlights: [
+      '修正 Claude Code 顯示的 Read(...) 檔案路徑按住 Ctrl 點擊沒有反應',
+      '支援 Read(path · lines 1-60) 格式，開檔時會直接跳到指定範圍的起始行',
+      '括號內 Windows 絕對路徑與含空白路徑只會標示真正檔名，不會把工具名稱或行數後綴帶入',
+    ],
+  },
+  {
     version: '0.13.0',
     date: '2026-07-24',
     highlights: [

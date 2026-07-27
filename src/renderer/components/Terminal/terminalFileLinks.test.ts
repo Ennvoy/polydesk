@@ -28,6 +28,34 @@ describe('findTerminalFileLinks', () => {
       expect.objectContaining({ path: 'src/rules/asteria-vault.md' }),
     ]);
   });
+
+  it('辨識 Claude Read 工具輸出的括號路徑與行數範圍', () => {
+    const health = 'Read(C:\\Users\\ennvoy.lin\\Desktop\\Asteria\\system\\health.md)';
+    const log = 'Read(C:\\Users\\ennvoy.lin\\Desktop\\Asteria\\system\\log.md · lines 1-60)';
+
+    expect(findTerminalFileLinks(health)).toEqual([
+      expect.objectContaining({
+        text: 'C:\\Users\\ennvoy.lin\\Desktop\\Asteria\\system\\health.md',
+        path: 'C:\\Users\\ennvoy.lin\\Desktop\\Asteria\\system\\health.md',
+        line: undefined,
+      }),
+    ]);
+    expect(findTerminalFileLinks(log)).toEqual([
+      expect.objectContaining({
+        text: 'C:\\Users\\ennvoy.lin\\Desktop\\Asteria\\system\\log.md',
+        path: 'C:\\Users\\ennvoy.lin\\Desktop\\Asteria\\system\\log.md',
+        line: 1,
+      }),
+    ]);
+  });
+
+  it('Claude Read 括號內含空白的路徑仍只把檔案本身標成連結', () => {
+    const text = '● Read(C:\\My Repo\\notes\\daily log.md · lines 12-30)';
+    const [match] = findTerminalFileLinks(text);
+
+    expect(match).toMatchObject({ path: 'C:\\My Repo\\notes\\daily log.md', line: 12 });
+    expect(text.slice(match.start, match.end)).toBe('C:\\My Repo\\notes\\daily log.md');
+  });
 });
 
 describe('findTerminalFileCellLinks', () => {

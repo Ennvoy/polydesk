@@ -7,6 +7,17 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.14.0（2026-07-27）
+
+Claude Code 工具輸出連結修正：`Read(...)` 顯示的檔案路徑現在可按住 Ctrl 點擊開啟，含行數範圍時會直接跳到起始行。
+
+### 2026-07-27｜修正 Claude Read 檔案連結無法開啟
+
+- 病根：既有終端檔案 matcher 只辨識獨立路徑 token；Claude Code 實際輸出為 `Read(C:\path\file.md)` 或 `Read(C:\path\file.md · lines 1-60)`，`Read(` 前綴與行數後綴讓整段無法成為合法路徑，因此 Ctrl+左鍵找不到可啟用的 match。
+- 修法：在通用 token 解析前新增工具呼叫格式解析，只把括號內真正路徑映射成 xterm 連結；支援 Windows 絕對／相對路徑與空白，`lines N-M` 會轉成編輯器起始行定位，工具名稱、括號與行數後綴不會送進 main process。
+- 去重與安全：特殊格式和通用 parser 以完整文字區間去重，避免同一段生成兩條重疊連結；檔案存在性、工作區 containment、外部檔確認與危險副檔名封鎖仍由既有 main process 安全鏈路執行。
+- 驗證：檔案連結單元測試 7 案、typecheck、正式 build 全綠；真 Electron E2E 實際 hover 並 Ctrl+點擊 `Read(system/health log.md · lines 2-3)`，確認 Monaco 開檔並跳到第 2 行，既有工作區內定位與工作區外安全案例亦通過。
+
 ## v0.13.0（2026-07-24）
 
 Windows 終端機啟動相容性修正：安裝其他軟體導致 PATH 重排後，PowerShell、CMD 與 WSL 仍可正常建立；失敗時也會顯示可判讀的原因。

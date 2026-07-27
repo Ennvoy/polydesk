@@ -75,6 +75,80 @@ test('Ctrl+點擊終端機工作區路徑：在 Polydesk 編輯器開檔並跳�
   }
 });
 
+test('Ctrl+點擊 Claude Read 工具輸出：開啟括號內路徑並套用 lines 起始行', async () => {
+  const root = makeTempDir('pd-term-claude-read-link-');
+  const dir = makeSubDir(root, 'link-ws');
+  const linked = join(dir, 'system', 'health log.md');
+  mkdirSync(join(dir, 'system'), { recursive: true });
+  writeFileSync(linked, ['line one', 'TARGET_FROM_READ', 'line three'].join('\n'), 'utf8');
+  const { app, page, userData } = await launchApp();
+  try {
+    await stubFolderPicker(app, [dir]);
+    await addWorkspaceViaUI(page);
+    await page.locator('button[aria-label="開啟工作區 link-ws"]').click();
+    await page.locator('button[aria-label="新增終端機"]').click();
+    const host = page.locator('.pd-term-view [data-term-unicode]').first();
+    await expect(host).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(1_500);
+
+    const point = await host.evaluate(async (el) => {
+      const term = (el as HTMLElement & {
+        __pdTerm?: {
+          buffer: { active: { cursorY: number } };
+          write(data: string, callback: () => void): void;
+          _core?: {
+            _renderService?: {
+              dimensions?: { css?: { cell?: { width: number; height: number } } };
+            };
+          };
+        };
+      }).__pdTerm;
+      if (!term) throw new Error('找不到 xterm 實例');
+      // 用不換行的工作區相對路徑驗 Ctrl+點擊完整鏈路；Windows 絕對路徑與空白解析由單元測試釘死。
+      const terminalPath = 'system/health log.md';
+      const output = `Read(${terminalPath} · lines 2-3)`;
+      await new Promise<void>((resolve) => term.write(`\r\n${output}`, resolve));
+      const cell = term._core?._renderService?.dimensions?.css?.cell;
+      if (!cell?.width || !cell.height) throw new Error('無法取得 xterm cell 尺寸');
+      const rect = el.querySelector('.xterm-screen')!.getBoundingClientRect();
+      const pathCell = output.indexOf(terminalPath) + 3;
+      return {
+        x: rect.left + cell.width * pathCell,
+        y: rect.top + cell.height * (term.buffer.active.cursorY + 0.5),
+        relativeX: cell.width * pathCell,
+        relativeY: cell.height * (term.buffer.active.cursorY + 0.5),
+        terminalPath,
+      };
+    });
+
+    await page.mouse.move(point.x, point.y);
+    await expect
+      .poll(
+        () =>
+          host.evaluate((el) => {
+            const term = (el as HTMLElement & {
+              __pdTerm?: { _core?: { linkifier?: { currentLink?: { link?: { text?: string } } } } };
+            }).__pdTerm;
+            return term?._core?.linkifier?.currentLink?.link?.text ?? '';
+          }),
+        { timeout: 5_000, message: 'Claude Read 輸出的括號路徑未成為 xterm 連結' },
+      )
+      .toBe(point.terminalPath);
+    await page.locator('.pd-term-view .xterm-screen').first().click({
+      position: { x: point.relativeX, y: point.relativeY },
+      modifiers: ['Control'],
+    });
+
+    await expect(page.locator('[role="tab"][aria-label^="health log.md"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.monaco-editor').first()).toContainText('TARGET_FROM_READ', { timeout: 15_000 });
+    await expect(page.getByText('行 2，欄 1', { exact: true })).toBeVisible({ timeout: 15_000 });
+  } finally {
+    await app.close();
+    rmSync(userData, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('工作區外檔案：主程序確認後才外開，危險腳本一律封鎖', async () => {
   const root = makeTempDir('pd-term-external-link-');
   const dir = makeSubDir(root, 'link-ws');

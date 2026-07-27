@@ -1,6 +1,6 @@
 # Polydesk
 
-![version](https://img.shields.io/badge/version-v0.13.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+![version](https://img.shields.io/badge/version-v0.14.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
 
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
@@ -42,7 +42,7 @@ Windows PowerShell、CMD 與 WSL 會由 Polydesk 使用系統絕對路徑啟動�
 
 終端機輸出的 `http://`、`https://` 純文字網址與 OSC 8 超連結會顯示為可點項目；按住 `Ctrl` 再點擊即可交由 Windows 預設瀏覽器開啟。一般左鍵仍保留給文字選取與 TUI 操作。網址會在 renderer 與 main process 各驗證一次，只允許不含內嵌帳密的 HTTP／HTTPS；`javascript:`、`file:`、`data:` 等協定不會外開。
 
-將滑鼠移到終端機輸出的檔案路徑，路徑會顯示底線；按住 `Ctrl` 再點擊即可開啟。支援 Windows 絕對路徑、`~\...` 家目錄路徑、工作區相對路徑，以及 `path:line`、`path:line:column` 定位格式；含空白的路徑請以單引號或雙引號包住。即使路徑前方有中文、全形符號或 emoji，也會依終端實際格位正確標示與點擊。
+將滑鼠移到終端機輸出的檔案路徑，路徑會顯示底線；按住 `Ctrl` 再點擊即可開啟。支援 Windows 絕對路徑、`~\...` 家目錄路徑、工作區相對路徑，以及 `path:line`、`path:line:column` 定位格式；Claude Code 的 `Read(path)` 與 `Read(path · lines 1-60)` 工具輸出也能直接開檔，後者會跳到範圍起始行。含空白的獨立路徑請以單引號或雙引號包住；`Read(...)` 括號內可直接包含空白。即使路徑前方有中文、全形符號或 emoji，也會依終端實際格位正確標示與點擊。
 
 - 工作區內檔案會在 Polydesk 編輯器開啟；若路徑包含行號與欄位，游標會直接跳到該位置。
 - 相對路徑以終端機啟動時的工作區根目錄為準；若已在 shell 內 `cd` 到其他位置，請使用絕對路徑。

@@ -70,6 +70,30 @@ function parsePathAndPosition(value: string): Pick<TerminalFileLinkMatch, 'path'
  */
 export function findTerminalFileLinks(text: string): TerminalFileLinkMatch[] {
   const matches: TerminalFileLinkMatch[] = [];
+  // Claude Code 會把工具輸出顯示成 Read(C:\\path\\file.md) 或
+  // Read(C:\\path\\file.md · lines 1-60)。先抽出括號內的完整路徑，才能同時支援
+  // Windows 路徑中的空白，並避免把 Read( 或行數後綴送到 main process。
+  const wrappedTools = /\b[A-Za-z][A-Za-z0-9_-]*\(([^)\r\n]+)\)/g;
+  let wrapped: RegExpExecArray | null;
+  while ((wrapped = wrappedTools.exec(text))) {
+    const content = wrapped[1];
+    const position = /^(.*?)(?:\s+·\s+lines?\s+(\d+)(?:-\d+)?)\s*$/i.exec(content);
+    const rawPath = position?.[1] ?? content;
+    const path = rawPath.trim();
+    const parsed = parsePathAndPosition(path);
+    if (!parsed) continue;
+    const contentOffset = wrapped[0].indexOf(content);
+    const leading = rawPath.length - rawPath.trimStart().length;
+    const start = wrapped.index + contentOffset + leading;
+    matches.push({
+      start,
+      end: start + path.length,
+      text: path,
+      ...parsed,
+      line: parsed.line ?? (position?.[2] ? Number(position[2]) : undefined),
+    });
+  }
+
   const tokens = /"([^"\r\n]+)"|'([^'\r\n]+)'|[^\s<>"'`，。；！？、]+/g;
   let token: RegExpExecArray | null;
   while ((token = tokens.exec(text))) {
@@ -80,14 +104,16 @@ export function findTerminalFileLinks(text: string): TerminalFileLinkMatch[] {
     const parsed = parsePathAndPosition(trimmed.value);
     if (!parsed) continue;
     const start = token.index + quoteOffset + trimmed.leading;
+    const end = start + trimmed.value.length;
+    if (matches.some((match) => start < match.end && end > match.start)) continue;
     matches.push({
       start,
-      end: start + trimmed.value.length,
+      end,
       text: trimmed.value,
       ...parsed,
     });
   }
-  return matches;
+  return matches.sort((a, b) => a.start - b.start);
 }
 
 /**
