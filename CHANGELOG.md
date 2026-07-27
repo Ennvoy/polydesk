@@ -7,6 +7,17 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.17.0（2026-07-27）
+
+第三方軟體剪貼簿相容修正：圖片即使被包裝成無路徑、通用 MIME 的虛擬檔案，仍可在 Polydesk 檔案總管貼入。
+
+### 2026-07-27｜支援非標準 MIME 的虛擬圖片檔
+
+- 確認：圖片貼上链路使用 Electron `clipboard.readImage()` 與 Node 檔案 API，沒有啟動外部程式或以程式名查找執行檔；第三方軟體重排系統 `PATH` 不會影響此功能。
+- 病根：部分軟體不會在 paste event 公告 `image/*`，而是提供 `Files` 與 `application/octet-stream`（或空 MIME）的無磁碟路徑虛擬 File。v0.16.0 只在偵測到 image MIME 時啟動 bitmap fallback，所以這類剪貼簿會誤報無法取得檔案路徑。
+- 修法：只要 paste event 有 `Files` 但取不到任何可用磁碟路徑，也會交由 main process 嘗試讀取剪貼簿 bitmap 並沿用既有 PNG 安全落檔流程；實體檔案與純文字貼上行為不變。
+- 驗證：typecheck、差異格式檢查與正式 build 通過；真 Electron Explorer E2E 4 案全綠，新案重現 `Files` + `application/octet-stream` + 無路徑虛擬圖片，確認仍會讀取系統 bitmap 並建立 PNG。
+
 ## v0.16.0（2026-07-27）
 
 剪貼簿圖片貼上支援：從截圖工具、瀏覽器或通訊軟體複製圖片後，可直接在 Polydesk 檔案總管按 `Ctrl+V` 建立 PNG。

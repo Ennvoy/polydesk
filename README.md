@@ -1,6 +1,6 @@
 # Polydesk
 
-![version](https://img.shields.io/badge/version-v0.16.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+![version](https://img.shields.io/badge/version-v0.17.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
 
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
@@ -18,7 +18,7 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 | **終端機多開** | 同一工作區可並排/上下多開終端機、可拖曳調整，支援 PowerShell 等 shell；Windows 內建 shell 以絕對路徑啟動，不受其他軟體重排 PATH 影響，啟動失敗會顯示原因；工具列可一鍵建立並啟動 Claude bypass、Codex 或 Agy，且會核對 xterm 與 ConPTY 的實際欄列一致後才啟動 TUI，尺寸套用失敗會自動重試，避免首屏或版面切換後跑版；選取文字後可用 `Ctrl+C` 在終端機間複製貼上，未選取時仍送出中斷訊號；按住 `Ctrl` 點擊輸出的檔案路徑可直接開檔並跳到指定行欄，點擊 HTTP／HTTPS 網址則交由系統瀏覽器開啟。 |
 | **Monaco 編輯器** | 多分頁、分割並排、依視窗寬度自動換行；AI／外部工具改檔後，乾淨分頁與唯讀預覽會自動更新，大批改檔也會對帳；未存檔內容不會被覆蓋。分頁右鍵可關閉、關閉其他或關閉目前工作區的全部分頁。 |
 | **Git 原始碼控制** | status / stage / commit / push / pull / stash / branch / log / diff；SCM、活動列與狀態列共用單次 Git 快照，開啟面板與切換分支不再重複掃描工作樹；整合終端機或外部工具完成 commit / push 後會自動同步分支與未推送狀態；**AI 產生 commit message**（可切換 claude / codex / agy 引擎）。 |
-| **檔案總管** | VSCode 風右鍵編輯（新增/改名/刪除/剪貼）；可用 `Ctrl+V` 貼入外部檔案，也能把截圖工具、瀏覽器或通訊軟體複製的圖片直接存成 PNG；刪除**移到資源回收桶**（可救回）。 |
+| **檔案總管** | VSCode 風右鍵編輯（新增/改名/刪除/剪貼）；可用 `Ctrl+V` 貼入外部檔案，也能把截圖工具、瀏覽器或通訊軟體複製的圖片直接存成 PNG，包含無路徑且使用通用 MIME 的虛擬圖片檔；刪除**移到資源回收桶**（可救回）。 |
 | **試算表預覽** | `.xlsx / .xls` 直接渲染成表格（Excel 風欄標＋列號、多工作表切換），不再是二進位亂碼。 |
 | **AI 狀態監控** | 以真實 process 與工具事件偵測各工作區狀態；Windows 系統程序掃描使用絕對路徑，不受第三方軟體重排 PATH 影響；Claude / Codex 支援細分狀態，Agy 第一版提供「執行中 / 未啟動」徽章；主工作樹與每個 worktree 皆依自身路徑獨立顯示 Claude／Codex／Agy 標籤。 |
 | **總覽面板** | 一鍵最大化總覽：各工作區 Claude / Codex / Agy 狀態，以及 Claude / Codex 服務用量（5 小時 / 每週額度；Agy CLI 未提供可讀取用量，因此不顯示用量卡）。 |
@@ -40,7 +40,7 @@ Windows PowerShell、CMD 與 WSL 會由 Polydesk 使用系統絕對路徑啟動�
 
 AI 執行狀態監控使用 `SystemRoot` 下的 Windows PowerShell／WMIC 絕對路徑掃描程序，因此同一類 PATH 重排不會再造成工作區的 Claude、Codex、Agy 標籤消失。標籤只會在對應 AI CLI 確實於 Polydesk 終端機內啟動時顯示；工具結束並關閉終端機後會回到未啟動狀態。
 
-在截圖工具、瀏覽器或通訊軟體複製圖片後，先點一下檔案總管中的目標資料夾，再按 `Ctrl+V`，圖片會存成 `貼上圖片.png`；若檔名已存在會自動建立 `貼上圖片 copy.png`，不會覆蓋舊檔。從 Windows 檔案總管複製既有圖片檔時，仍會保留原始檔名與格式。
+在截圖工具、瀏覽器或通訊軟體複製圖片後，先點一下檔案總管中的目標資料夾，再按 `Ctrl+V`，圖片會存成 `貼上圖片.png`；若檔名已存在會自動建立 `貼上圖片 copy.png`，不會覆蓋舊檔。此流程同時支援某些軟體用「無磁碟路徑、通用 MIME 虛擬檔案」提供的圖片，且不依賴系統 `PATH`。從 Windows 檔案總管複製既有圖片檔時，仍會保留原始檔名與格式。
 
 ### 從終端機開啟檔案與網址
 

@@ -382,8 +382,9 @@ export function Explorer(): React.JSX.Element {
   // Ctrl+V 從系統剪貼簿貼入外部檔案（VSCode 風）。兩段協作、不依賴檔案總管有焦點：
   //   ① keydown：焦點不在可編輯元素時（如點在檔案樹的 div），Chromium 本不會觸發 paste，
   //      故把焦點導到隱藏 catcher（contenteditable）逼瀏覽器把貼上事件送出來。
-  //   ② paste（capture）：實體檔案走 importFiles；截圖／瀏覽器複製等無路徑 bitmap 走
-  //      importClipboardImage 轉 PNG。純文字貼上仍放行編輯器／終端機。
+  //   ② paste（capture）：實體檔案走 importFiles；截圖／瀏覽器複製等無路徑 bitmap，
+  //      以及某些軟體用通用 MIME 暴露的無路徑虛擬檔案，均改由 main process
+  //      直接讀取系統剪貼簿並轉 PNG。純文字貼上仍放行編輯器／終端機。
   useEffect(() => {
     if (!wsId) return undefined;
     const onKey = (e: KeyboardEvent): void => {
@@ -418,7 +419,10 @@ export function Explorer(): React.JSX.Element {
       const target = e.target as HTMLElement | null;
       const targetIsEditable = !!target
         && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
-      if (hasImage && (target === catcherRef.current || !targetIsEditable)) {
+      // Windows 上部分軟體會把複製圖片公告成無磁碟路徑的虛擬 File，而且 MIME
+      // 可能是 application/octet-stream 或空字串。因此只要 Files 沒有可用路徑，也要讓
+      // main process 嘗試 clipboard.readImage()；此流程不依賴系統 PATH。
+      if ((hasImage || hasFiles) && (target === catcherRef.current || !targetIsEditable)) {
         e.preventDefault();
         void runClipboardImageImport(destDir);
         return;

@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.17.0',
+    date: '2026-07-27',
+    highlights: [
+      '修正某些第三方軟體複製的圖片仍無法貼入檔案總管',
+      '即使剪貼簿只公告無磁碟路徑、通用 MIME 的虛擬檔案，仍會由主程序嘗試讀取 bitmap',
+      '圖片貼上不依賴系統 PATH，實體檔案、標準 bitmap 與虛擬圖片檔皆有獨立回歸驗證',
+    ],
+  },
+  {
     version: '0.16.0',
     date: '2026-07-27',
     highlights: [

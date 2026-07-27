@@ -111,3 +111,34 @@ test('真實 Ctrl+V：截圖 bitmap 沒有磁碟路徑時會轉成 PNG 貼入工
   rmSync(userData, { recursive: true, force: true });
   rmSync(wsRoot, { recursive: true, force: true });
 });
+
+test('虛擬圖片檔：只有 Files 且 MIME 非 image 時仍會從系統剪貼簿貼入', async () => {
+  const wsRoot = makeTempDir();
+  const wsDir = makeSubDir(wsRoot, 'proj');
+  const { app, page, userData } = await launchApp();
+  await stubFolderPicker(app, [wsDir]);
+  await addWorkspaceViaUI(page);
+
+  // 某些第三方軟體會把圖片公告成無路徑、通用 MIME 的虛擬 File；
+  // Windows 剪貼簿同時仍有可由 Electron nativeImage 讀取的 bitmap。
+  await app.evaluate(({ clipboard, nativeImage }, pngBase64) => {
+    clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(pngBase64, 'base64')));
+  }, PNG_1PX.toString('base64'));
+
+  const tree = page.locator('[role="tree"]');
+  await expect(tree).toBeVisible();
+  await tree.evaluate((el) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([new Uint8Array([0])], 'virtual-image', { type: 'application/octet-stream' }));
+    const event = new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true });
+    el.dispatchEvent(event);
+  });
+
+  const pasted = tree.locator('[role="treeitem"][aria-label="貼上圖片.png"]');
+  await expect(pasted).toBeVisible({ timeout: 8000 });
+  expect(existsSync(join(wsDir, '貼上圖片.png'))).toBe(true);
+
+  await app.close();
+  rmSync(userData, { recursive: true, force: true });
+  rmSync(wsRoot, { recursive: true, force: true });
+});
