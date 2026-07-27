@@ -16,7 +16,7 @@ import iconv from 'iconv-lite';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import WordExtractor from 'word-extractor';
-import { BrowserWindow, dialog, shell } from 'electron';
+import { BrowserWindow, clipboard, dialog, shell } from 'electron';
 import type { IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
 import type { FileEncoding, Eol } from '../../shared/types';
@@ -568,6 +568,36 @@ async function uniqueName(destAbs: string, base: string): Promise<string> {
   }
 }
 
+/** 剪貼簿 bitmap 轉 PNG 後的落檔上限；與圖片預覽上限一致，避免巨型剪貼簿造成磁碟／記憶體壓力。 */
+export const MAX_CLIPBOARD_IMAGE_BYTES = 20 * 1024 * 1024;
+
+/**
+ * 把 main process 已取得的剪貼簿 PNG 寫進工作區；不接受 renderer 提供任意 bytes。
+ * 目的地仍走 workspace containment，檔名衝突沿用外部檔匯入的自動改名規則。
+ */
+export async function importClipboardImage(
+  mgr: WorkspaceManager,
+  wsId: string,
+  destDir: string,
+  png: Buffer,
+): Promise<{ imported: true; name: string } | { error: string }> {
+  if (!Buffer.isBuffer(png) || png.length === 0) return { error: '剪貼簿沒有可貼上的圖片' };
+  if (png.length > MAX_CLIPBOARD_IMAGE_BYTES) {
+    return { error: `剪貼簿圖片過大（${Math.round(png.length / 1024 / 1024)}MB，上限 20MB）` };
+  }
+  const safe = resolveSafe(mgr, wsId, destDir === '' ? '.' : destDir);
+  if ('error' in safe) return { error: '目標路徑超出工作區範圍' };
+  try {
+    const st = await fsp.stat(safe.abs);
+    if (!st.isDirectory()) return { error: '貼上目標不是資料夾' };
+    const name = await uniqueName(safe.abs, '貼上圖片.png');
+    await fsp.writeFile(join(safe.abs, name), png, { flag: 'wx' });
+    return { imported: true, name };
+  } catch (e) {
+    return { error: fsOpError(e) };
+  }
+}
+
 /** 貼入外部檔案（系統剪貼簿）：sources（外部絕對路徑）逐一複製進 destDir（工作區內、重名自動改名）。
  *  destDir 經 resolveSafe 限工作區內；source 為外部路徑（使用者剪貼簿內容，屬匯入來源，不沙箱）。 */
 export async function importFiles(
@@ -711,6 +741,11 @@ export function registerFileService(
   ipc.handle('fs:delete', (_e, req: InvokeReq<'fs:delete'>) => deleteEntry(workspaces, req.wsId, req.path));
   ipc.handle('fs:copy', (_e, req: InvokeReq<'fs:copy'>) => copyEntry(workspaces, req.wsId, req.from, req.to));
   ipc.handle('fs:importFiles', (_e, req: InvokeReq<'fs:importFiles'>) => importFiles(workspaces, req.wsId, req.destDir, req.sources));
+  ipc.handle('fs:importClipboardImage', (_e, req: InvokeReq<'fs:importClipboardImage'>) => {
+    const image = clipboard.readImage();
+    const png = image.isEmpty() ? Buffer.alloc(0) : image.toPNG();
+    return importClipboardImage(workspaces, req.wsId, req.destDir, png);
+  });
   ipc.handle('fs:readSheet', (_e, req: InvokeReq<'fs:readSheet'>) => {
     watchBeforeRead(req.wsId);
     return readSheet(workspaces, req.wsId, req.path);

@@ -71,6 +71,11 @@ export interface InvokeChannels {
     req: { wsId: string; destDir: string; sources: string[] };
     res: { imported: number; names: string[]; errors?: string[] } | { error: string };
   };
+  /** 把系統剪貼簿 bitmap 轉成 PNG 寫入 destDir；圖片 bytes 只在 main process 內流動。 */
+  'fs:importClipboardImage': {
+    req: { wsId: string; destDir: string };
+    res: { imported: true; name: string } | { error: string };
+  };
   /** 讀 xlsx/xls 等試算表 → 每工作表的儲存格字串矩陣（唯讀預覽，非文字編輯）。 */
   'fs:readSheet': {
     req: { wsId: string; path: string };

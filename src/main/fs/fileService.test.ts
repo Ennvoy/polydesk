@@ -27,6 +27,8 @@ import {
   detectEncoding,
   resolveSafe,
   importFiles,
+  importClipboardImage,
+  MAX_CLIPBOARD_IMAGE_BYTES,
   deleteEntry,
   readSheet,
   readDoc,
@@ -434,6 +436,38 @@ describe('fileService importFiles（貼上外部檔案）', () => {
     writeFileSync(join(dir, 'file.txt'), 'F', 'utf8');
     const notDir = await importFiles(ctx.mgr, wsId, 'file.txt', [src]);
     expect('error' in notDir).toBe(true);
+  });
+});
+
+describe('fileService importClipboardImage（貼上剪貼簿 bitmap）', () => {
+  let ctx: ReturnType<typeof setup>;
+  beforeEach(() => {
+    __resetFileServiceState();
+    ctx = setup();
+  });
+  afterEach(() => {
+    rmSync(ctx.root, { recursive: true, force: true });
+  });
+
+  it('PNG 寫入所選資料夾；同名時自動改名且不覆蓋', async () => {
+    const { dir, wsId } = addWorkspace(ctx.mgr, ctx.root, 'imagePaste');
+    mkdirSync(join(dir, 'assets'), { recursive: true });
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+    const first = await importClipboardImage(ctx.mgr, wsId, 'assets', png);
+    const second = await importClipboardImage(ctx.mgr, wsId, 'assets', png);
+
+    expect(first).toEqual({ imported: true, name: '貼上圖片.png' });
+    expect(second).toEqual({ imported: true, name: '貼上圖片 copy.png' });
+    expect(readFileSync(join(dir, 'assets', '貼上圖片.png')).equals(png)).toBe(true);
+    expect(readFileSync(join(dir, 'assets', '貼上圖片 copy.png')).equals(png)).toBe(true);
+  });
+
+  it('空剪貼簿、超過 20MB 與越界目的地皆拒絕', async () => {
+    const { wsId } = addWorkspace(ctx.mgr, ctx.root, 'imagePaste');
+    expect(await importClipboardImage(ctx.mgr, wsId, '', Buffer.alloc(0))).toEqual({ error: '剪貼簿沒有可貼上的圖片' });
+    expect('error' in (await importClipboardImage(ctx.mgr, wsId, '', Buffer.alloc(MAX_CLIPBOARD_IMAGE_BYTES + 1)))).toBe(true);
+    expect(await importClipboardImage(ctx.mgr, wsId, '../outside', Buffer.from('png'))).toEqual({ error: '目標路徑超出工作區範圍' });
   });
 });
 

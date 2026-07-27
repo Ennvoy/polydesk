@@ -7,6 +7,17 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.16.0（2026-07-27）
+
+剪貼簿圖片貼上支援：從截圖工具、瀏覽器或通訊軟體複製圖片後，可直接在 Polydesk 檔案總管按 `Ctrl+V` 建立 PNG。
+
+### 2026-07-27｜支援無磁碟路徑的剪貼簿圖片
+
+- 病根：既有檔案總管貼上功能只處理 Windows 檔案總管複製的實體檔案，依賴 `webUtils.getPathForFile()` 取得磁碟路徑；截圖工具、瀏覽器與通訊軟體提供的是剪貼簿 bitmap，雖然 paste event 可能帶 `Files`／`image/png`，但產生的虛擬 File 沒有磁碟路徑，因此舊程式只會顯示「無法取得貼上檔案的路徑」。
+- 修法：Explorer 現在區分實體檔案與無路徑 bitmap；前者維持既有 `importFiles`，後者經固定白名單 `fs:importClipboardImage` 交 main process 直接讀取系統剪貼簿、轉成 PNG，並寫入目前選取資料夾或工作區根目錄。
+- 命名與安全：預設檔名為 `貼上圖片.png`，衝突時沿用 `copy`／`copy 2` 自動改名，不覆蓋既有檔案；圖片 bytes 不經 renderer 傳遞，目的地仍通過工作區 containment，空圖片、越界目的地與超過 20MB 的 PNG 會拒絕。
+- 驗證：fileService 單元測試 32 案、typecheck、差異格式檢查與正式 build 全綠；真 Electron E2E 3 案實際將 1×1 PNG 寫入 Windows 剪貼簿後按 `Ctrl+V`，確認落檔、檔案樹更新與圖片預覽成功，既有外部檔案貼上兩案亦通過。
+
 ## v0.15.0（2026-07-27）
 
 AI 執行狀態 PATH 相容性修正：Windows PATH 被其他軟體重排後，工作區列仍能顯示 Claude、Codex 與 Agy 狀態標籤。

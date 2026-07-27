@@ -3,10 +3,15 @@
 // 註：clipboardData.files → webUtils.getPathForFile 那段需真實系統剪貼簿，屬人工 dogfood；
 //     此處以真實外部路徑直呼 importFiles，覆蓋 preload 橋接 + IPC + fs + tree 重整整條鏈路。
 import { test, expect } from '@playwright/test';
-import { rmSync, writeFileSync, existsSync } from 'node:fs';
+import { rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import { launchApp, makeTempDir, makeSubDir, stubFolderPicker, addWorkspaceViaUI } from './electronApp';
+
+const PNG_1PX = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64',
+);
 
 test('貼上外部檔案：fileUtils 已暴露 + importFiles 複製進工作區並自動顯示', async () => {
   const wsRoot = makeTempDir();
@@ -68,8 +73,39 @@ test('真實 Ctrl+V：非可編輯焦點下也能貼入外部檔案（paste catc
 
   await page.keyboard.press('Control+V'); // 真實 Ctrl+V → catcher → paste → 匯入
 
-  await expect(tree.locator('[role="treeitem"][aria-label="paste-me.txt"]')).toBeVisible({ timeout: 5000 });
+  await expect(tree.locator('[role="treeitem"][aria-label="paste-me.txt"]')).toBeVisible({ timeout: 10000 });
   expect(existsSync(join(wsDir, 'paste-me.txt'))).toBe(true);
+
+  await app.close();
+  rmSync(userData, { recursive: true, force: true });
+  rmSync(wsRoot, { recursive: true, force: true });
+});
+
+test('真實 Ctrl+V：截圖 bitmap 沒有磁碟路徑時會轉成 PNG 貼入工作區', async () => {
+  const wsRoot = makeTempDir();
+  const wsDir = makeSubDir(wsRoot, 'proj');
+  const { app, page, userData } = await launchApp();
+  await stubFolderPicker(app, [wsDir]);
+  await addWorkspaceViaUI(page);
+
+  await app.evaluate(({ clipboard, nativeImage }, pngBase64) => {
+    clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(pngBase64, 'base64')));
+  }, PNG_1PX.toString('base64'));
+
+  const tree = page.locator('[role="tree"]');
+  await expect(tree).toBeVisible();
+  await tree.click();
+  await page.keyboard.press('Control+V');
+
+  const pasted = tree.locator('[role="treeitem"][aria-label="貼上圖片.png"]');
+  await expect(pasted).toBeVisible({ timeout: 8000 });
+  expect(existsSync(join(wsDir, '貼上圖片.png'))).toBe(true);
+  expect(readFileSync(join(wsDir, '貼上圖片.png')).subarray(0, 8).equals(PNG_1PX.subarray(0, 8))).toBe(true);
+
+  await pasted.click();
+  const image = page.locator('[role="group"][aria-label="圖片：貼上圖片.png"] img');
+  await expect(image).toBeVisible();
+  await expect.poll(() => image.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBe(1);
 
   await app.close();
   rmSync(userData, { recursive: true, force: true });

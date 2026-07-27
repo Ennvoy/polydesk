@@ -216,6 +216,21 @@ export function Explorer(): React.JSX.Element {
     [wsId, loadDir],
   );
 
+  /** 系統剪貼簿只有 bitmap、沒有磁碟路徑時，交 main 轉成 PNG 寫入目的資料夾。 */
+  const runClipboardImageImport = useCallback(
+    async (destDir: string): Promise<void> => {
+      if (!wsId) return;
+      const r = await ipc.fs.importClipboardImage({ wsId, destDir });
+      if ('error' in r) {
+        setErr(r.error);
+        return;
+      }
+      if (destDir !== '') setExpanded((p) => ({ ...p, [destDir]: true }));
+      void loadDir(destDir);
+    },
+    [wsId, loadDir],
+  );
+
   useEffect(() => {
     setDirs({});
     setExpanded({});
@@ -367,7 +382,8 @@ export function Explorer(): React.JSX.Element {
   // Ctrl+V 從系統剪貼簿貼入外部檔案（VSCode 風）。兩段協作、不依賴檔案總管有焦點：
   //   ① keydown：焦點不在可編輯元素時（如點在檔案樹的 div），Chromium 本不會觸發 paste，
   //      故把焦點導到隱藏 catcher（contenteditable）逼瀏覽器把貼上事件送出來。
-  //   ② paste（capture）：只攔「檔案型」貼上（types 含 'Files'）→ 匯入檔案總管；文字貼上放行編輯器/終端機。
+  //   ② paste（capture）：實體檔案走 importFiles；截圖／瀏覽器複製等無路徑 bitmap 走
+  //      importClipboardImage 轉 PNG。純文字貼上仍放行編輯器／終端機。
   useEffect(() => {
     if (!wsId) return undefined;
     const onKey = (e: KeyboardEvent): void => {
@@ -384,18 +400,33 @@ export function Explorer(): React.JSX.Element {
         }, 0);
       }
       const cd = e.clipboardData;
-      if (!cd || !Array.from(cd.types).includes('Files')) return;
+      if (!cd) return;
+      const types = Array.from(cd.types);
       const files = Array.from(cd.files);
-      if (files.length === 0) return;
-      e.preventDefault();
+      const hasFiles = types.includes('Files');
+      const hasImage = types.some((t) => t.toLowerCase().startsWith('image/'))
+        || files.some((f) => f.type.toLowerCase().startsWith('image/'));
+      if (!hasFiles && !hasImage) return;
       const sources = files.map((f) => ipc.fileUtils.pathForFile(f)).filter((p) => p.length > 0);
-      if (sources.length === 0) {
-        setErr('無法取得貼上檔案的路徑');
-        return;
-      }
       const sel = selectedRef.current;
       const destDir = sel ? (sel.dir ? sel.rel : relDirname(sel.rel)) : '';
-      void runImport(destDir, sources);
+      if (sources.length > 0) {
+        e.preventDefault();
+        void runImport(destDir, sources);
+        return;
+      }
+      const target = e.target as HTMLElement | null;
+      const targetIsEditable = !!target
+        && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (hasImage && (target === catcherRef.current || !targetIsEditable)) {
+        e.preventDefault();
+        void runClipboardImageImport(destDir);
+        return;
+      }
+      if (hasFiles) {
+        e.preventDefault();
+        setErr('無法取得貼上檔案的路徑');
+      }
     };
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('paste', onPaste, true);
@@ -403,7 +434,7 @@ export function Explorer(): React.JSX.Element {
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('paste', onPaste, true);
     };
-  }, [wsId, runImport]);
+  }, [wsId, runImport, runClipboardImageImport]);
 
   // OS 檔案拖入 → 複製進工作區（VS Code 慣例；與 Ctrl+V 貼上同走 importFiles：重名自動改名、
   // 資料夾遞迴）。只認外部拖曳（types 含 'Files'）；app 內部樹列拖曳（自訂 MIME、無 Files）不觸發。

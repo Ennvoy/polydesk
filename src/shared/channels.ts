@@ -22,6 +22,7 @@ export const INVOKE_CHANNELS = [
   'fs:delete',
   'fs:copy',
   'fs:importFiles',
+  'fs:importClipboardImage',
   'fs:readSheet',
   'fs:readDoc',
   'fs:openExternal',

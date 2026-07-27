@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.16.0',
+    date: '2026-07-27',
+    highlights: [
+      '檔案總管現在可直接貼上截圖工具、瀏覽器或通訊軟體複製的圖片',
+      '沒有磁碟路徑的剪貼簿 bitmap 會安全轉成貼上圖片.png，重名時自動改名、不覆蓋既有檔案',
+      '圖片資料只在主程序內讀取與落檔，保留工作區路徑沙箱並限制為 20MB',
+    ],
+  },
+  {
     version: '0.15.0',
     date: '2026-07-27',
     highlights: [
