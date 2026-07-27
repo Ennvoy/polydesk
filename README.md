@@ -1,6 +1,6 @@
 # Polydesk
 
-![version](https://img.shields.io/badge/version-v0.14.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+![version](https://img.shields.io/badge/version-v0.15.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
 
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
@@ -20,7 +20,7 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 | **Git 原始碼控制** | status / stage / commit / push / pull / stash / branch / log / diff；SCM、活動列與狀態列共用單次 Git 快照，開啟面板與切換分支不再重複掃描工作樹；整合終端機或外部工具完成 commit / push 後會自動同步分支與未推送狀態；**AI 產生 commit message**（可切換 claude / codex / agy 引擎）。 |
 | **檔案總管** | VSCode 風右鍵編輯（新增/改名/刪除/剪貼）；**從系統剪貼簿 Ctrl+V 貼入外部檔案**；刪除**移到資源回收桶**（可救回）。 |
 | **試算表預覽** | `.xlsx / .xls` 直接渲染成表格（Excel 風欄標＋列號、多工作表切換），不再是二進位亂碼。 |
-| **AI 狀態監控** | 以真實 process 與工具事件偵測各工作區狀態；Claude / Codex 支援細分狀態，Agy 第一版提供「執行中 / 未啟動」徽章；主工作樹與每個 worktree 皆依自身路徑獨立顯示 Claude／Codex／Agy 標籤。 |
+| **AI 狀態監控** | 以真實 process 與工具事件偵測各工作區狀態；Windows 系統程序掃描使用絕對路徑，不受第三方軟體重排 PATH 影響；Claude / Codex 支援細分狀態，Agy 第一版提供「執行中 / 未啟動」徽章；主工作樹與每個 worktree 皆依自身路徑獨立顯示 Claude／Codex／Agy 標籤。 |
 | **總覽面板** | 一鍵最大化總覽：各工作區 Claude / Codex / Agy 狀態，以及 Claude / Codex 服務用量（5 小時 / 每週額度；Agy CLI 未提供可讀取用量，因此不顯示用量卡）。 |
 | **三主題** | 深色 / 淺色 / 暖色，字型統一 Geist，切換不跳版面。 |
 | **搜尋 / LSP** | 內建 ripgrep 全文搜尋、Language Server 診斷。 |
@@ -37,6 +37,8 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 終端機面板右上方提供三個 AI CLI 快捷按鈕：`Claude bypass` 會執行 `claude --dangerously-skip-permissions`，`Codex` 會執行 `codex`，`Agy` 會執行 `agy`。每次點擊都會建立一個獨立終端機，沿用目前工作區選定的 shell；Polydesk 會等 xterm 與 Windows ConPTY 回報相同欄列後才啟動工具，若尺寸未實際套用則自動重試，避免 Claude 等 TUI 先用錯誤欄寬排版。Claude bypass 會略過所有工具與檔案操作的權限確認，只能在你完全信任的工作區使用。
 
 Windows PowerShell、CMD 與 WSL 會由 Polydesk 使用系統絕對路徑啟動，即使安裝 Sunlike365 等軟體後 `PATH` 順序改變也不需手動修環境變數。PowerShell 7 或 Git Bash 若未安裝，終端機面板會顯示 `shell-not-found` 錯誤；工作區遺失或 ConPTY 無法建立時也會提供對應代碼，不再只像按鈕沒有反應。
+
+AI 執行狀態監控使用 `SystemRoot` 下的 Windows PowerShell／WMIC 絕對路徑掃描程序，因此同一類 PATH 重排不會再造成工作區的 Claude、Codex、Agy 標籤消失。標籤只會在對應 AI CLI 確實於 Polydesk 終端機內啟動時顯示；工具結束並關閉終端機後會回到未啟動狀態。
 
 ### 從終端機開啟檔案與網址
 

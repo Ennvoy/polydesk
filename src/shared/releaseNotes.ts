@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.15.0',
+    date: '2026-07-27',
+    highlights: [
+      '修正 PATH 被其他軟體重排後，工作區的 Claude、Codex、Agy 執行狀態標籤全部消失',
+      'AI 程序掃描改用 Windows 系統工具的絕對路徑，不再依賴 PATH 尋找 PowerShell 或 WMIC',
+      '終端機啟動與 AI 狀態監控現在套用一致的 PATH 相容策略',
+    ],
+  },
+  {
     version: '0.14.0',
     date: '2026-07-27',
     highlights: [

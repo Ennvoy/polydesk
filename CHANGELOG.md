@@ -7,6 +7,17 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.15.0（2026-07-27）
+
+AI 執行狀態 PATH 相容性修正：Windows PATH 被其他軟體重排後，工作區列仍能顯示 Claude、Codex 與 Agy 狀態標籤。
+
+### 2026-07-27｜修正新版可開終端機但 AI 執行標籤消失
+
+- 病根：v0.13.0 已把終端機 shell 改成由 `SystemRoot` 組絕對路徑，因此受影響電腦可以重新建立終端機；但 AI 狀態監控仍以裸名稱啟動 `wmic` 與 `powershell.exe`。Windows 11 缺少 WMIC 且 PATH 又無法解析 PowerShell 時，程序掃描兩條路徑都失敗，Claude／Codex／Agy 的 PID 快取保持空白，工作區列便沒有任何狀態標籤。
+- 修法：AI 程序掃描器現在以不分大小寫的 `SystemRoot`／`windir` 組出 WMIC 與 Windows PowerShell 絕對路徑；即使 PATH 只剩第三方軟體目錄，WMIC 不可用時仍可經系統 PowerShell 的 CIM 掃描取得三種 AI 程序的 parent shell PID。
+- 一致性：終端機建立與狀態監控都不再依賴 PATH 尋找 Windows 內建工具；既有 process gate、工作區 cwd 歸戶、狀態事件與 fail-open 快取策略維持不變。
+- 驗證：程序掃描、狀態監控與版本同步單元測試 17 案、typecheck、差異格式檢查與正式 build 全綠；回歸測試模擬 PATH 只有 `C:\\Tools`、WMIC 不可用，確認 fallback 仍以 `D:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe` 執行並正確解析 Claude／Codex／Agy PID；既有 PATH 真 Electron E2E 2 案亦通過。
+
 ## v0.14.0（2026-07-27）
 
 Claude Code 工具輸出連結修正：`Read(...)` 顯示的檔案路徑現在可按住 Ctrl 點擊開啟，含行數範圍時會直接跳到起始行。

@@ -13,12 +13,50 @@
 // 非 Windows 回空集合（平台不支援此偵測）。
 
 import { execFile } from 'node:child_process';
+import { win32 as pathWin32 } from 'node:path';
+
+type ExecProcess = (
+  file: string,
+  args: readonly string[],
+  options: { timeout: number; windowsHide: boolean },
+  callback: (error: Error | null, stdout: string) => void,
+) => void;
+
+const defaultExecProcess: ExecProcess = (file, args, options, callback) => {
+  execFile(file, [...args], options, (error, stdout) => callback(error, stdout));
+};
+
+export interface AiProcessScanOptions {
+  platform?: NodeJS.Platform;
+  env?: NodeJS.ProcessEnv;
+  execProcess?: ExecProcess;
+}
 
 /** 各工具的 parent shell pid 集合；null＝該工具本輪掃描失敗（呼叫端保留舊快取）。 */
 export interface AiShellPids {
   claude: Set<number> | null;
   codex: Set<number> | null;
   agy: Set<number> | null;
+}
+
+function envValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  return Object.entries(env).find(([key, value]) => key.toLowerCase() === name.toLowerCase() && value)?.[1];
+}
+
+/**
+ * 程序掃描用的系統工具一律走 SystemRoot 絕對路徑。
+ * PATH 異常時終端機雖可用絕對路徑啟動，若掃描器仍呼叫裸 powershell.exe，AI 狀態徽章會全部消失。
+ */
+export function resolveWindowsProcessTools(env: NodeJS.ProcessEnv = process.env): {
+  wmic: string;
+  powershell: string;
+} {
+  const configuredRoot = envValue(env, 'SystemRoot') ?? envValue(env, 'windir');
+  const systemRoot = configuredRoot && pathWin32.isAbsolute(configuredRoot) ? configuredRoot : 'C:\\Windows';
+  return {
+    wmic: pathWin32.join(systemRoot, 'System32', 'wbem', 'WMIC.exe'),
+    powershell: pathWin32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+  };
 }
 
 export function parsePids(stdout: string): Set<number> {
@@ -47,10 +85,10 @@ export function parseTaggedPids(stdout: string): { claude: Set<number>; codex: S
 }
 
 /** wmic 查符合 where 的 process 的 ParentProcessId 集合；wmic 不存在/失敗回 null 交 fallback。 */
-function viaWmic(where: string): Promise<Set<number> | null> {
+function viaWmic(where: string, executable: string, run: ExecProcess): Promise<Set<number> | null> {
   return new Promise((resolve) => {
-    execFile(
-      'wmic',
+    run(
+      executable,
       ['process', 'where', where, 'get', 'ParentProcessId'],
       { timeout: 5000, windowsHide: true },
       (err, stdout) => resolve(err ? null : parsePids(stdout)),
@@ -62,7 +100,10 @@ function viaWmic(where: string): Promise<Set<number> | null> {
  * powershell fallback（wmic 被移除的機器）：單一 spawn＋單次 Win32_Process 列舉，本地過濾同時得出
  * claude、codex 與 agy 的 parent pid（輸出 `C:<pid>` / `X:<pid>` / `A:<pid>`）。失敗/逾時回 null（fail-open）。
  */
-function viaPowershellAll(): Promise<{ claude: Set<number>; codex: Set<number>; agy: Set<number> } | null> {
+function viaPowershellAll(
+  executable: string,
+  run: ExecProcess,
+): Promise<{ claude: Set<number>; codex: Set<number>; agy: Set<number> } | null> {
   return new Promise((resolve) => {
     const ps = [
       "$all = Get-CimInstance Win32_Process -Property Name,ParentProcessId,CommandLine;",
@@ -72,8 +113,8 @@ function viaPowershellAll(): Promise<{ claude: Set<number>; codex: Set<number>; 
       "  elseif ($p.Name -eq 'agy.exe') { 'A:' + $p.ParentProcessId }",
       '}',
     ].join(' ');
-    execFile(
-      'powershell.exe',
+    run(
+      executable,
       ['-NoProfile', '-NonInteractive', '-Command', ps],
       { timeout: 15000, windowsHide: true },
       (err, stdout) => resolve(err ? null : parseTaggedPids(stdout)),
@@ -85,14 +126,18 @@ function viaPowershellAll(): Promise<{ claude: Set<number>; codex: Set<number>; 
  * 一趟掃出 claude + codex + agy 的 parent shell pid 集合：wmic 都成功即用（快路徑）；
  * 否則單一 powershell 合併查詢；再失敗回個別 wmic 成功的部分、失敗的工具為 null。
  */
-export async function scanAiShellPids(): Promise<AiShellPids> {
-  if (process.platform !== 'win32') return { claude: new Set(), codex: new Set(), agy: new Set() };
+export async function scanAiShellPids(options: AiProcessScanOptions = {}): Promise<AiShellPids> {
+  if ((options.platform ?? process.platform) !== 'win32') {
+    return { claude: new Set(), codex: new Set(), agy: new Set() };
+  }
+  const tools = resolveWindowsProcessTools(options.env);
+  const run = options.execProcess ?? defaultExecProcess;
   const [wc, wx, wa] = await Promise.all([
-    viaWmic("name='claude.exe'"),
-    viaWmic("name='node.exe' and commandline like '%codex.js%'"),
-    viaWmic("name='agy.exe'"),
+    viaWmic("name='claude.exe'", tools.wmic, run),
+    viaWmic("name='node.exe' and commandline like '%codex.js%'", tools.wmic, run),
+    viaWmic("name='agy.exe'", tools.wmic, run),
   ]);
   if (wc && wx && wa) return { claude: wc, codex: wx, agy: wa };
-  const all = await viaPowershellAll();
+  const all = await viaPowershellAll(tools.powershell, run);
   return all ?? { claude: wc, codex: wx, agy: wa };
 }
