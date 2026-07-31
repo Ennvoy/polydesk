@@ -109,10 +109,30 @@ test('REQ-PERF-002/003/004 切換 / 開檔 / 按鍵 p95', async () => {
   // 按鍵延遲：開終端機、聚焦 xterm、逐鍵輸入（PTY echo 回流記一次往返延遲）。
   await page.locator('button[aria-label="新增終端機"]').click();
   await expect(page.locator('.pd-term-pane-label', { hasText: 'PowerShell' }).first()).toBeVisible({ timeout: 15000 });
-  await page.locator('.xterm-screen, .xterm').first().click();
-  await page.waitForTimeout(500);
+  const terminalHost = page.locator('.pd-term-xterm-host').first();
+  await expect(terminalHost).toHaveAttribute('data-initial-size-ready', 'true', { timeout: 15_000 });
+  await expect
+    .poll(
+      () =>
+        terminalHost.evaluate((host) => {
+          const term = (host as HTMLElement & {
+            __pdTerm?: { buffer: { active: { baseY: number; cursorY: number; getLine: (line: number) => { translateToString: (trim: boolean) => string } | undefined } } };
+          }).__pdTerm;
+          const buffer = term?.buffer.active;
+          return buffer?.getLine((buffer.baseY ?? 0) + (buffer.cursorY ?? 0))?.translateToString(true) ?? '';
+        }),
+      { timeout: 15_000 },
+    )
+    .toMatch(/^PS .*>/);
+  // 直接聚焦 xterm 真正接鍵盤的 textarea；點 screen 在 WebGL／版面收斂期間偶爾只命中 canvas，
+  // 會讓 page.keyboard 輸入落到 body，造成 0~2 個樣本的 under-sampling 假失敗。
+  const terminalInput = page.locator('.pd-term-view .xterm-helper-textarea').first();
+  await terminalInput.focus();
+  await expect(terminalInput).toBeFocused();
+  await page.waitForTimeout(100);
   for (let i = 0; i < N_KEY; i++) {
-    await page.keyboard.type('a', { delay: 30 });
+    // 每鍵直接送到 textarea，避免字型載入／fit 的 term.focus 在量測中途改變全域 activeElement。
+    await terminalInput.press('a');
     await page.waitForTimeout(40);
   }
   await page.waitForTimeout(400);

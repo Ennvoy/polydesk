@@ -153,6 +153,27 @@ describe('GitService（真 git）', () => {
     expect(log[1].refs).toContainEqual({ name: 'v1.0', kind: 'tag', head: false });
   });
 
+  it('log 會走訪 remote-tracking refs，顯示尚未 pull 的遠端獨有 commit', async () => {
+    initRepo(ctx.repo);
+    const svc = new GitService(ctx.mgr);
+    writeFileSync(join(ctx.repo, 'base.txt'), 'base');
+    await svc.stage(ctx.wsId, ['base.txt'], true);
+    await svc.commit(ctx.wsId, 'base');
+
+    execFileSync('git', ['checkout', '-b', 'remote-work'], { cwd: ctx.repo, stdio: 'pipe' });
+    writeFileSync(join(ctx.repo, 'remote.txt'), 'from teammate');
+    await svc.stage(ctx.wsId, ['remote.txt'], true);
+    await svc.commit(ctx.wsId, 'remote only');
+    execFileSync('git', ['update-ref', 'refs/remotes/origin/teammate', 'HEAD'], { cwd: ctx.repo, stdio: 'pipe' });
+    execFileSync('git', ['checkout', 'main'], { cwd: ctx.repo, stdio: 'pipe' });
+    execFileSync('git', ['branch', '-D', 'remote-work'], { cwd: ctx.repo, stdio: 'pipe' });
+
+    const log = await svc.log(ctx.wsId, 10);
+    const remoteCommit = log.find((entry) => entry.subject === 'remote only');
+    expect(remoteCommit).toBeDefined();
+    expect(remoteCommit?.refs).toContainEqual({ name: 'origin/teammate', kind: 'remote', head: false });
+  });
+
   it('合法分支名可建立並出現在 list', async () => {
     initRepo(ctx.repo);
     writeFileSync(join(ctx.repo, 'a.txt'), 'x');

@@ -173,6 +173,8 @@ export interface InvokeChannels {
     /** applied=false 表示 ConPTY 本次未接受尺寸，renderer 必須稍後重試，不能據此啟動 TUI。 */
     res: { ok: true; applied: boolean; cols: number; rows: number };
   };
+  /** 可見 terminal 維持低延遲 flush；背景 terminal 放大批次窗，降低多工作區 IPC／renderer 壓力。 */
+  'pty:setVisibility': { req: { termId: string; visible: boolean }; res: { ok: true } };
   'pty:close': { req: { termId: string }; res: { ok: true } };
   'pty:list': { req: { wsId: string }; res: TermState[] };
   // 剪貼簿（終端機貼上/複製）：讀取走 main 端 electron clipboard——renderer 的 navigator.clipboard

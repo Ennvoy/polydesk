@@ -35,13 +35,13 @@ function seedGitRepo(): { root: string; repo: string; remote: string } {
   return { root, repo, remote };
 }
 
-test('PE-4：遠端進新 commit → ⟳ 重新整理順便 fetch → ↓1 未拉取＋pull 鈕角標', async () => {
+test('PE-4：遠端進新 commit → fetch 後線圖可見遠端版本，並顯示 ↓1 未拉取', async () => {
   const { root, repo, remote } = seedGitRepo();
   const { app, page, userData } = await launchApp();
   await stubFolderPicker(app, [repo]);
   await addWorkspaceViaUI(page);
   await page.locator('button[aria-label="原始碼控制"]').click();
-  await expect(page.locator('[aria-label*="落後 0"]')).toBeVisible({ timeout: 12000 });
+  await expect(page.locator('.pd-scm-ab[aria-label*="落後 0"]')).toBeVisible({ timeout: 12000 });
 
   // 另一個 clone（模擬同事／另一台機器）推真 commit 到 bare remote——本地此刻渾然不知
   const other = join(root, 'other');
@@ -57,9 +57,16 @@ test('PE-4：遠端進新 commit → ⟳ 重新整理順便 fetch → ↓1 未�
   await expect(page.locator('.pd-scm-behind')).toHaveText('↓1 未拉取', { timeout: 15000 });
   await expect(page.locator('button[aria-label="拉取（pull）：1 個 commit 未拉取"]')).toBeVisible();
 
+  // 尚未 pull 前，歷史線圖就能沿 remote-tracking ref 顯示同事剛 push 的版本。
+  await page.locator('button[role="tab"]', { hasText: '歷史' }).click();
+  const remoteRow = page.locator('.pd-scm-logrow', { hasText: 'remote commit' });
+  await expect(remoteRow).toBeVisible({ timeout: 15000 });
+  await expect(remoteRow.locator('.pd-scm-ref.is-remote')).toHaveAttribute('title', '遠端分支 origin/main');
+  await page.locator('button[role="tab"]', { hasText: '變更' }).click();
+
   // 真實資料鏈路收尾：pull 後落後歸零、遠端內容真的進工作樹
   await page.locator('button[aria-label="拉取（pull）：1 個 commit 未拉取"]').click();
-  await expect(page.locator('[aria-label*="落後 0"]')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.pd-scm-ab[aria-label*="落後 0"]')).toBeVisible({ timeout: 15000 });
 
   await app.close();
   rmSync(root, { recursive: true, force: true });

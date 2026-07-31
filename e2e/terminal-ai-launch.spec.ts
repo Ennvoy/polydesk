@@ -67,10 +67,13 @@ test('Claude bypass / Codex / Agy 按鈕會各開終端機並送出對應命令'
   await expect
     .poll(() => readTermBuffer(page, 0), { timeout: 15000 })
     .toContain('FAKE_CLAUDE_ARGS:--dangerously-skip-permissions');
-  const claudeBuffer = await readTermBuffer(page, 0);
   const claudeCols = await readTermCols(page, 0);
   expect(claudeCols).not.toBeNull();
-  expect(claudeBuffer).toContain(`FAKE_CLAUDE_COLS:${claudeCols}`);
+  // xterm.write 解析是非同步佇列；第一行進 buffer 時，緊接的 node 欄數回報可能仍在下一批待解析。
+  // 分別等待兩個真實輸出，不把「看見第一行」誤當成整個 CLI 已完成。
+  await expect
+    .poll(() => readTermBuffer(page, 0), { timeout: 15000 })
+    .toContain(`FAKE_CLAUDE_COLS:${claudeCols}`);
 
   // 首屏穩定窗回歸（DF-19）：命令送出後的短窗內欄數不得再變——遲到的 resize（版面收斂尾巴、
   // 字型載入改格寬、失敗補送）撞上 TUI 靜態歡迎橫幅繪製，就是「偶發首屏殘影跑版」的病根。

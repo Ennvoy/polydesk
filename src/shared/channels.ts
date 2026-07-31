@@ -61,6 +61,7 @@ export const INVOKE_CHANNELS = [
   'claude:states',
   'pty:create',
   'pty:resize',
+  'pty:setVisibility',
   'pty:close',
   'pty:list',
   'clipboard:readText',

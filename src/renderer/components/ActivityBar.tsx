@@ -4,7 +4,7 @@
 import React from 'react';
 import { appStore, useAppState, type ActivityView } from '../state/appStore';
 import { ipc } from '../ipc/client';
-import { loadGitSnapshot } from '../state/gitSnapshot';
+import { invalidateGitSnapshot, loadGitSnapshot } from '../state/gitSnapshot';
 import { dialog } from './Dialogs/host';
 import { SettingsPanel } from './Settings/SettingsPanel';
 
@@ -104,6 +104,7 @@ export function ActivityBar(): React.JSX.Element {
     timer = setTimeout(load, 120);
     const off = ipc.events.fs.change(({ wsId }) => {
       if (wsId !== activeWorkspaceId) return;
+      invalidateGitSnapshot(wsId);
       if (timer) clearTimeout(timer);
       timer = setTimeout(load, 300);
     });

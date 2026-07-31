@@ -9,7 +9,7 @@ import { useAppState } from '../../state/appStore';
 import { dialog } from '../Dialogs/host';
 import { editorBus } from '../../state/editorBus';
 import { appStore } from '../../state/appStore';
-import { loadGitSnapshot } from '../../state/gitSnapshot';
+import { invalidateGitSnapshot, loadGitSnapshot, refreshGitSnapshot } from '../../state/gitSnapshot';
 import { WorktreePanel } from '../Worktree/WorktreePanel';
 import { PublishGitHubDialog } from './PublishGitHubDialog';
 import { CreateWorktreeDialog } from '../Worktree/CreateWorktreeDialog';
@@ -19,6 +19,7 @@ import type { GitStatus, GitChange, GitLogEntry, GitLogRef, AiEngine, GitPushErr
 import { DEFAULT_BACKGROUND_POLL_MS, FETCH_COOLDOWN_MS } from '../../../shared/constants';
 import { shouldAutoFetch } from './fetchCooldown';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
+import { record } from '../../../shared/perf';
 
 type Tab = 'changes' | 'history' | 'branches' | 'worktree';
 
@@ -26,6 +27,7 @@ type Tab = 'changes' | 'history' | 'branches' | 'worktree';
 const GRAPH_LANE_W = 14;
 const GRAPH_ROW_H = 48; // === scm.css .pd-scm-logrow height；務必同步（線圖列高＝SVG 高才不斷線）
 const GRAPH_DOT_R = 4;
+const CHANGE_RENDER_BATCH = 200;
 // lane 色盤（深/淺主題皆可讀的中飽和色）；色彩索引取模循環。
 const GRAPH_COLORS = ['#4aa3ff', '#f78c6b', '#c792ea', '#7fd1b9', '#ffcb6b', '#f07178', '#82aaff', '#c3e88d'];
 const graphColor = (c: number): string => GRAPH_COLORS[((c % GRAPH_COLORS.length) + GRAPH_COLORS.length) % GRAPH_COLORS.length];
@@ -179,6 +181,7 @@ export function SourceControlPanel(): React.JSX.Element {
   const [commitMenu, setCommitMenu] = useState<{ c: GitLogEntry; x: number; y: number } | null>(null); // PE-1 右鍵選單
   const [changeMenu, setChangeMenu] = useState<{ c: GitChange; x: number; y: number } | null>(null); // 變更檔右鍵選單
   const [expanded, setExpanded] = useState<string | null>(null); // PE-1 展開檔案清單的 commit hash
+  const [auxRevision, setAuxRevision] = useState(0); // 只有 refs／使用者操作才重讀歷史與分支，不跟著每次 worktree 變更重跑
   const [cFiles, setCFiles] = useState<Record<string, { path: string; status: string }[]>>({}); // commit→檔案清單快取
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null); // hover 延遲關閉計時器（滑入卡片可取消）
   const statusRef = useRef<GitStatus | null>(null);
@@ -187,7 +190,7 @@ export function SourceControlPanel(): React.JSX.Element {
   // 工作區時，若不取消，切到最新工作區還得等前面每個 stale 載入跑完、且 stale 結果會回頭覆蓋當前 →
   // 面板卡在 loading。每次 refresh 遞增 gen，await 回來後 gen 不是最新就丟棄（不 setState、不搶 loading）。
   const loadGen = useRef(0);
-  const refresh = useCallback(async (): Promise<void> => {
+  const refresh = useCallback(async (fresh = true): Promise<void> => {
     const gen = ++loadGen.current;
     if (!wsId) {
       setStatus(null);
@@ -198,11 +201,12 @@ export function SourceControlPanel(): React.JSX.Element {
     setLoading(true);
     setError(null);
     try {
-      const snapshot = await loadGitSnapshot(wsId);
+      const snapshot = fresh ? await refreshGitSnapshot(wsId) : await loadGitSnapshot(wsId);
       if (gen !== loadGen.current) return; // 期間又切了工作區：丟棄 stale
       statusRef.current = snapshot.status;
       setStatus(snapshot.status);
       setChanges(snapshot.status.isRepo ? snapshot.changes : []);
+      if (fresh) setAuxRevision((value) => value + 1);
     } catch (e) {
       if (gen === loadGen.current) setError(errText(e));
     } finally {
@@ -246,7 +250,7 @@ export function SourceControlPanel(): React.JSX.Element {
   // 刷新後順帶自動 fetch（PE-4；同 wsId 60s 冷卻，連切不狂觸網）。
   useEffect(() => {
     setTab('changes');
-    const t = setTimeout(() => void refresh().then(() => fetchRemote(false)), 120);
+    const t = setTimeout(() => void refresh(false).then(() => fetchRemote(false)), 120);
     return () => clearTimeout(t);
   }, [refresh, fetchRemote]);
 
@@ -267,8 +271,9 @@ export function SourceControlPanel(): React.JSX.Element {
     let t: ReturnType<typeof setTimeout> | null = null;
     const off = ipc.events.fs.change((p) => {
       if (p.wsId !== wsId) return;
+      invalidateGitSnapshot(wsId);
       if (t) clearTimeout(t);
-      t = setTimeout(() => void refresh(), 300); // 去抖：多檔變動合併成一次刷新
+      t = setTimeout(() => void refresh(false), 300); // 去抖：多檔變動合併成一次刷新
     });
     return () => {
       if (t) clearTimeout(t);
@@ -353,11 +358,13 @@ export function SourceControlPanel(): React.JSX.Element {
   useEffect(() => {
     if (!wsId || !status?.isRepo) return;
     if (tab === 'history') {
+      record('gitLogRequest', 1);
       void ipc.git
         .log({ wsId, limit: 50 })
         .then(setLog)
         .catch((e) => setError(errText(e)));
     } else if (tab === 'branches') {
+      record('gitBranchListRequest', 1);
       void ipc.git
         .branch({ wsId, op: 'list' })
         .then((r) => {
@@ -365,7 +372,7 @@ export function SourceControlPanel(): React.JSX.Element {
         })
         .catch((e) => setError(errText(e)));
     }
-  }, [tab, wsId, status?.isRepo, changes]);
+  }, [tab, wsId, status?.isRepo, status?.head, status?.branch, auxRevision]);
 
   const run = useCallback(
     async (fn: () => Promise<void>): Promise<void> => {
@@ -1227,7 +1234,10 @@ function ChangeGroup(props: {
   onOpen: (c: GitChange) => void;
   onContext?: (c: GitChange, e: React.MouseEvent) => void;
 }): React.JSX.Element | null {
+  const [visibleCount, setVisibleCount] = useState(CHANGE_RENDER_BATCH);
   if (props.items.length === 0) return null;
+  const visibleItems = props.items.slice(0, visibleCount);
+  const remaining = props.items.length - visibleItems.length;
   return (
     <div className="pd-scm-group">
       <div className="pd-scm-grouphead">
@@ -1240,7 +1250,7 @@ function ChangeGroup(props: {
           </button>
         )}
       </div>
-      {props.items.map((c) => (
+      {visibleItems.map((c) => (
         <div
           key={`${c.staged}:${c.path}`}
           className="pd-row pd-scm-change"
@@ -1272,6 +1282,16 @@ function ChangeGroup(props: {
           </button>
         </div>
       ))}
+      {remaining > 0 && (
+        <button
+          type="button"
+          className="pd-scm-link pd-scm-showmore"
+          aria-label={`顯示更多 ${props.title}，尚有 ${remaining} 項`}
+          onClick={() => setVisibleCount((count) => count + CHANGE_RENDER_BATCH)}
+        >
+          顯示更多（尚有 {remaining} 項）
+        </button>
+      )}
     </div>
   );
 }

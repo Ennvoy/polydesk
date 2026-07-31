@@ -55,7 +55,7 @@ test('REQ-E2E-003：編輯→變更出現→stage→commit→清空、ahead+1', 
 
   // 變更清空（無暫存/未暫存按鈕）+ ahead 顯示 1
   await expect(page.locator('button[aria-label^="暫存："]')).toHaveCount(0, { timeout: 12000 });
-  await expect(page.locator('[aria-label*="領先 1"]')).toBeVisible({ timeout: 12000 });
+  await expect(page.locator('.pd-scm-ab[aria-label*="領先 1"]')).toBeVisible({ timeout: 12000 });
 
   await app.close();
   rmSync(root, { recursive: true, force: true });
@@ -72,11 +72,11 @@ test('整合終端或外部 push 後 SCM 自動清除過期的未推送數字', 
   await stubFolderPicker(app, [repo]);
   await addWorkspaceViaUI(page);
   await page.locator('button[aria-label="原始碼控制"]').click();
-  await expect(page.locator('[aria-label*="領先 1"]')).toBeVisible({ timeout: 12000 });
+  await expect(page.locator('.pd-scm-ab[aria-label*="領先 1"]')).toBeVisible({ timeout: 12000 });
 
   // 模擬整合終端／外部工具直接執行 push：不經 Polydesk git:push IPC，也不改一般工作樹檔案。
   git(repo, 'push');
-  await expect(page.locator('[aria-label*="領先 0"]')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.pd-scm-ab[aria-label*="領先 0"]')).toBeVisible({ timeout: 15000 });
 
   await app.close();
   rmSync(root, { recursive: true, force: true });

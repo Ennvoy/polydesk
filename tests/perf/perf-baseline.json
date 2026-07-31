@@ -1,6 +1,6 @@
 {
   "_note": "X-1 效能 budget 基準快照（務實 N 量到綠；嚴謹 30 次 p95 + 多基準機留 ship 量一次）。",
-  "_measuredOn": "2026-06-29",
+  "_measuredOn": "2026-07-31",
   "_howToRun": "npm run build 後：npx playwright test e2e/perf.spec.ts（報告寫 test-results/perf-report.json）",
   "machine": {
     "cpu": "Intel(R) Core(TM) Ultra 5 235U",
@@ -11,7 +11,28 @@
     "coldStart":  { "p95Ms": 1033, "n": 8,  "budgetMs": 3000, "pass": true, "req": "REQ-PERF-001" },
     "wsSwitch":   { "p95Ms": 0,    "n": 13, "budgetMs": 200,  "pass": true, "req": "REQ-PERF-002", "note": "切已載入工作區為同步 setState，次毫秒" },
     "fileOpen":   { "p95Ms": 56,   "n": 8,  "budgetMs": 500,  "pass": true, "req": "REQ-PERF-003" },
-    "keyLatency": { "p95Ms": 31,   "n": 21, "budgetMs": 50,   "pass": true, "req": "REQ-PERF-004", "note": "PTY 往返（輸入→shell echo→回流）" }
+    "keyLatency": { "p95Ms": 22,   "n": 22, "budgetMs": 50,   "pass": true, "req": "REQ-PERF-004", "note": "等待 PowerShell prompt 後量 PTY 往返；三輪 p95 22/21/21ms" }
   },
-  "idleCpu": { "pct": 0.4, "workspaces": 10, "windowMs": 8000, "budgetPct": 10, "pass": true, "req": "REQ-MON-006" }
+  "idleCpu": { "pct": 0.4, "workspaces": 10, "windowMs": 8000, "budgetPct": 10, "pass": true, "req": "REQ-MON-006" },
+  "fourWorkspaceTerminal": {
+    "frameP95Ms": 19.7,
+    "rendererCpuPct": 3.6,
+    "rendererWorkingSetMb": 186.9,
+    "activeStreams": 4,
+    "frameBudgetMs": 50,
+    "cpuBudgetPct": 25,
+    "pass": true,
+    "note": "四個真 PowerShell PTY 各自持續輸出，確認四個 xterm baseY > 50 後量測"
+  },
+  "sourceControl": {
+    "changes": 600,
+    "initialRenderedRows": 200,
+    "eventWaves": 4,
+    "snapshotRequests": 4,
+    "snapshotRequestBudget": 5,
+    "extraGitLogRequests": 0,
+    "backgroundPollMs": 10000,
+    "pass": true,
+    "note": "真 Git repository 與真 fs:change；停留歷史頁驗證 worktree 變動不重跑 git log"
+  }
 }

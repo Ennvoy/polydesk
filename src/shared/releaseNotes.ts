@@ -15,6 +15,18 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.18.0',
+    date: '2026-07-31',
+    highlights: [
+      '終端機新增內容導覽軌，可點擊每個非空邏輯行快速跳回先前輸出',
+      '支援 Alt+上／下逐節點移動、目前位置標示、鍵盤焦點提示與減少動態效果設定',
+      '背景終端改採低頻批次輸出、共用單一 renderer 分流；鍵盤輸入後的回應則優先以 4ms flush',
+      '四工作區真 Electron 串流壓測達 frame p95 19.7ms、renderer CPU 3.6%，四個終端皆持續接收輸出',
+      '原始碼控制共用短時 Git 快照、停止因工作檔變動重讀歷史，並將大量變更清單改為每批 200 項',
+      'Git 線圖在 fetch 後會顯示尚未 pull 的遠端分支與同事提交，不會自動 merge 或改動工作樹',
+    ],
+  },
+  {
     version: '0.17.0',
     date: '2026-07-27',
     highlights: [

@@ -7,7 +7,7 @@ export const STATE_FILE_NAME = 'state.json';
 export const IGNORED_DIRS = ['node_modules', '.git', 'dist', 'out', '.vite', 'release', 'coverage'] as const;
 
 /** 背景工作區監控輪詢預設間隔（REQ-MON-005）。 */
-export const DEFAULT_BACKGROUND_POLL_MS = 5_000;
+export const DEFAULT_BACKGROUND_POLL_MS = 10_000;
 /** git 網路類操作逾時（REQ-SCM-007）。 */
 export const GIT_NETWORK_TIMEOUT_MS = 30_000;
 /** Clone 可能需要下載完整歷史，給予比 pull/push 更長的逾時。 */

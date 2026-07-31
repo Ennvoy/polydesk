@@ -242,6 +242,10 @@ export interface PtyDeps {
   treeKill?: (pid: number) => void | Promise<void>;
   /** frame 批次合併間隔（ms），預設 16（約一幀）。 */
   flushIntervalMs?: number;
+  /** 背景 terminal 批次間隔（ms）；保留完整輸出，但減少多工作區的 IPC 次數。 */
+  backgroundFlushIntervalMs?: number;
+  /** 使用者輸入後的互動輸出批次間隔（ms），預設 4。 */
+  interactiveFlushIntervalMs?: number;
   /** 待送 byte 超過此門檻即 pause() backpressure，預設 1MB。 */
   highWaterBytes?: number;
   /** 是否攔截 OSC52（REQ-TERM-008：寫入解出交剪貼簿、查詢丟棄、序列不進 renderer），預設開。 */
@@ -287,6 +291,10 @@ interface Term {
   shell: ShellKind;
   title: string;
   alive: boolean;
+  /** renderer 是否正在顯示；只影響輸出批次頻率，不 pause PTY、不丟 scrollback。 */
+  visible: boolean;
+  /** 最近一次使用者輸入時間；短窗內的 echo／TUI 回應優先低延遲 flush。 */
+  lastInputAt: number;
   /** 最後「實際套用成功」的 PTY 尺寸（resize 去重基準；失敗不記帳 → 下次重送自動重試）。 */
   appliedCols: number;
   appliedRows: number;
@@ -334,6 +342,8 @@ export class PtyManager {
   private readonly emitExit: (p: { termId: string; exitCode: number }) => void;
   private readonly treeKill: (pid: number) => void | Promise<void>;
   private readonly flushIntervalMs: number;
+  private readonly backgroundFlushIntervalMs: number;
+  private readonly interactiveFlushIntervalMs: number;
   private readonly highWaterBytes: number;
   private readonly stripClipboard: boolean;
   private readonly writeClipboard: (text: string) => void;
@@ -348,6 +358,8 @@ export class PtyManager {
     this.emitExit = deps.emitExit ?? ((p) => emit('pty:exit', p));
     this.treeKill = deps.treeKill ?? defaultTreeKill;
     this.flushIntervalMs = deps.flushIntervalMs ?? 16;
+    this.backgroundFlushIntervalMs = deps.backgroundFlushIntervalMs ?? 100;
+    this.interactiveFlushIntervalMs = deps.interactiveFlushIntervalMs ?? 4;
     this.highWaterBytes = deps.highWaterBytes ?? 1024 * 1024;
     this.stripClipboard = deps.stripClipboard ?? true;
     this.writeClipboard = deps.writeClipboard ?? defaultWriteClipboard;
@@ -388,6 +400,8 @@ export class PtyManager {
       shell,
       title: shell,
       alive: true,
+      visible: true,
+      lastInputAt: Number.NEGATIVE_INFINITY,
       appliedCols: 80,
       appliedRows: 24,
       pending: [],
@@ -409,10 +423,27 @@ export class PtyManager {
     const t = this.terms.get(termId);
     if (!t || !t.alive) return;
     try {
+      t.lastInputAt = Date.now();
       t.pty.write(data);
     } catch {
       /* 寫入競態（程序剛結束）：忽略，不讓 main 崩潰 */
     }
+  }
+
+  /**
+   * renderer 回報 terminal 是否可見。背景只延長尚未排程的輸出 flush；切回可見時立即沖出累積資料，
+   * 因此不漏輸出，也不讓使用者切回後看到分批追趕。
+   */
+  setVisibility(req: { termId: string; visible: boolean }): { ok: true } {
+    const t = this.terms.get(req.termId);
+    if (!t || t.visible === req.visible) return { ok: true };
+    t.visible = req.visible;
+    if (req.visible && t.flushTimer !== null) {
+      clearTimeout(t.flushTimer);
+      t.flushTimer = null;
+      this.flush(req.termId);
+    }
+    return { ok: true };
   }
 
   /** 調整尺寸；termId 不存在/已死則安全 no-op（F-3-A4）。
@@ -523,7 +554,13 @@ export class PtyManager {
       }
     }
     if (t.flushTimer === null) {
-      t.flushTimer = setTimeout(() => this.flush(termId), this.flushIntervalMs);
+      const interactive = Date.now() - t.lastInputAt <= 250;
+      const interval = interactive
+        ? this.interactiveFlushIntervalMs
+        : t.visible
+          ? this.flushIntervalMs
+          : this.backgroundFlushIntervalMs;
+      t.flushTimer = setTimeout(() => this.flush(termId), interval);
     }
   }
 
@@ -617,6 +654,9 @@ export function registerPtyHandlers(
     }
   });
   ipc.handle('pty:resize', (_e, req: { termId: string; cols: number; rows: number }) => mgr.resize(req));
+  ipc.handle('pty:setVisibility', (_e, req: { termId: string; visible: boolean }) =>
+    mgr.setVisibility({ termId: req.termId, visible: req.visible === true }),
+  );
   ipc.handle('pty:close', (_e, req: { termId: string }) => mgr.close(req));
   ipc.handle('pty:list', (_e, req: { wsId: string }) => mgr.list(req.wsId));
 

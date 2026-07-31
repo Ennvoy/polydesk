@@ -15,7 +15,7 @@ import { railBus } from './state/railBus';
 import { appStore, useAppState } from './state/appStore';
 import { useClaudeCounts } from './state/claudeCounts';
 import { ipc } from './ipc/client';
-import { loadGitSnapshot } from './state/gitSnapshot';
+import { invalidateGitSnapshot, loadGitSnapshot } from './state/gitSnapshot';
 import type { GitStatus } from '../shared/types';
 import { APP_VERSION } from '../shared/releaseNotes';
 
@@ -36,7 +36,10 @@ function StatusBarBranch({ wsId }: { wsId: string }): React.JSX.Element | null {
     setSt(null);
     load();
     const off = ipc.events.fs.change((p) => {
-      if (p.wsId === wsId) load();
+      if (p.wsId === wsId) {
+        invalidateGitSnapshot(wsId);
+        load();
+      }
     });
     return () => {
       alive = false;

@@ -322,6 +322,55 @@ describe('PtyManager 高速輸出批次合併 + flow control（F-3-A5）', () =>
     expect(fake.resumed).toBeGreaterThanOrEqual(1); // 消化後恢復
   });
 
+  it('背景 terminal 放大 flush 批次窗，切回可見時立即沖出且不漏資料', () => {
+    const fake = new FakePty();
+    const emitData = vi.fn();
+    const mgr = new PtyManager(ctx.workspaces, ctx.lifecycle, {
+      spawn: () => fake,
+      emitData,
+      flushIntervalMs: 16,
+      backgroundFlushIntervalMs: 100,
+      stripClipboard: false,
+    });
+    const { termId } = mgr.create({ wsId: ctx.wsId, shell: 'powershell' });
+
+    mgr.setVisibility({ termId, visible: false });
+    fake.feed(Buffer.from('background'));
+    vi.advanceTimersByTime(20);
+    expect(emitData).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(80);
+    expect(Buffer.from(emitData.mock.calls[0][0].chunk).toString()).toBe('background');
+
+    fake.feed(Buffer.from('pending'));
+    vi.advanceTimersByTime(20);
+    expect(emitData).toHaveBeenCalledTimes(1);
+    mgr.setVisibility({ termId, visible: true });
+    expect(emitData).toHaveBeenCalledTimes(2);
+    expect(Buffer.from(emitData.mock.calls[1][0].chunk).toString()).toBe('pending');
+  });
+
+  it('背景 terminal 收到使用者輸入後，echo 走低延遲批次而非等待 100ms', () => {
+    const fake = new FakePty();
+    const emitData = vi.fn();
+    const mgr = new PtyManager(ctx.workspaces, ctx.lifecycle, {
+      spawn: () => fake,
+      emitData,
+      flushIntervalMs: 16,
+      backgroundFlushIntervalMs: 100,
+      interactiveFlushIntervalMs: 4,
+      stripClipboard: false,
+    });
+    const { termId } = mgr.create({ wsId: ctx.wsId, shell: 'powershell' });
+
+    mgr.setVisibility({ termId, visible: false });
+    mgr.write(termId, 'a');
+    fake.feed(Buffer.from('a'));
+    vi.advanceTimersByTime(3);
+    expect(emitData).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(Buffer.from(emitData.mock.calls[0][0].chunk).toString()).toBe('a');
+  });
+
   it('OSC52 寫入經 flush 交給 writeClipboard、序列不進 emitData；查詢不觸發寫入', () => {
     const fake = new FakePty();
     const spawn: SpawnFn = () => fake;

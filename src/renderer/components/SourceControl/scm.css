@@ -247,6 +247,13 @@
 .pd-scm-link:hover { background: var(--surface-warm); color: var(--accent-hover); }
 .pd-scm-link:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .pd-scm-link:disabled { opacity: 0.4; cursor: not-allowed; }
+.pd-scm-showmore {
+  display: block;
+  width: calc(100% - var(--space-4));
+  margin: var(--space-2) auto;
+  padding: var(--space-2);
+  text-align: center;
+}
 
 /* 變更列 */
 .pd-scm-change { justify-content: space-between; gap: var(--space-1); padding-right: var(--space-1); }

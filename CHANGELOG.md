@@ -7,6 +7,21 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.18.0（2026-07-31）
+
+終端機內容導覽與四工作區效能優化：長篇 Claude／Codex 輸出可逐句跳轉，多個背景終端持續串流時也降低 Polydesk renderer 的重複成本。
+
+### 2026-07-31｜新增逐句導覽軌並收斂背景終端成本
+
+- 導覽：每個終端左側依非空邏輯行建立可點擊節點，自動換行延續列不重複；支援文字預覽、目前位置與可視區標示，以及 `Alt+↑`／`Alt+↓` 相鄰跳轉。長輸出最多均勻取樣 220 個視覺節點，既有 5,000 行 scrollback 保持不變。
+- 病根：每個 `TerminalView` 原先都註冊全域 PTY data listener，四個終端會重複接收並篩選彼此事件；不可見終端仍持有 WebGL，main process 也一律以 16ms flush 高頻推送，AI CLI 高輸出時會放大 IPC、解析與 GPU 成本。
+- 效能：renderer 改由單一 dispatcher 依 `termId` 分流；不可見終端釋放 WebGL，純背景 PTY 改為 100ms 合併輸出，鍵盤輸入後 250ms 內的回應則用 4ms 互動優先 flush；切回前景時立即補送並重新 fit。輸出不丟棄，shell 與 AI CLI 程序亦不會被暫停。
+- SCM 病根：狀態列、活動列與 SCM 面板只合併完全同時的 snapshot，錯開 300ms 仍會重掃；歷史／分支 effect 依賴整份 `changes`，AI 每次改檔都可能附帶重跑 `git log`／branch list；大量變更則一次建立所有 React 列。
+- SCM 修法：快照保留 600ms 短時共用並由檔案事件／Git 操作明確失效，同一批事件只遞增一次世代；歷史與分支只在 HEAD、branch 或使用者操作後重讀；變更清單每批渲染 200 項，背景 Git 探測由 5 秒放寬到 10 秒並保留 focus 即時喚醒。
+- Git 線圖改為走訪所有本地與 remote-tracking refs；手動重新整理完成 fetch 後，尚未 pull 的同事 push 版本也會顯示遠端分支徽章，不會自動 merge 或改動工作樹。
+- 無障礙：節點為可聚焦按鈕，提供句子預覽、目前節點狀態與清楚 focus ring；遵循 `prefers-reduced-motion`，不以動畫作為唯一狀態提示。
+- 驗證：導覽、dispatcher、快照世代與 PtyManager 單元測試、typecheck、build，以及新增／受影響的真 Electron E2E 全綠；四工作區各自持續高速輸出的壓測量得 frame p95 19.7ms、renderer CPU 3.6%，低於 50ms／25% budget；20 鍵 steady-state 三輪 p95 為 22／21／21ms，最終隔離重跑為 25ms；SCM 以 600 個真變更驗證初始 DOM 只有 200 列，四波檔案事件最多 4 次 snapshot 且額外 `git log` 為 0。既有冷啟動 `<3s` 門檻在目前多個 AI 程序同時運作的機器上重跑為 3.45–4.08s，列為後續獨立啟動路徑優化，不影響本次四工作區穩態與 SCM 修正。
+
 ## v0.17.0（2026-07-27）
 
 第三方軟體剪貼簿相容修正：圖片即使被包裝成無路徑、通用 MIME 的虛擬檔案，仍可在 Polydesk 檔案總管貼入。

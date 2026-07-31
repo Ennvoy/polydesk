@@ -721,8 +721,9 @@ export class GitService {
       const { stdout } = await this.run(
         // --topo-order：保證任何父都不早於其子出現（rebase/cherry-pick/時鐘偏移下，預設 date order 會讓
         // 父排在子前，破壞線圖 swimlane「子先於父」前提 → 畫出 dangling 錯誤線）。
+        // --all：同時走訪本地與 remote-tracking refs，fetch 後尚未 pull 的同事提交也能出現在歷史線圖。
         // --decorate=full：%D 輸出全名（refs/heads/、refs/remotes/），短名分不出本地 foo/bar 與遠端 origin/bar。
-        [...readHardeningArgs(), 'log', '--topo-order', '--decorate=full', '-n', String(n), `--pretty=format:${fmt}`, '-z'],
+        [...readHardeningArgs(), 'log', '--all', '--topo-order', '--decorate=full', '-n', String(n), `--pretty=format:${fmt}`, '-z'],
         { cwd, env: readEnv() },
       );
       return stdout
