@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.19.0',
+    date: '2026-08-04',
+    highlights: [
+      '修正舊版或手動加入的 worktree 按下兩種移除選項都沒有反應',
+      '即使工作區缺少 worktree metadata，也會以 Git 真實登記安全解析主工作樹與待刪路徑',
+      '移除失敗時會保留可讀錯誤，不再被重新整理立即清掉',
+    ],
+  },
+  {
     version: '0.18.0',
     date: '2026-07-31',
     highlights: [

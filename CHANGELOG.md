@@ -7,6 +7,20 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.19.0（2026-08-04）
+
+worktree 移除相容性修正：舊版或手動以一般工作區加入的既有 worktree，現在可正常移出列表或連同資料夾刪除；操作失敗也會留下明確提示。
+
+- 對應功能 commit：`25f1228`
+
+### 2026-08-04｜修正舊 worktree 兩種移除都沒有反應
+
+- 病根：SCM 列表會依 Git 路徑認出已納管 worktree，但移除 handler 只接受 state 內含 `worktree.mainPath` 的工作區；舊版或手動以一般工作區加入的資料沒有這段 metadata，因此主程序直接回「非 worktree 工作區」。
+- 修法：連同刪除前改由 `git worktree list` 的真實登記解析待刪路徑與主工作樹，並拒絕主工作樹或未登記資料夾；僅移出列表仍只 teardown 與 delist，不碰磁碟資料。
+- 錯誤回饋：兩種移除都會檢查 IPC 結果與例外；失敗後停止重新整理，避免剛寫入的錯誤立刻被清空而看似沒反應。
+- 影響範圍：SCM `worktree` 分頁、工作區生命週期 teardown 與 Git worktree remove；不修改既有 worktree 內容，也不改變 dirty 二段確認及 `--force` 規則。
+- 驗證：worktree 單元測試 14 案、typecheck、正式 build、真 Electron worktree E2E 4 案全綠；全套 Vitest 552 案初跑有 2 個 Windows 併發／watcher 偶發失敗，隔離重跑 10 案全綠，其餘 550 案初跑通過。
+
 ## v0.18.0（2026-07-31）
 
 終端機內容導覽與四工作區效能優化：長篇 Claude／Codex 輸出可逐句跳轉，多個背景終端持續串流時也降低 Polydesk renderer 的重複成本。
