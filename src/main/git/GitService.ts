@@ -978,6 +978,22 @@ export function canonicalPath(p: string): string {
 }
 
 /**
+ * 從 Git 的真實登記解析待刪 worktree 與主工作樹。
+ * 舊版可能把既有 worktree 以一般工作區加入，state 內沒有 worktree.mainPath；
+ * 移除時不可只信持久化 metadata，須回到 `git worktree list` 判定。
+ */
+export function resolveWorktreeRemoval(
+  list: GitWorktree[],
+  targetPath: string,
+): { targetPath: string; mainPath: string } | null {
+  const targetKey = canonicalPath(targetPath);
+  const target = list.find((entry) => canonicalPath(entry.path) === targetKey);
+  const main = list.find((entry) => entry.isMain);
+  if (!target || target.isMain || !main) return null;
+  return { targetPath: target.path, mainPath: main.path };
+}
+
+/**
  * REQ-WT-003＋紅軍 A2：驗證候選 worktree 路徑確實隸屬指定主工作樹。
  * 比對「候選路徑解出的 git-common-dir」與「主工作樹解出的 git-common-dir」是否為同一實體
  * （皆 realpath 正規化）——git 自報的 worktree 登記路徑可被惡意 repo 竄改，故不可只信 list 輸出。
@@ -1262,7 +1278,7 @@ export function registerWorktreeRemoveHandler(
 ): void {
   ipc.handle('git:worktreeRemove', async (_e, req: InvokeReq<'git:worktreeRemove'>) => {
     const ws = workspaces.get(req.wsId);
-    if (!ws?.worktree) return { error: '非 worktree 工作區' };
+    if (!ws) return { error: '找不到工作區' };
     const target = ws.path;
     const mainKey = req.wsId;
     return enqueue(workspaces.queueKeyForRepo(mainKey), async () => {
@@ -1271,11 +1287,15 @@ export function registerWorktreeRemoveHandler(
         await workspaces.remove(req.wsId, false);
         return { ok: true as const };
       }
+      // 舊版／手動加入的 worktree 可能沒有 ws.worktree metadata；以 Git 真實登記回查，
+      // 同時阻止把主工作樹或已不屬於此 repo 的一般資料夾交給 worktree remove。
+      const removal = resolveWorktreeRemoval(await svc.worktreeList(req.wsId), target);
+      if (!removal) return { error: '找不到有效的 Git worktree 登記' };
       // 連同刪除（REQ-WT-006 順序鐵則）：先 teardown 釋放 handle（Windows 防 EBUSY）→ git remove
       // 成功後才 delist。git remove 失敗則「不 delist」＝工作區項保留、不半殘。
       await workspaces.teardownOnly(req.wsId);
       try {
-        await svc.worktreeRemoveByPath(target, ws.worktree!.mainPath, req.force);
+        await svc.worktreeRemoveByPath(removal.targetPath, removal.mainPath, req.force);
       } catch (e) {
         const msg = errMsg(e, 'worktree remove 失敗');
         const code = /is dirty|contains modified|use --force/i.test(msg)

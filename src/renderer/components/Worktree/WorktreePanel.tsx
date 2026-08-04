@@ -110,10 +110,15 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
     ))) as 'list-only' | 'delete' | undefined;
     if (!choice) return;
 
+    setError(null);
     setBusy(true);
     try {
       if (choice === 'list-only') {
-        await ipc.git.worktreeRemove({ wsId: targetWsId, deleteFolder: false, force: false });
+        const r = await ipc.git.worktreeRemove({ wsId: targetWsId, deleteFolder: false, force: false });
+        if ('error' in r) {
+          setError(neutralizeBidi(r.error));
+          return;
+        }
         await appStore.loadWorkspaces();
         await reload();
         return;
@@ -138,9 +143,12 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
               ? '該 worktree 仍有未提交變更。請先提交/暫存，或確認丟棄後重試。'
               : r.error,
         );
+        return;
       }
       await appStore.loadWorkspaces();
       await reload();
+    } catch (e) {
+      setError(neutralizeBidi(e instanceof Error ? e.message : '移除 worktree 失敗'));
     } finally {
       setBusy(false);
     }

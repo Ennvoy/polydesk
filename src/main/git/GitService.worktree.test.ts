@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { StateStore } from '../store/StateStore';
 import { WorkspaceManager } from '../workspace/WorkspaceManager';
 import { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
-import { GitService, parseWorktreeList } from './GitService';
+import { GitService, parseWorktreeList, resolveWorktreeRemoval } from './GitService';
 
 const NUL = '\0';
 
@@ -30,6 +30,25 @@ describe('parseWorktreeList（--porcelain -z）', () => {
 
   it('空輸出 → 空陣列', () => {
     expect(parseWorktreeList('')).toEqual([]);
+  });
+});
+
+describe('resolveWorktreeRemoval（舊版一般工作區相容）', () => {
+  const list = [
+    { path: 'C:/repos/app', branch: 'main', head: 'aaaa', isMain: true, prunable: false },
+    { path: 'C:/repos/app-worktrees/profile', branch: 'profile', head: 'bbbb', isMain: false, prunable: false },
+  ];
+
+  it('不依賴 workspace metadata，從 Git 登記解出主工作樹與目標', () => {
+    expect(resolveWorktreeRemoval(list, 'C:\\repos\\app-worktrees\\profile')).toEqual({
+      targetPath: 'C:/repos/app-worktrees/profile',
+      mainPath: 'C:/repos/app',
+    });
+  });
+
+  it('拒絕主工作樹與未登記資料夾', () => {
+    expect(resolveWorktreeRemoval(list, 'C:\\repos\\app')).toBeNull();
+    expect(resolveWorktreeRemoval(list, 'C:\\repos\\other')).toBeNull();
   });
 });
 

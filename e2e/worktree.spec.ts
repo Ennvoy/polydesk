@@ -145,6 +145,43 @@ test('REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅
   rmSync(userData, { recursive: true, force: true });
 });
 
+test('worktree 移除相容舊資料：一般工作區加入時兩種移除都有效', async () => {
+  const { root, repo } = seedRepo();
+  const legacyPath = join(root, 'profile');
+  git(repo, 'worktree', 'add', legacyPath, 'dev');
+  const { app, page, userData } = await launchApp();
+  await stubFolderPicker(app, [repo, legacyPath, legacyPath]);
+  await addWorkspaceViaUI(page);
+  await addWorkspaceViaUI(page); // 模擬舊版：以一般工作區加入，沒有 worktree.mainPath metadata
+  await page.locator('button[aria-label="開啟工作區 work"]').click();
+  await page.locator('button[aria-label="原始碼控制"]').click();
+  await page.getByRole('tab', { name: 'worktree' }).click();
+
+  // 僅移出列表：工作區項消失，但 Git 登記與資料夾保留。
+  await page.locator('button[aria-label="移除 worktree dev"]').click();
+  await page.locator('button[aria-label="僅從列表移出，保留資料夾"]').click();
+  await expect(page.locator('button[aria-label="開啟工作區 profile"]')).toHaveCount(0);
+  expect(existsSync(legacyPath)).toBe(true);
+  expect(git(repo, 'worktree', 'list', '--porcelain')).toContain(legacyPath.replace(/\\/g, '/'));
+
+  // 再以一般工作區加回；連同刪除須從 Git 真實登記回查 mainPath，不能依賴缺失 metadata。
+  await addWorkspaceViaUI(page);
+  await page.getByRole('tab', { name: '變更' }).click();
+  await page.getByRole('tab', { name: 'worktree' }).click();
+  await page.locator('button[aria-label="移除 worktree dev"]').click();
+  await page.locator('button[aria-label="連同刪除資料夾"]').click();
+  const discard = page.locator('button[aria-label="確定丟棄並刪除"]');
+  await expect(discard).toBeVisible({ timeout: 8000 });
+  await page.locator('input[aria-label="確定丟棄未提交變更"]').check();
+  await discard.click();
+  await expect.poll(() => existsSync(legacyPath), { timeout: 8000 }).toBe(false);
+  expect(git(repo, 'worktree', 'list', '--porcelain')).not.toContain(legacyPath.replace(/\\/g, '/'));
+
+  await app.close();
+  rmSync(root, { recursive: true, force: true });
+  rmSync(userData, { recursive: true, force: true });
+});
+
 test('F-13：分支分頁「在新 worktree 開啟」建立；checkout 衝突→跳到該 worktree', async () => {
   const { root, repo } = seedRepo();
   const { app, page, userData } = await launchApp();
