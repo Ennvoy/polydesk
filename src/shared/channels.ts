@@ -59,6 +59,7 @@ export const INVOKE_CHANNELS = [
   'ai:generateCommitMessage',
   'ai:usage',
   'claude:states',
+  'claude:transcript',
   'pty:create',
   'pty:resize',
   'pty:setVisibility',

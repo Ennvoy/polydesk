@@ -1,0 +1,162 @@
+// 對話軸：claude 這類 TUI 一啟動就切 alternate screen，xterm alt buffer 沒有 scrollback →
+// 行導覽軌的條件（buffer 行數 > 可視列數）恆為 false。此規格驗證軸在 alt buffer 下改以
+// claude 自己的 session transcript 為資料源，節點對齊「訊息」，且點擊送出 Ctrl+O + `{` 定位。
+//
+// 不啟動真 claude（要帳號、慢）：改用真 PowerShell 印出 ?1049h 讓 xterm 真的切 buffer，
+// 並在該工作區對應的 ~/.claude/projects/<slug>/ 預先放一份 transcript。slug 來自 tmp 目錄，
+// 不會撞到使用者既有專案，測後整個目錄刪除。
+import { test, expect, type Page } from '@playwright/test';
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { launchApp, stubFolderPicker, addWorkspaceViaUI, makeTempDir, makeSubDir } from './electronApp';
+import { claudeProjectSlug } from '../src/main/claude/sessionTranscript';
+
+const jsonl = (value: unknown): string => `${JSON.stringify(value)}\n`;
+const userLine = (text: string): string =>
+  jsonl({ type: 'user', isSidechain: false, message: { content: [{ type: 'text', text }] } });
+const assistantLine = (text: string): string =>
+  jsonl({ type: 'assistant', isSidechain: false, message: { content: [{ type: 'text', text }] } });
+const toolResultLine = (): string =>
+  jsonl({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'x' }] } });
+
+/** 讓 PTY 真的吐出 escape sequence（不是寫進 stdin），xterm 才會實際切 buffer。 */
+async function emitFromPty(page: Page, command: string): Promise<void> {
+  await page.evaluate(async (input) => {
+    const api = (
+      window as unknown as {
+        polydesk: {
+          store: { getState: () => Promise<{ workspaces: { id: string }[] }> };
+          pty: { list: (r: { wsId: string }) => Promise<{ termId: string }[]>; write: (termId: string, data: string) => void };
+        };
+      }
+    ).polydesk;
+    const state = await api.store.getState();
+    const terminals = await api.pty.list({ wsId: state.workspaces[0].id });
+    api.pty.write(terminals[0].termId, input);
+  }, command);
+}
+
+/** 終端機實際可用版面：欄列數會直接反映字元格大小，rail 若吃掉寬度或改變行高必然變動。 */
+async function terminalMetrics(page: Page): Promise<Record<string, number>> {
+  return page.evaluate(() => {
+    const host = document.querySelector('.pd-term-xterm-host') as HTMLElement & {
+      __pdTerm?: { cols: number; rows: number };
+    };
+    const rect = host.getBoundingClientRect();
+    const rowEl = document.querySelector('.xterm-rows > div') as HTMLElement | null;
+    return {
+      cols: host.__pdTerm!.cols,
+      rows: host.__pdTerm!.rows,
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      left: Math.round(rect.left),
+      rowHeight: rowEl ? Math.round(rowEl.getBoundingClientRect().height * 100) / 100 : -1,
+    };
+  });
+}
+
+test('對話軸不改變終端機的可用版面與行距', async () => {
+  const root = makeTempDir('pd-transcript-layout-');
+  const dir = makeSubDir(root, 'layout-ws');
+  const projectDir = join(homedir(), '.claude', 'projects', claudeProjectSlug(dir));
+  mkdirSync(projectDir, { recursive: true });
+  writeFileSync(join(projectDir, 'e2e-session.jsonl'), userLine('提問') + assistantLine('回覆') + userLine('再問'));
+
+  const { app, page } = await launchApp();
+  try {
+    await stubFolderPicker(app, [dir]);
+    await addWorkspaceViaUI(page);
+    await page.locator('button[aria-label="開啟工作區 layout-ws"]').click();
+    await page.locator('button[aria-label="新增終端機"]').click();
+    await expect(page.locator('.pd-term-xterm-host[data-initial-size-ready="true"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.pd-term-navigation.is-messages')).toHaveCount(0);
+
+    const before = await terminalMetrics(page);
+
+    // 切到 alternate screen → 對話軸接手。
+    await emitFromPty(page, '[Console]::Write([char]27 + "[?1049h" + "TUI-READY")\r');
+    await expect(page.locator('.pd-term-navigation.is-messages')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.pd-term-navigation-node.is-message')).toHaveCount(3);
+
+    // 軌的 18px 寬是版面一直保留的空槽，節點是絕對定位、不參與版面計算 → 欄列數、
+    // 可用寬高、左緣與單列行高都必須一模一樣。
+    expect(await terminalMetrics(page)).toEqual(before);
+  } finally {
+    await app.close();
+    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('alternate screen 的終端機改用對話軸，節點對齊訊息且點擊送出定位按鍵', async () => {
+  const root = makeTempDir('pd-transcript-rail-');
+  const dir = makeSubDir(root, 'transcript-ws');
+  const projectDir = join(homedir(), '.claude', 'projects', claudeProjectSlug(dir));
+  mkdirSync(projectDir, { recursive: true });
+  writeFileSync(
+    join(projectDir, 'e2e-session.jsonl'),
+    userLine('第一個提問') +
+      assistantLine('第一個回覆') +
+      toolResultLine() + // 工具回填不該變成節點
+      userLine('第二個提問') +
+      assistantLine('第二個回覆'),
+  );
+
+  const { app, page } = await launchApp();
+  try {
+    await stubFolderPicker(app, [dir]);
+    await addWorkspaceViaUI(page);
+    await page.locator('button[aria-label="開啟工作區 transcript-ws"]').click();
+    await page.locator('button[aria-label="新增終端機"]').click();
+    await expect(page.locator('.pd-term-xterm-host[data-initial-size-ready="true"]')).toBeVisible({ timeout: 15_000 });
+
+    // 一般 shell（normal buffer）先確認不是對話軸模式。
+    await expect(page.locator('.pd-term-navigation.is-messages')).toHaveCount(0);
+
+    // 記錄送往 PTY 的資料，稍後驗證點擊真的送出 Ctrl+O + `{`。
+    await app.evaluate(({ ipcMain }) => {
+      const sink: string[] = [];
+      (globalThis as unknown as { __ptyWrites: string[] }).__ptyWrites = sink;
+      ipcMain.on('pty:write', (_event, payload: { data: string }) => {
+        sink.push(payload.data);
+      });
+    });
+
+    // 真 PowerShell 輸出 ?1049h → xterm 切 alternate buffer（等同 claude 啟動時的動作）。
+    await emitFromPty(page, '[Console]::Write([char]27 + "[?1049h" + "TUI-READY")\r');
+
+    const rail = page.locator('.pd-term-navigation.is-messages');
+    await expect(rail).toBeVisible({ timeout: 15_000 });
+    // 4 則對話（tool_result 被濾掉），順序為 提問／回覆／提問／回覆。
+    await expect(rail).toHaveAttribute('data-message-node-count', '4');
+    await expect(rail.locator('.pd-term-navigation-node.is-prompt')).toHaveCount(2);
+    await expect(rail.locator('.pd-term-navigation-node.is-reply')).toHaveCount(2);
+    await expect(rail.locator('.pd-term-navigation-node').first()).toHaveAttribute(
+      'aria-label',
+      '跳到第 1 則（你的提問）：第一個提問',
+    );
+
+    // 點第一則提問：它前面還有 1 個 user prompt（第二個提問）→ Ctrl+O 後送 1 次 `{`。
+    // 斷言整條寫入序列而非最後一筆：xterm 取得焦點時也會送出自己的回報序列。
+    const ptyWrites = (): Promise<string[]> =>
+      app.evaluate(() => (globalThis as unknown as { __ptyWrites: string[] }).__ptyWrites);
+    await rail.locator('.pd-term-navigation-node.is-prompt').first().click();
+    await expect.poll(ptyWrites, { timeout: 5_000 }).toContain('\x0f{');
+
+    // 最新那則（第 4 則）之後沒有更多 prompt → 只送 Ctrl+O，不帶 `{`。
+    await rail.locator('.pd-term-navigation-node').last().click();
+    await expect.poll(ptyWrites, { timeout: 5_000 }).toContain('\x0f');
+
+    // 退出 alternate screen → 立刻交還原本的行導覽軌。
+    // 先 Ctrl+C 清掉輸入行：上面點擊送出的 `{` 進了 PowerShell 的命令列，會把接下來的指令
+    // 吃成 script block（這正是 jumpToMessage 刻意不送 Enter 的理由——誤觸只留字元、不會執行）。
+    await emitFromPty(page, '\x03');
+    await emitFromPty(page, '[Console]::Write([char]27 + "[?1049l")\r');
+    await expect(page.locator('.pd-term-navigation.is-messages')).toHaveCount(0, { timeout: 10_000 });
+  } finally {
+    await app.close();
+    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});

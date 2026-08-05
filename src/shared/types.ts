@@ -43,6 +43,22 @@ export interface ClaudeStatus {
   exitCode?: number;
 }
 
+/** 對話軸的一則訊息（claude 在 alternate screen 自繪畫面，節點只能對齊訊息、對不到終端機行號）。 */
+export interface ClaudeTranscriptNode {
+  /** 在對話中的序號（0 起，user 與 assistant 混合計數）。 */
+  index: number;
+  role: 'user' | 'assistant';
+  /** 單行摘要，供軸上 tooltip。 */
+  preview: string;
+  /** 從最新往回數還有幾個 user prompt：點節點時送這麼多次 `{` 給 claude 的 transcript 檢視。 */
+  promptsFromEnd: number;
+}
+/** 某工作區當前 claude session 的對話節點快照。 */
+export interface ClaudeTranscript {
+  sessionId: string;
+  nodes: ClaudeTranscriptNode[];
+}
+
 export interface Workspace {
   id: string;
   name: string;

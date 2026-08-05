@@ -7,6 +7,19 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.20.0（2026-08-05）
+
+Claude 面板的對話軸：終端機左側導覽軌在自繪畫面的 TUI（claude）底下改以「對話訊息」為節點，補上這類面板一直看不到導覽軌的空白。
+
+### 2026-08-05｜Claude 面板改用對話軸
+
+- 病根：導覽軌以 xterm buffer 的非空白邏輯行建節點，顯示條件是 `buffer 行數 > 可視列數`。claude 一啟動就送 `?1049h` 切 alternate screen 並自繪整個畫面，而 alt buffer 沒有 scrollback、長度恆等於可視列數，條件永遠不成立——不論跑多久、輸出多少，claude 面板的軌上永遠沒有節點（codex、PowerShell 留在 normal buffer 故不受影響）。
+- 修法：偵測到 alt buffer 時改換資料源，讀 claude 自己寫的 session transcript（`~/.claude/projects/<slug>/<sessionId>.jsonl`）建節點，節點對齊「訊息」而非終端機行。長節點＝使用者提問、短節點＝Claude 回覆，滑過顯示該則摘要。
+- 綁定方式刻意零侵入：不改使用者的啟動指令，以工作區 cwd 推出 slug 目錄、取 mtime 最新的 session 檔；jsonl 為 append-only，故只讀新增位元組並沿用既有節點，長對話不會每次重解析數 MB，尾端半行留到寫完才計入。
+- 節點語意：同一回合內連續的多則 assistant 發言摺疊為一個節點——定位只能跳到 user prompt，展開成多個節點會是假的可點性。sidechain（subagent）、工具回填、`isMeta` 補註與 slash 指令 stdout 都不計入。
+- 跳轉：alt buffer 拿不到絕對行號，改送 `Ctrl+O` 開啟 claude 的對話檢視（停在最新）再送 N 次 `{` 往回跳到該則提問；刻意不送 Enter，萬一使用者當下已停在對話檢視，最壞只是輸入框多出幾個字元、不會執行任何東西。
+- 離開 TUI 回到一般 shell 時立即交還原本的逐行導覽軌；找不到 session 檔的 alt-screen TUI（vim 等）維持原本的空軌，不誤標。
+
 ## v0.19.0（2026-08-04）
 
 worktree 移除相容性修正：舊版或手動以一般工作區加入的既有 worktree，現在可正常移出列表或連同資料夾刪除；操作失敗也會留下明確提示。

@@ -5,6 +5,7 @@ import type {
   Workspace,
   WorkspaceInput,
   ClaudeStatus,
+  ClaudeTranscript,
   AiTool,
   GitStatus,
   GitChange,
@@ -166,6 +167,9 @@ export interface InvokeChannels {
   'ai:usage': { req: void; res: AiUsage };
   /** 目前所有（工作區×工具）AI 狀態快照：徽章/計數掛載先拉現況再訂閱 claude:status（重掛不丟燈）。 */
   'claude:states': { req: void; res: { wsId: string; tool: AiTool; status: ClaudeStatus }[] };
+  /** 對話軸資料源：claude 在 alternate screen 自繪畫面、xterm 無 scrollback 可掃，改讀它自己的 session
+   *  transcript。沒跑過 claude 的工作區回 null，終端機據此保留原本的行導覽軌。 */
+  'claude:transcript': { req: { wsId: string }; res: ClaudeTranscript | null };
   // 終端機（控制訊息走 invoke；資料流走 stream）
   'pty:create': { req: { wsId: string; shell: ShellKind }; res: PtyCreateResult };
   'pty:resize': {

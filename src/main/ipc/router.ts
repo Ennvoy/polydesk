@@ -17,6 +17,7 @@ import { registerSearchHandlers } from '../search/SearchService';
 import { registerLspHandlers } from '../lsp/LspManager';
 import { registerClipboardHandlers } from '../clipboard/clipboardHandlers';
 import { ClaudeStatusMonitor } from '../monitor/ClaudeStatusMonitor';
+import { readClaudeTranscript } from '../claude/sessionTranscript';
 import { registerUpdateHandlers } from '../update/AutoUpdater';
 import { registerExternalUrlHandlers } from '../window/externalUrl';
 import { registerWindowControls } from '../window/windowControls';
@@ -58,6 +59,11 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
   const monitor = new ClaudeStatusMonitor(workspaces, pty, undefined, { lifecycle });
   monitor.start();
   ipcMain.handle('claude:states', () => monitor.snapshot()); // 掛載快照（徽章/計數重掛不丟燈）
+  // 對話軸：claude 面板的導覽軌資料源（alt screen 下 xterm 沒有 scrollback 可掃）
+  ipcMain.handle('claude:transcript', async (_e, req: { wsId: string }) => {
+    const cwd = workspaces.get(req.wsId)?.path;
+    return cwd ? readClaudeTranscript(cwd) : null;
+  });
 
   registerUpdateHandlers(ipcMain); // update:*（electron-updater）
   registerExternalUrlHandlers(ipcMain); // app:openExternalUrl（HTTP(S) 白名單後交系統瀏覽器）

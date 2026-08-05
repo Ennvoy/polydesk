@@ -15,6 +15,16 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.20.0',
+    date: '2026-08-05',
+    highlights: [
+      'Claude 面板新增對話軸：左側導覽軌改以對話訊息為節點，長的是你的提問、短的是 Claude 回覆',
+      '滑過節點可看該則摘要，點擊會開啟 Claude 的對話檢視並跳到該則提問',
+      '修正 Claude 等自繪畫面的 TUI 完全看不到導覽軌（它們沒有終端機捲動紀錄可掃）',
+      '離開 TUI 回到一般 shell 時自動切回原本的逐行導覽軌',
+    ],
+  },
+  {
     version: '0.19.0',
     date: '2026-08-04',
     highlights: [

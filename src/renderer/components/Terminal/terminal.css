@@ -154,6 +154,25 @@
   outline: none;
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent, #6e8efb), transparent 52%);
 }
+/* 對話軸（claude 等 alternate screen TUI）：節點＝訊息而非行，長＝你的提問、短＝AI 回覆。
+   節點等距排列——alt buffer 沒有 scrollback，本來就沒有「行位置」可對應。 */
+.pd-term-navigation-node.is-message {
+  height: 3px;
+}
+.pd-term-navigation-node.is-message.is-prompt {
+  width: 16px;
+  background: var(--accent, #6e8efb);
+  opacity: 0.72;
+}
+.pd-term-navigation-node.is-message.is-reply {
+  width: 9px;
+  opacity: 0.38;
+}
+.pd-term-navigation-node.is-message.is-active {
+  opacity: 1;
+  background: var(--accent, #6e8efb);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent, #6e8efb), transparent 60%);
+}
 @media (prefers-reduced-motion: reduce) {
   .pd-term-navigation-node {
     transition: none;
