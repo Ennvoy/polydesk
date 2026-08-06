@@ -86,8 +86,12 @@ test('REQ-WS-009：有跑中終端機按 X → 確認彈窗 → 確認後 app �
 
     // 真實鏈路證據：經 PTY 讓 shell 把自己的 PID 寫進工作區檔案
     // （不走 Get-CimInstance——這台機器 CIM 掃描慢到逾時，見 reference_win11_no_wmic_cim_slow）
+    const terminalHost = page.locator('.pd-term-xterm-host').first();
+    await expect(terminalHost).toHaveAttribute('data-initial-size-ready', 'true', { timeout: 15_000 });
+    const terminalInput = page.locator('.pd-term-view .xterm-helper-textarea').first();
+    await terminalInput.focus();
+    await expect(terminalInput).toBeFocused();
     await page.waitForTimeout(1500); // shell 初始化 prompt
-    await page.locator('.pd-term-view').first().click(); // 聚焦 xterm helper textarea
     await page.keyboard.type('Set-Content pid.txt "$PID" -Encoding Ascii');
     await page.keyboard.press('Enter');
     let shellPid = 0;

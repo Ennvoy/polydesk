@@ -7,6 +7,25 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.21.0（2026-08-06）
+
+SCM 分支管理補上本地／遠端清楚分組與安全刪除完整鏈路；刪除影響範圍、阻擋原因與遠端身分都在操作前後保持明確。
+
+### 2026-08-06｜本地與遠端分支安全刪除
+
+- 分支頁分成可獨立收合的「本地分支」與「遠端分支」，各自顯示數量；每列的 `⋯` 與右鍵共用同一套操作選單，避免兩個入口出現不一致行為。
+- 本地刪除固定使用 `git branch -d -- <name>`，沒有 `-D` 強制路徑；目前分支、其他 worktree 使用中的分支與未合併分支會保留，並在選單或錯誤訊息具名說明阻擋原因。
+- 遠端刪除固定使用 `git push <remote> --delete <branch>`，確認視窗明示伺服器影響；成功後只刪指定遠端分支，本地同名分支與其他 remote 不受影響。
+- shared IPC 新增結構化 `remoteBranches`，main 依實際 remote 清單採最長前綴解析，支援合法的 `team/backend` 斜線 remote，不再由 renderer 拆字串猜 remote。
+- Git 原始錯誤在回傳 UI 前會中和 bidi 與 C0 控制字元，再依非法 ref、目前分支、worktree、未合併、認證、網路、逾時、remote 不存在與伺服器拒絕等情況結構化分類；成功後同步刷新分支、snapshot、歷史與 worktree 狀態。
+
+### 驗證與已知豁免
+
+- 全量 ship 驗證通過：TypeScript typecheck、正式 build、574 個 Vitest，以及 110 個非豁免 Electron E2E；Windows 資源敏感案例以單 worker 分成 6 個 Vitest shard 與 12 個 E2E shard，範圍未縮減。
+- 審查修正後再通過 32 個 Git／錯誤分類單測與 1 個真 Electron 分支管理 E2E；測試包含真 Git、bare remote、worktree、未合併分支與 `team/backend` remote。
+- 既有 `REQ-PERF-001` 冷啟動 `<3s` 在同機多 AI 負載下量得 p95 3159、3335、6437 ms。使用者於 2026-08-06 核准沿用既有效能豁免直接發布；3 秒門檻與測試本身均未修改，ship gate 僅排除這 1 案。
+- Windows 真實相依測試的 Vitest 單案例與 hook timeout 由 25 秒放寬為 60 秒，另將既有 ConPTY 自然結束事件輪詢放寬至 30 秒；產品執行與網路 timeout 不變。
+
 ## v0.20.0（2026-08-05）
 
 Claude 面板的對話軸：終端機左側導覽軌在自繪畫面的 TUI（claude）底下改以「對話訊息」為節點，補上這類面板一直看不到導覽軌的空白。

@@ -214,7 +214,7 @@ export interface InvokeChannels {
   'git:commit':        { req: { wsId: string; message: string }; res: { ok: true; hash: string } | { error: string } };
   'git:push':          { req: { wsId: string };     res: { ok: true } | { error: string } };
   'git:pull':          { req: { wsId: string };     res: { ok: true } | { error: string } };
-  'git:branch':        { req: { wsId: string; op: 'list' | 'create' | 'checkout'; name?: string }; res: { branches: string[]; current: string } | { ok: true } };
+  'git:branch':        { req: { wsId: string; op: 'list' | 'create' | 'checkout' | 'delete-local' | 'delete-remote'; name?: string; startPoint?: string; remote?: string }; res: { branches: string[]; current: string; remotes?: string[]; remoteBranches?: GitRemoteBranch[] } | { ok: true } | GitBranchDeleteResult };
   'git:log':           { req: { wsId: string; limit: number }; res: GitLogEntry[] };
   'git:stash':         { req: { wsId: string; op: 'push' | 'pop' | 'list' }; res: unknown };
   'git:init':          { req: { wsId: string };     res: { ok: true } };

@@ -1,0 +1,20 @@
+{
+  "frozen": [
+    "src/renderer/components/SourceControl/SourceControlPanel.tsx",
+    "src/renderer/components/SourceControl/scm.css"
+  ],
+  "log": [
+    {
+      "path": "src/renderer/components/SourceControl/SourceControlPanel.tsx",
+      "action": "freeze",
+      "at": "2026-08-06T08:18:09.8728808+08:00",
+      "reason": "design 定稿"
+    },
+    {
+      "path": "src/renderer/components/SourceControl/scm.css",
+      "action": "freeze",
+      "at": "2026-08-06T08:18:09.8728808+08:00",
+      "reason": "design 定稿"
+    }
+  ]
+}

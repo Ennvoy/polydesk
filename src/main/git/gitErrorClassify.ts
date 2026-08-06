@@ -1,7 +1,7 @@
 // push / gh 錯誤訊息分類（DF-12）。純 regex 模組（零 electron/Node 依賴）→ 可直接單測；
 // 與 GitService.clone 內建分類器同哲學：把 stderr 原文分流成 UI 可給人話引導的 code。
 
-import type { GitPublishErrorCode, GitPushErrorCode } from '../../shared/types';
+import type { GitBranchDeleteErrorCode, GitPublishErrorCode, GitPushErrorCode } from '../../shared/types';
 
 /** 「分支沒 upstream」不是錯誤碼——push 會自動改跑 `push -u <remote> HEAD` 補救（VS Code 同款）。 */
 export function isNoUpstreamError(message: string): boolean {
@@ -16,6 +16,15 @@ export function classifyPushError(message: string, timedOut: boolean): GitPushEr
   if (/repository not found/i.test(message)) return 'remote-not-found';
   if (/authentication failed|permission denied|publickey|could not read username|access denied|HTTP 403/i.test(message)) return 'auth';
   if (/could not resolve host|failed to connect|connection (?:timed out|refused)|network is unreachable|unable to access/i.test(message)) return 'network';
+  return 'failed';
+}
+
+export function classifyBranchDeleteError(message: string, timedOut: boolean): GitBranchDeleteErrorCode {
+  const pushCode = classifyPushError(message, timedOut);
+  if (pushCode !== 'failed') return pushCode;
+  if (/remote rejected|protected branch|pre-receive hook|hook declined|denydeletecurrent|deletion prohibited/i.test(message)) {
+    return 'rejected';
+  }
   return 'failed';
 }
 

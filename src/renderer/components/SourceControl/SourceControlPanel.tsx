@@ -15,13 +15,41 @@ import { PublishGitHubDialog } from './PublishGitHubDialog';
 import { CreateWorktreeDialog } from '../Worktree/CreateWorktreeDialog';
 import { parseWorktreeConflict, resolveJumpTarget } from '../Worktree/worktreeModel';
 import { neutralizeBidi } from '../Dialogs/TrustConfirm';
-import type { GitStatus, GitChange, GitLogEntry, GitLogRef, AiEngine, GitPushErrorCode } from '../../../shared/types';
+import type {
+  GitStatus,
+  GitChange,
+  GitLogEntry,
+  GitLogRef,
+  AiEngine,
+  GitPushErrorCode,
+  GitRemoteBranch,
+  GitBranchDeleteErrorCode,
+} from '../../../shared/types';
 import { DEFAULT_BACKGROUND_POLL_MS, FETCH_COOLDOWN_MS } from '../../../shared/constants';
 import { shouldAutoFetch } from './fetchCooldown';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
 import { record } from '../../../shared/perf';
 
 type Tab = 'changes' | 'history' | 'branches' | 'worktree';
+type BranchKind = 'local' | 'remote';
+
+interface BranchState {
+  local: string[];
+  remote: GitRemoteBranch[];
+  current: string;
+  worktreePaths: Record<string, string>;
+}
+
+interface BranchMenuState {
+  kind: BranchKind;
+  name: string;
+  remote?: string;
+  displayName: string;
+  x: number;
+  y: number;
+}
+
+const EMPTY_BRANCH_STATE: BranchState = { local: [], remote: [], current: '', worktreePaths: {} };
 
 // ── commit 線圖渲染常數 ──
 const GRAPH_LANE_W = 14;
@@ -176,7 +204,9 @@ export function SourceControlPanel(): React.JSX.Element {
   const [engine, setEngine] = useState<AiEngine>('claude');
   const [tab, setTab] = useState<Tab>('changes');
   const [log, setLog] = useState<GitLogEntry[]>([]);
-  const [branches, setBranches] = useState<{ list: string[]; current: string }>({ list: [], current: '' });
+  const [branches, setBranches] = useState<BranchState>(EMPTY_BRANCH_STATE);
+  const [branchGroupsOpen, setBranchGroupsOpen] = useState<Record<BranchKind, boolean>>({ local: true, remote: true });
+  const [branchMenu, setBranchMenu] = useState<BranchMenuState | null>(null);
   const [hover, setHover] = useState<{ c: GitLogEntry; top: number; left: number } | null>(null); // PE-1 hover 卡
   const [commitMenu, setCommitMenu] = useState<{ c: GitLogEntry; x: number; y: number } | null>(null); // PE-1 右鍵選單
   const [changeMenu, setChangeMenu] = useState<{ c: GitChange; x: number; y: number } | null>(null); // 變更檔右鍵選單
@@ -336,12 +366,13 @@ export function SourceControlPanel(): React.JSX.Element {
     };
   }, [wsId, status?.isRepo, refresh]);
 
-  // 右鍵選單（commit / 變更檔）— 點外 / Esc 關閉。
+  // 右鍵選單（commit / 變更檔 / 分支）— 點外 / Esc 關閉。
   useEffect(() => {
-    if (!commitMenu && !changeMenu) return undefined;
+    if (!commitMenu && !changeMenu && !branchMenu) return undefined;
     const close = (): void => {
       setCommitMenu(null);
       setChangeMenu(null);
+      setBranchMenu(null);
     };
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') close();
@@ -352,7 +383,31 @@ export function SourceControlPanel(): React.JSX.Element {
       window.removeEventListener('mousedown', close);
       window.removeEventListener('keydown', onKey);
     };
-  }, [commitMenu, changeMenu]);
+  }, [commitMenu, changeMenu, branchMenu]);
+
+  const loadBranches = useCallback(async (): Promise<void> => {
+    if (!wsId) {
+      setBranches(EMPTY_BRANCH_STATE);
+      return;
+    }
+    const [branchResult, worktreeResult] = await Promise.all([
+      ipc.git.branch({ wsId, op: 'list' }),
+      ipc.git.worktreeList({ wsId }),
+    ]);
+    if (!('branches' in branchResult)) return;
+    const worktreePaths: Record<string, string> = {};
+    if ('list' in worktreeResult) {
+      for (const worktree of worktreeResult.list) {
+        if (worktree.branch) worktreePaths[worktree.branch] = worktree.path;
+      }
+    }
+    setBranches({
+      local: branchResult.branches,
+      remote: branchResult.remoteBranches ?? [],
+      current: branchResult.current,
+      worktreePaths,
+    });
+  }, [wsId]);
 
   // 切到歷史/分支頁時載入對應資料。
   useEffect(() => {
@@ -365,14 +420,9 @@ export function SourceControlPanel(): React.JSX.Element {
         .catch((e) => setError(errText(e)));
     } else if (tab === 'branches') {
       record('gitBranchListRequest', 1);
-      void ipc.git
-        .branch({ wsId, op: 'list' })
-        .then((r) => {
-          if ('branches' in r) setBranches({ list: r.branches, current: r.current });
-        })
-        .catch((e) => setError(errText(e)));
+      void loadBranches().catch((e) => setError(errText(e)));
     }
-  }, [tab, wsId, status?.isRepo, status?.head, status?.branch, auxRevision]);
+  }, [tab, wsId, status?.isRepo, status?.head, status?.branch, auxRevision, loadBranches]);
 
   const run = useCallback(
     async (fn: () => Promise<void>): Promise<void> => {
@@ -585,8 +635,7 @@ export function SourceControlPanel(): React.JSX.Element {
       await ipc.git.branch({ wsId, op: 'create', name });
       await ipc.git.branch({ wsId, op: 'checkout', name });
       await refresh();
-      const r = await ipc.git.branch({ wsId, op: 'list' });
-      if ('branches' in r) setBranches({ list: r.branches, current: r.current });
+      await loadBranches();
       setTab('branches');
     });
   };
@@ -640,8 +689,7 @@ export function SourceControlPanel(): React.JSX.Element {
         return;
       }
       await refresh();
-      const r = await ipc.git.branch({ wsId, op: 'list' });
-      if ('branches' in r) setBranches({ list: r.branches, current: r.current });
+      await loadBranches();
     });
 
   // PE-1：從某 commit 建立分支（git branch <name> <commit> → checkout）。
@@ -653,8 +701,7 @@ export function SourceControlPanel(): React.JSX.Element {
       await ipc.git.branch({ wsId, op: 'create', name, startPoint: c.hash });
       await ipc.git.branch({ wsId, op: 'checkout', name });
       await refresh();
-      const r = await ipc.git.branch({ wsId, op: 'list' });
-      if ('branches' in r) setBranches({ list: r.branches, current: r.current });
+      await loadBranches();
       setTab('branches');
     });
   };
@@ -687,6 +734,84 @@ export function SourceControlPanel(): React.JSX.Element {
         .then((r) => setCFiles((prev) => ({ ...prev, [c.hash]: r.files })))
         .catch(() => setCFiles((prev) => ({ ...prev, [c.hash]: [] })));
     }
+  };
+
+  const branchDeleteErrorText = (
+    code: GitBranchDeleteErrorCode,
+    raw: string,
+    kind: BranchKind,
+    name: string,
+    detail?: string,
+  ): string => {
+    const safeName = neutralizeBidi(name);
+    const safeDetail = detail ? neutralizeBidi(detail) : '';
+    const safeRaw = neutralizeBidi(raw).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '�');
+    if (code === 'current') return `無法刪除「${safeName}」：這是目前分支，請先切換到其他分支。`;
+    if (code === 'worktree') {
+      return `無法刪除「${safeName}」：正由另一個 worktree 使用中${safeDetail ? `（${safeDetail}）` : ''}。`;
+    }
+    if (code === 'unmerged') return `無法安全刪除「${safeName}」：分支尚未合併，請先合併或改用 Git 手動處理。`;
+    if (code === 'not-found') return `找不到${kind === 'local' ? '本地' : '遠端'}分支「${safeName}」，分支清單可能已過期，請重新整理。`;
+    if (code === 'auth') return `刪除遠端分支失敗：認證未通過，請檢查 Git Credential Manager 或 SSH 金鑰。\n${safeRaw}`;
+    if (code === 'network') return `刪除遠端分支失敗：目前無法連上遠端，請檢查網路、VPN 或代理設定。\n${safeRaw}`;
+    if (code === 'timeout') return `刪除遠端分支逾時，伺服器狀態可能尚未同步，請重新整理後再確認。\n${safeRaw}`;
+    if (code === 'no-remote' || code === 'remote-not-found') return `找不到指定的 Git remote，請檢查遠端設定後再試。\n${safeRaw}`;
+    if (code === 'rejected') return `遠端伺服器拒絕刪除「${safeName}」，可能是預設分支或受保護分支。\n${safeRaw}`;
+    if (code === 'invalid') return `分支或 remote 名稱無效，已停止刪除。\n${safeRaw}`;
+    return `刪除${kind === 'local' ? '本地' : '遠端'}分支失敗：${safeRaw}`;
+  };
+
+  const openBranchMenu = (
+    event: React.MouseEvent<HTMLElement>,
+    kind: BranchKind,
+    name: string,
+    remote?: string,
+    displayName = name,
+  ): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setCommitMenu(null);
+    setChangeMenu(null);
+    setBranchMenu({ kind, name, remote, displayName, x: event.clientX || rect.right, y: event.clientY || rect.bottom });
+  };
+
+  const onDeleteBranch = async (branch: BranchMenuState): Promise<void> => {
+    if (!wsId) return;
+    const { kind, name, remote, displayName } = branch;
+    if (kind === 'remote' && !remote) {
+      setError(`遠端分支「${neutralizeBidi(displayName)}」缺少 remote 身分，已停止刪除。`);
+      return;
+    }
+    const ok = await dialog.confirm(
+      kind === 'local'
+        ? {
+            title: '刪除本地分支？',
+            body: `只會刪除這台電腦上的「${neutralizeBidi(name)}」，不會刪除遠端同名分支。尚未合併的分支會被 Git 拒絕。`,
+            confirmText: '刪除本地分支',
+            cancelText: '取消',
+          }
+        : {
+            title: '刪除遠端分支？',
+            body: `將從遠端「${neutralizeBidi(remote!)}」刪除伺服器分支「${neutralizeBidi(name)}」。本地同名分支會保留。`,
+            confirmText: '刪除遠端分支',
+            cancelText: '取消',
+            danger: true,
+          },
+    );
+    if (!ok) return;
+    await run(async () => {
+      const result =
+        kind === 'local'
+          ? await ipc.git.branch({ wsId, op: 'delete-local', name })
+          : await ipc.git.branch({ wsId, op: 'delete-remote', remote: remote!, name });
+      if ('error' in result) {
+        setError(branchDeleteErrorText(result.code, result.error, kind, displayName, result.detail));
+        return;
+      }
+      await refresh();
+      await loadBranches();
+    });
   };
 
   // ── 渲染分支 ──
@@ -1073,40 +1198,194 @@ export function SourceControlPanel(): React.JSX.Element {
               ＋ 新分支
             </button>
           </div>
-          {branches.list.length === 0 ? (
-            <div className="pd-scm-empty">尚無分支。</div>
-          ) : (
-            branches.list.map((b) => (
-              <div key={b} className="pd-row pd-scm-branchrow pdwt-branchrow" style={{ alignItems: 'center' }}>
-                <button
-                  className={`pdwt-branch-switch${b === branches.current ? ' is-active' : ''}`}
-                  style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 'var(--space-1)', background: 'transparent', border: 'none', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: b === branches.current ? 'default' : 'pointer', padding: 0 }}
-                  aria-label={b === branches.current ? `目前分支 ${b}` : `切換到分支 ${b}`}
-                  aria-current={b === branches.current}
-                  onClick={() => b !== branches.current && void onCheckout(b)}
-                  disabled={busy || b === branches.current}
-                >
-                  <span className="pd-scm-branchdot" aria-hidden="true">
-                    {b === branches.current ? '●' : '○'}
-                  </span>
-                  <span className="pd-scm-branchname">{b}</span>
-                </button>
-                <button
-                  className="pdws-actbtn"
-                  aria-label={`在新 worktree 開啟 ${b}`}
-                  title="在新 worktree 開啟"
-                  onClick={() => void openWorktreeForBranch(b)}
-                  disabled={busy}
-                >
-                  ⎇＋
-                </button>
+          <section className="pd-scm-branchgroup" aria-label="本地分支群組">
+            <button
+              type="button"
+              className="pd-scm-branchgroup-toggle"
+              aria-expanded={branchGroupsOpen.local}
+              aria-controls="pd-scm-local-branches"
+              onClick={() => setBranchGroupsOpen((prev) => ({ ...prev, local: !prev.local }))}
+            >
+              <span className="pd-scm-branchgroup-chevron" aria-hidden="true">{branchGroupsOpen.local ? '⌄' : '›'}</span>
+              <span>本地分支</span>
+              <span className="pd-scm-branchgroup-count">{branches.local.length}</span>
+            </button>
+            {branchGroupsOpen.local && (
+              <div id="pd-scm-local-branches" role="list" aria-label="本地分支清單">
+                {branches.local.length === 0 ? (
+                  <div className="pd-scm-branchgroup-empty">尚無本地分支。</div>
+                ) : (
+                  branches.local.map((branch) => {
+                    const isCurrent = branch === branches.current;
+                    const usedPath = branches.worktreePaths[branch];
+                    return (
+                      <div
+                        key={branch}
+                        role="listitem"
+                        data-branch-kind="local"
+                        data-branch-name={branch}
+                        className="pd-row pd-scm-branchrow pdwt-branchrow"
+                        onContextMenu={(event) => openBranchMenu(event, 'local', branch)}
+                      >
+                        <button
+                          className={`pdwt-branch-switch${isCurrent ? ' is-active' : ''}`}
+                          aria-label={isCurrent ? `目前分支 ${branch}` : `切換到分支 ${branch}`}
+                          aria-current={isCurrent}
+                          onClick={() => !isCurrent && void onCheckout(branch)}
+                          disabled={busy || isCurrent}
+                        >
+                          <span className="pd-scm-branchdot" aria-hidden="true">{isCurrent ? '●' : '○'}</span>
+                          <span className="pd-scm-branchname">{branch}</span>
+                        </button>
+                        {usedPath && !isCurrent && (
+                          <span className="pd-scm-branch-used" title={`由 worktree 使用中：${neutralizeBidi(usedPath)}`}>worktree 使用中</span>
+                        )}
+                        <button
+                          className="pdws-actbtn"
+                          aria-label={`在新 worktree 開啟 ${branch}`}
+                          title="在新 worktree 開啟"
+                          onClick={() => void openWorktreeForBranch(branch)}
+                          disabled={busy}
+                        >
+                          ⎇＋
+                        </button>
+                        <button
+                          type="button"
+                          className="pdws-actbtn pd-scm-branch-more"
+                          aria-label={`更多本地分支操作 ${branch}`}
+                          aria-haspopup="menu"
+                          aria-expanded={branchMenu?.kind === 'local' && branchMenu.name === branch}
+                          onClick={(event) => openBranchMenu(event, 'local', branch)}
+                          disabled={busy}
+                        >
+                          ⋯
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
               </div>
-            ))
-          )}
+            )}
+          </section>
+
+          <section className="pd-scm-branchgroup" aria-label="遠端分支群組">
+            <button
+              type="button"
+              className="pd-scm-branchgroup-toggle"
+              aria-expanded={branchGroupsOpen.remote}
+              aria-controls="pd-scm-remote-branches"
+              onClick={() => setBranchGroupsOpen((prev) => ({ ...prev, remote: !prev.remote }))}
+            >
+              <span className="pd-scm-branchgroup-chevron" aria-hidden="true">{branchGroupsOpen.remote ? '⌄' : '›'}</span>
+              <span>遠端分支</span>
+              <span className="pd-scm-branchgroup-count">{branches.remote.length}</span>
+            </button>
+            {branchGroupsOpen.remote && (
+              <div id="pd-scm-remote-branches" role="list" aria-label="遠端分支清單">
+                {branches.remote.length === 0 ? (
+                  <div className="pd-scm-branchgroup-empty">尚無遠端分支。可先 Fetch 取得最新遠端追蹤分支。</div>
+                ) : (
+                  branches.remote.map((branch) => (
+                    <div
+                      key={branch.ref}
+                      role="listitem"
+                      data-branch-kind="remote"
+                      data-branch-name={branch.ref}
+                      className="pd-row pd-scm-branchrow pd-scm-remotebranchrow"
+                      onContextMenu={(event) => openBranchMenu(event, 'remote', branch.name, branch.remote, branch.ref)}
+                    >
+                      <span className="pd-scm-remotebranch-icon" aria-hidden="true"><RemoteRefIcon /></span>
+                      <span className="pd-scm-branchname" title={neutralizeBidi(branch.ref)}>{branch.ref}</span>
+                      <button
+                        type="button"
+                        className="pdws-actbtn pd-scm-branch-more"
+                        aria-label={`更多遠端分支操作 ${branch.ref}`}
+                        aria-haspopup="menu"
+                        aria-expanded={branchMenu?.kind === 'remote' && branchMenu.displayName === branch.ref}
+                        onClick={(event) => openBranchMenu(event, 'remote', branch.name, branch.remote, branch.ref)}
+                        disabled={busy}
+                      >
+                        ⋯
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </section>
         </div>
       )}
 
       {tab === 'worktree' && wsId && <WorktreePanel wsId={wsId} wsPath={wsPath} />}
+
+      {branchMenu && (() => {
+        const isCurrent = branchMenu.kind === 'local' && branchMenu.name === branches.current;
+        const usedPath = branchMenu.kind === 'local' ? branches.worktreePaths[branchMenu.name] : undefined;
+        const deleteLabel =
+          branchMenu.kind === 'remote'
+            ? '刪除遠端分支'
+            : isCurrent
+              ? '刪除本地分支（目前分支）'
+              : usedPath
+                ? '刪除本地分支（由 worktree 使用中）'
+                : '刪除本地分支';
+        return (
+          <div
+            className="pd-scm-ctxmenu"
+            role="menu"
+            aria-label={`${branchMenu.kind === 'local' ? '本地' : '遠端'}分支操作`}
+            style={{ top: Math.min(branchMenu.y, window.innerHeight - 190), left: Math.min(branchMenu.x, window.innerWidth - 250) }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {branchMenu.kind === 'local' && (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="pd-scm-ctxitem"
+                  disabled={isCurrent || busy}
+                  onClick={() => {
+                    const branch = branchMenu.name;
+                    setBranchMenu(null);
+                    void onCheckout(branch);
+                  }}
+                >
+                  {isCurrent ? '目前已在此分支' : '切換到此分支'}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="pd-scm-ctxitem"
+                  disabled={busy}
+                  onClick={() => {
+                    const branch = branchMenu.name;
+                    setBranchMenu(null);
+                    void openWorktreeForBranch(branch);
+                  }}
+                >
+                  在新 worktree 開啟
+                </button>
+                <div className="pd-scm-ctxdivider" role="separator" />
+              </>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              className="pd-scm-ctxitem is-danger"
+              aria-label={deleteLabel}
+              title={usedPath && !isCurrent ? `由 worktree 使用中：${neutralizeBidi(usedPath)}` : undefined}
+              disabled={isCurrent || Boolean(usedPath) || busy}
+              onClick={() => {
+                const branch = branchMenu;
+                setBranchMenu(null);
+                void onDeleteBranch(branch);
+              }}
+            >
+              {deleteLabel}
+            </button>
+          </div>
+        );
+      })()}
 
       {commitMenu && (
         <div

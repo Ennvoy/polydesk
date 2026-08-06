@@ -189,13 +189,14 @@ describe('GitService（真 git）', () => {
     expect(r.current).toBe('main');
   });
 
-  it('branch list 以單一 for-each-ref 同時取得本地、遠端與目前分支', async () => {
+  it('branch list 以單一 for-each-ref 取得 refs，並以實際 remote 名稱建立結構化身分', async () => {
     initRepo(ctx.repo);
     writeFileSync(join(ctx.repo, 'a.txt'), 'x');
     const seed = new GitService(ctx.mgr);
     await seed.stage(ctx.wsId, ['a.txt'], true);
     await seed.commit(ctx.wsId, 'init');
     execFileSync('git', ['branch', 'feature'], { cwd: ctx.repo, stdio: 'pipe' });
+    execFileSync('git', ['remote', 'add', 'origin', join(ctx.root, 'origin.git')], { cwd: ctx.repo, stdio: 'pipe' });
     execFileSync('git', ['update-ref', 'refs/remotes/origin/main', 'HEAD'], { cwd: ctx.repo, stdio: 'pipe' });
 
     const calls: string[][] = [];
@@ -208,9 +209,11 @@ describe('GitService（真 git）', () => {
 
     expect(result.branches).toEqual(expect.arrayContaining(['main', 'feature']));
     expect(result.remotes).toContain('origin/main');
+    expect(result.remoteBranches).toContainEqual({ remote: 'origin', name: 'main', ref: 'origin/main' });
     expect(result.current).toBe('main');
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
     expect(calls[0]).toContain('for-each-ref');
+    expect(calls[1]).toContain('remote');
   });
 
   it('A1：惡意分支名 create/checkout 永不執行 git，且回明確 invalid 錯誤', async () => {

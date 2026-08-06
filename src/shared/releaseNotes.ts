@@ -15,6 +15,16 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.21.0',
+    date: '2026-08-06',
+    highlights: [
+      'SCM 分支頁清楚分成本地與遠端兩組，顯示數量並可各自收合',
+      '分支列的更多按鈕與右鍵共用操作選單，刪除前會明確說明影響本機或遠端伺服器',
+      '本地分支只允許安全刪除；目前分支、worktree 使用中與尚未合併的分支都會保留並顯示原因',
+      '遠端分支以實際 remote 與 branch 身分精確刪除，支援名稱含斜線的 remote，且不會連帶刪除本地同名分支',
+    ],
+  },
+  {
     version: '0.20.0',
     date: '2026-08-05',
     highlights: [

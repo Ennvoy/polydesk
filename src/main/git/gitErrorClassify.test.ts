@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyPushError, classifyGhError, isNoUpstreamError } from './gitErrorClassify';
+import { classifyBranchDeleteError, classifyPushError, classifyGhError, isNoUpstreamError } from './gitErrorClassify';
 
 describe('isNoUpstreamError（自動 push -u 的觸發判定）', () => {
   it('git 各版措辭都認得', () => {
@@ -26,6 +26,19 @@ describe('classifyPushError', () => {
     expect(classifyPushError("fatal: unable to access 'https://github.com/...': Could not resolve host: github.com", false)).toBe('network');
     expect(classifyPushError('whatever', true)).toBe('timeout');
     expect(classifyPushError('some unknown error', false)).toBe('failed');
+  });
+});
+
+describe('classifyBranchDeleteError', () => {
+  it('沿用 push 的逾時、網路與認證分類', () => {
+    expect(classifyBranchDeleteError('whatever', true)).toBe('timeout');
+    expect(classifyBranchDeleteError('fatal: unable to access: Could not resolve host: github.com', false)).toBe('network');
+    expect(classifyBranchDeleteError('remote: Permission denied', false)).toBe('auth');
+  });
+
+  it('辨識遠端保護規則或 receive hook 拒絕刪除', () => {
+    expect(classifyBranchDeleteError('remote: error: GH006: Protected branch update failed', false)).toBe('rejected');
+    expect(classifyBranchDeleteError('! [remote rejected] main (pre-receive hook declined)', false)).toBe('rejected');
   });
 });
 

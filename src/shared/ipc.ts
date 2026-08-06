@@ -33,6 +33,8 @@ import type {
   GitPublishInput,
   GitPublishResult,
   GitPushErrorCode,
+  GitRemoteBranch,
+  GitBranchDeleteResult,
 } from './types';
 
 /** invoke 通道：renderer 經 preload 呼叫、main `ipcMain.handle` 回應（一次性 Promise）。 */
@@ -121,8 +123,17 @@ export interface InvokeChannels {
   /** DF-12：gh CLI 建 GitHub repo＋加 origin＋push 一氣呵成（Polydesk 不碰 token）。 */
   'git:publishGitHub': { req: GitPublishInput; res: GitPublishResult };
   'git:branch': {
-    req: { wsId: string; op: 'list' | 'create' | 'checkout'; name?: string; startPoint?: string };
-    res: { branches: string[]; current: string; remotes?: string[] } | { ok: true };
+    req: {
+      wsId: string;
+      op: 'list' | 'create' | 'checkout' | 'delete-local' | 'delete-remote';
+      name?: string;
+      startPoint?: string;
+      remote?: string;
+    };
+    res:
+      | { branches: string[]; current: string; remotes?: string[]; remoteBranches?: GitRemoteBranch[] }
+      | { ok: true }
+      | GitBranchDeleteResult;
   };
   'git:log': { req: { wsId: string; limit: number }; res: GitLogEntry[] };
   /** commit diff（git show <ref>；給 path 則限定單檔）；PE-1 右鍵/展開檔案用。 */

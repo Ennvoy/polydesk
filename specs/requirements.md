@@ -91,6 +91,9 @@
 - **REQ-SCM-007**（Unwanted｜操作失敗/逾時）：若 git 操作失敗（push 被拒/無 remote/認證失敗/merge conflict/網路斷），系統應顯示明確錯誤並允許重試，不得偽裝成功；網路類操作應有明確逾時（design 定值），逾時即回錯。
 - **REQ-SCM-008**（併發）：同一工作區有 git 操作進行中時，後續 git 操作應序列化並於 UI 顯示「進行中」。
 - **REQ-SCM-009**（git 安全硬化）：所有 git 呼叫應用 argv 陣列 + `shell:false`（execFile/spawn）、參數前置 `--`、commit message 經 `-F tempfile`/stdin；branch/remote 名做格式驗證；唯讀監控操作加 `GIT_CONFIG_NOSYSTEM=1`、空 `core.hooksPath`、`core.fsmonitor=false`、`--no-pager`、不啟用不可信 textconv、尊重 `safe.directory`。
+- **REQ-SCM-010**（分支分組）：分支頁應將本地與遠端分支分組顯示，各自提供數量與收合狀態；每列的更多按鈕與右鍵應使用同一套操作選單。
+- **REQ-SCM-011**（本地安全刪除）：本地分支刪除只能使用非強制的安全模式；目前分支、任一 worktree 使用中的分支與未合併分支不得刪除，並應具名顯示阻擋原因，不提供默認或隱藏的強制刪除路徑。
+- **REQ-SCM-012**（遠端精確刪除）：遠端刪除前應明示 remote 與 branch 及伺服器影響，成功時只刪除指定遠端分支並保留本地同名分支；remote 與 branch 應以結構化欄位傳遞，支援多 remote 與名稱含 `/` 的合法 remote，不得由顯示字串猜測身分。
 
 ### 4.6 Claude↔Playwright 網頁測試（REQ-PW）— 核心差異化
 > 設計定調（採用使用者實戰驗證）：**完全沿用官方 `@playwright/mcp`，app 不自建接線、不註冊 MCP、不管理 profile、不注入 env**。官方 MCP 依「啟動它的 claude 的工作目錄(cwd)」自動分流 persistent profile（在 `%LOCALAPPDATA%\ms-playwright`），故每個工作區的 claude 在自己資料夾 cwd 跑即自動獲得 per-workspace profile 隔離、可平行、零 repo 足跡。app 唯一責任＝終端機 cwd=工作區資料夾（REQ-TERM-001）。

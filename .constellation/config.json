@@ -1,0 +1,29 @@
+{
+  "approved": true,
+  "commands": {
+    "test": [
+      "cmd /c npm run typecheck -- --pretty false",
+      "cmd /c npm test -- --maxWorkers=1 --minWorkers=1 --shard=1/6",
+      "cmd /c npm test -- --maxWorkers=1 --minWorkers=1 --shard=2/6",
+      "cmd /c npm test -- --maxWorkers=1 --minWorkers=1 --shard=3/6",
+      "cmd /c npm test -- --maxWorkers=1 --minWorkers=1 --shard=4/6",
+      "cmd /c npm test -- --maxWorkers=1 --minWorkers=1 --shard=5/6",
+      "cmd /c npm test -- --maxWorkers=1 --minWorkers=1 --shard=6/6"
+    ],
+    "journey": [
+      "cmd /c npm run build",
+      "cmd /c npm run e2e -- --workers=1 --shard=1/12 --grep-invert \"REQ-PERF-001\"",
+      "cmd /c npm run e2e -- --workers=1 --shard=2/12 --grep-invert \"REQ-PERF-001\"",
+      "cmd /c npm run e2e -- --workers=1 --shard=3/12 --grep-invert \"REQ-PERF-001\"",
+      "cmd /c npm run e2e -- --workers=1 --shard=4/12 --grep-invert \"REQ-PERF-001\"",
+      "cmd /c npm run e2e -- --workers=1 --shard=5/12 --grep-invert \"REQ-PERF-001\"",
+      "cmd /c npm run e2e -- --workers=1 --shard=6/12 --grep-invert \"REQ-PERF-001\"",
+      "cmd /c npm run e2e -- --workers=1 --shard=7/12 --grep-invert \"REQ-PERF-001\"",
+      "cmd /c npm run e2e -- --workers=1 --shard=8/12 --grep-invert \"REQ-PERF-001\"",
+      "cmd /c npm run e2e -- --workers=1 --shard=9/12 --grep-invert \"REQ-PERF-001\"",
+      "cmd /c npm run e2e -- --workers=1 --shard=10/12 --grep-invert \"REQ-PERF-001\"",
+      "cmd /c npm run e2e -- --workers=1 --shard=11/12 --grep-invert \"REQ-PERF-001\"",
+      "cmd /c npm run e2e -- --workers=1 --shard=12/12 --grep-invert \"REQ-PERF-001\""
+    ]
+  }
+}

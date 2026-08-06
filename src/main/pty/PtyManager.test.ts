@@ -495,7 +495,7 @@ describe('PtyManager 真實 node-pty 生命週期（REQ-TERM-001/006/004）', ()
     const { termId } = mgr.create({ wsId: ctx.wsId, shell: 'powershell' });
     mgr.write(termId, 'exit\r');
 
-    const exited = await waitFor(() => exits.some((e) => e.termId === termId), 15000);
+    const exited = await waitFor(() => exits.some((e) => e.termId === termId), 30000);
     expect(exited).toBe(true);
     expect(typeof exits[0].exitCode).toBe('number');
     // 自然結束保留在清單（alive=false），供 UI 顯示「重啟」

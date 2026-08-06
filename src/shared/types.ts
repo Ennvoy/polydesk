@@ -129,6 +129,33 @@ export type GitPublishResult = { ok: true; url: string } | { error: string; code
 /** push 失敗分類（DF-12：比照 clone 的 code 分流，UI 據此給人話引導）。 */
 export type GitPushErrorCode = 'auth' | 'network' | 'timeout' | 'no-remote' | 'remote-not-found' | 'failed';
 
+/** 遠端追蹤分支的結構化身分；remote 名稱本身可含 `/`，不得由顯示 ref 反向切割。 */
+export interface GitRemoteBranch {
+  remote: string;
+  name: string;
+  /** 顯示與 React key 使用的完整短 ref，例如 `origin/feature/x`。 */
+  ref: string;
+}
+
+/** 分支安全刪除失敗分類；renderer 依 code 顯示可行處理方式，不解析 Git 在地化 stderr。 */
+export type GitBranchDeleteErrorCode =
+  | 'invalid'
+  | 'not-found'
+  | 'current'
+  | 'worktree'
+  | 'unmerged'
+  | 'auth'
+  | 'network'
+  | 'timeout'
+  | 'no-remote'
+  | 'remote-not-found'
+  | 'rejected'
+  | 'failed';
+
+export type GitBranchDeleteResult =
+  | { ok: true }
+  | { error: string; code: GitBranchDeleteErrorCode; detail?: string };
+
 /** git worktree 清單項（REQ-WT-008；`git worktree list --porcelain -z` 解析）。 */
 export interface GitWorktree {
   path: string;
