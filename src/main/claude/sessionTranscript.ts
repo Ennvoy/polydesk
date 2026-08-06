@@ -10,11 +10,10 @@ import { createReadStream } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import type { ClaudeTranscript, ClaudeTranscriptNode } from '../../shared/types';
+import type { ClaudeTranscript, ConversationRailNode } from '../../shared/types';
 
 /** transcript 單則訊息的中間表示（role + 摘要），promptsFromEnd 由 buildTranscriptNodes 補。 */
 interface RawEntry {
-  role: 'user' | 'assistant';
   preview: string;
 }
 
@@ -73,11 +72,7 @@ export function parseTranscriptLine(line: string): RawEntry | null {
     const raw = textOf(content);
     if (raw.startsWith('<local-command-stdout>')) return null;
     const preview = cleanPreview(raw);
-    return preview ? { role: 'user', preview } : null;
-  }
-  if (entry.type === 'assistant') {
-    const preview = cleanPreview(textOf(content)); // thinking / tool_use 不含 text → 不建節點
-    return preview ? { role: 'assistant', preview } : null;
+    return preview ? { preview } : null;
   }
   return null;
 }
@@ -87,26 +82,12 @@ export function parseTranscriptLine(line: string): RawEntry | null {
  * 點擊節點時 renderer 送 Ctrl+O 進 claude 的 transcript 檢視（預設停在最新），再送這麼多次 `{`
  * 往回跳 user prompt——相對最新的偏移是唯一算得準的定位，絕對行號在 alt screen 拿不到。
  */
-export function buildTranscriptNodes(entries: readonly RawEntry[]): ClaudeTranscriptNode[] {
-  // 先摺疊同一回合的連續發言（claude 一個回合常在工具呼叫之間講很多次話）：定位只能跳到 user
-  // prompt，同回合的每一則 assistant 都會跳到同一處，展開成多個節點只是假的可點性。
-  const turns: RawEntry[] = [];
-  for (const entry of entries) {
-    if (turns[turns.length - 1]?.role === entry.role) continue;
-    turns.push(entry);
-  }
-
-  const totalPrompts = turns.filter((entry) => entry.role === 'user').length;
-  let seenPrompts = 0;
-  return turns.map((entry, index) => {
-    if (entry.role === 'user') seenPrompts += 1;
-    return {
-      index,
-      role: entry.role,
-      preview: entry.preview,
-      promptsFromEnd: Math.max(0, totalPrompts - seenPrompts),
-    };
-  });
+export function buildTranscriptNodes(entries: readonly RawEntry[]): ConversationRailNode[] {
+  return entries.map((entry, index) => ({
+    index,
+    preview: entry.preview,
+    promptsFromEnd: entries.length - index - 1,
+  }));
 }
 
 /** 增量讀取狀態：jsonl 是 append-only，只有檔案沒被換掉才能沿用既有 entries。 */
@@ -120,7 +101,9 @@ const cache = new Map<string, CacheEntry>();
 /** 測試與工作區關閉用：丟掉某 cwd（或全部）的增量快取。 */
 export function clearTranscriptCache(cwd?: string): void {
   if (cwd === undefined) cache.clear();
-  else cache.delete(cwd);
+  else {
+    for (const key of cache.keys()) if (key.startsWith(`${cwd}\0`)) cache.delete(key);
+  }
 }
 
 /** slug 目錄下 mtime 最新的 *.jsonl；無檔或無目錄回 null。 */
@@ -169,22 +152,38 @@ async function readAppendedLines(path: string, start: number, end: number): Prom
  * 讀某工作區當前 claude session 的對話節點。找不到目錄/檔案回 null（renderer 據此保持原本的行導覽軌）。
  * 檔案變小或換檔視為新 session，整份重讀；否則只讀新增段落，長 session 也不會每次重解析數 MB。
  */
-export async function readClaudeTranscript(cwd: string, home: string = homedir()): Promise<ClaudeTranscript | null> {
+export async function readClaudeTranscript(
+  cwd: string,
+  home: string = homedir(),
+  sessionId?: string,
+): Promise<ClaudeTranscript | null> {
   const dir = join(home, '.claude', 'projects', claudeProjectSlug(cwd));
-  const file = await latestSessionFile(dir);
+  let file: { path: string; size: number; sessionId: string } | null;
+  if (sessionId) {
+    const path = join(dir, `${sessionId}.jsonl`);
+    try {
+      const info = await stat(path);
+      file = info.isFile() ? { path, size: info.size, sessionId } : null;
+    } catch {
+      file = null;
+    }
+  } else {
+    file = await latestSessionFile(dir);
+  }
   if (!file) return null;
 
-  const cached = cache.get(cwd);
+  const cacheKey = `${cwd}\0${file.sessionId}`;
+  const cached = cache.get(cacheKey);
   const reusable = cached && cached.path === file.path && cached.offset <= file.size;
   const start = reusable ? cached.offset : 0;
-  const entries = reusable ? cached.entries : [];
+  const entries = reusable ? [...cached.entries] : [];
 
   const { lines, consumed } = await readAppendedLines(file.path, start, file.size);
   for (const line of lines) {
     const entry = parseTranscriptLine(line);
     if (entry) entries.push(entry);
   }
-  cache.set(cwd, { path: file.path, offset: start + consumed, entries });
+  cache.set(cacheKey, { path: file.path, offset: start + consumed, entries });
 
   return { sessionId: file.sessionId, nodes: buildTranscriptNodes(entries) };
 }

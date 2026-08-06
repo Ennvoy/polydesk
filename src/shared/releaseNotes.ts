@@ -15,6 +15,16 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.22.0',
+    date: '2026-08-06',
+    highlights: [
+      'Claude 與 Codex 的對話軸改成只顯示你的提問，不再讓模型長回覆塞滿刻度',
+      '快捷按鈕與手動啟動共用終端機級 AI session 辨識，同工作區多終端不會互相誤讀',
+      'Claude 節點維持 transcript 回合定位；Codex 節點會捲回目前 scrollback 中可可靠配對的原始提問',
+      '無法唯一綁定 session、提問已離開 scrollback 或文字匹配有歧義時保守不顯示，避免跳錯內容',
+    ],
+  },
+  {
     version: '0.21.0',
     date: '2026-08-06',
     highlights: [

@@ -226,4 +226,47 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
     await mon.recompute();
     expect(emitted).toContainEqual({ wsId: 'a', tool: 'codex', status: { state: 'done' } });
   });
+
+  it('terminalTool 與 Claude session 依 termId 綁定，不以同 cwd 猜另一個終端機', async () => {
+    const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
+    const pty = { pidsOf: (): number[] => [100, 200], pidOf: (termId: string): number | null => (termId === 'term-a' ? 100 : termId === 'term-b' ? 200 : null) };
+    const sessions: SessionStatus[] = [
+      { sessionId: 'claude-a', termId: 'term-a', cwd: 'C:/p/a', state: 'done', ts: 1 },
+      { sessionId: 'claude-b', termId: 'term-b', cwd: 'C:/p/a', state: 'done', ts: 2 },
+    ];
+    const mon = new ClaudeStatusMonitor(workspaces, pty, () => undefined, {
+      readSessions: async () => sessions,
+      readCodex: async () => [],
+      readAgy: async () => [],
+      scanPids: async () => ({ claude: new Set([100]), codex: new Set([200]), agy: new Set<number>() }),
+      processScanMs: 0,
+      forceScanMinMs: 0,
+      watchFactory: noWatch,
+    });
+
+    expect(await mon.terminalTool('term-a')).toBe('claude');
+    expect(await mon.terminalTool('term-b')).toBe('codex');
+    expect(await mon.claudeSessionForTerminal('term-a')).toBe('claude-a');
+    expect(await mon.claudeSessionForTerminal('missing')).toBeNull();
+  });
+
+  it('terminalTool 的程序掃描失敗時 fail-closed，不沿用徽章的舊 PID 快取', async () => {
+    const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
+    const pty = { pidsOf: (): number[] => [200], pidOf: (): number => 200 };
+    let scanOk = true;
+    const mon = new ClaudeStatusMonitor(workspaces, pty, () => undefined, {
+      readSessions: async () => [],
+      readCodex: async () => [],
+      readAgy: async () => [],
+      scanPids: async () =>
+        scanOk ? { claude: new Set<number>(), codex: new Set([200]), agy: new Set<number>() } : null,
+      processScanMs: 0,
+      forceScanMinMs: 0,
+      watchFactory: noWatch,
+    });
+
+    expect(await mon.terminalTool('term')).toBe('codex');
+    scanOk = false;
+    expect(await mon.terminalTool('term')).toBeNull();
+  });
 });

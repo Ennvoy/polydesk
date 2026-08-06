@@ -1,0 +1,13 @@
+{
+  "frozen": [
+    "src/renderer/components/Terminal/terminal.css"
+  ],
+  "log": [
+    {
+      "path": "src/renderer/components/Terminal/terminal.css",
+      "action": "freeze",
+      "at": "2026-08-06T14:00:00+08:00",
+      "reason": "design 定稿"
+    }
+  ]
+}

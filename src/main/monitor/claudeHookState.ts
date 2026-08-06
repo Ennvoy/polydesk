@@ -11,6 +11,8 @@ export interface SessionStatus {
   ts: number;
   /** 來源工具；undefined 視為 claude（向後相容既有 hook 狀態檔來源）。 */
   tool?: AiTool;
+  /** Polydesk PTY 注入並由 Claude hook 原樣帶回；缺少代表外部或舊版 session。 */
+  termId?: string;
 }
 
 /** hook 狀態字串 → ClaudeState（未知 → idle）。 */

@@ -88,9 +88,10 @@ export function parseRolloutTail(tailText: string): { state: 'working' | 'awaiti
   return null;
 }
 
-/** codex sessions 根目錄。 */
-export function codexSessionsRoot(home: string = homedir()): string {
-  return join(home, '.codex', 'sessions');
+/** Codex sessions 根目錄；尊重官方 CODEX_HOME，未設定時沿用 ~/.codex。 */
+export function codexSessionsRoot(home: string = homedir(), env: NodeJS.ProcessEnv = process.env): string {
+  const configured = env.CODEX_HOME;
+  return join(configured || join(home, '.codex'), 'sessions');
 }
 
 /** 最近兩天的 YYYY/MM/DD 目錄（codex sessions 巢狀；跨午夜也涵蓋）。 */

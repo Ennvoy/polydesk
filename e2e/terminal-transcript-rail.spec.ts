@@ -5,7 +5,7 @@
 // 不啟動真 claude（要帳號、慢）：改用真 PowerShell 印出 ?1049h 讓 xterm 真的切 buffer，
 // 並在該工作區對應的 ~/.claude/projects/<slug>/ 預先放一份 transcript。slug 來自 tmp 目錄，
 // 不會撞到使用者既有專案，測後整個目錄刪除。
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -19,6 +19,21 @@ const assistantLine = (text: string): string =>
   jsonl({ type: 'assistant', isSidechain: false, message: { content: [{ type: 'text', text }] } });
 const toolResultLine = (): string =>
   jsonl({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'x' }] } });
+
+async function stubConversation(
+  app: ElectronApplication,
+  snapshot: {
+    tool: 'claude' | 'codex' | null;
+    sessionId?: string;
+    nodes: { index: number; preview: string; promptsFromEnd?: number; matchText?: string }[];
+    candidates?: { sessionId: string; nodes: { index: number; preview: string; matchText?: string }[] }[];
+  },
+): Promise<void> {
+  await app.evaluate(({ ipcMain }, value) => {
+    ipcMain.removeHandler('ai:conversation');
+    ipcMain.handle('ai:conversation', () => value);
+  }, snapshot);
+}
 
 /** 讓 PTY 真的吐出 escape sequence（不是寫進 stdin），xterm 才會實際切 buffer。 */
 async function emitFromPty(page: Page, command: string): Promise<void> {
@@ -71,13 +86,21 @@ test('對話軸不改變終端機的可用版面與行距', async () => {
     await page.locator('button[aria-label="新增終端機"]').click();
     await expect(page.locator('.pd-term-xterm-host[data-initial-size-ready="true"]')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('.pd-term-navigation.is-messages')).toHaveCount(0);
+    await stubConversation(app, {
+      tool: 'claude',
+      sessionId: 'e2e-session',
+      nodes: [
+        { index: 0, preview: '提問', promptsFromEnd: 1 },
+        { index: 1, preview: '再問', promptsFromEnd: 0 },
+      ],
+    });
 
     const before = await terminalMetrics(page);
 
     // 切到 alternate screen → 對話軸接手。
     await emitFromPty(page, '[Console]::Write([char]27 + "[?1049h" + "TUI-READY")\r');
     await expect(page.locator('.pd-term-navigation.is-messages')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('.pd-term-navigation-node.is-message')).toHaveCount(3);
+    await expect(page.locator('.pd-term-navigation-node.is-message')).toHaveCount(2);
 
     // 軌的 18px 寬是版面一直保留的空槽，節點是絕對定位、不參與版面計算 → 欄列數、
     // 可用寬高、左緣與單列行高都必須一模一樣。
@@ -110,6 +133,14 @@ test('alternate screen 的終端機改用對話軸，節點對齊訊息且點擊
     await page.locator('button[aria-label="開啟工作區 transcript-ws"]').click();
     await page.locator('button[aria-label="新增終端機"]').click();
     await expect(page.locator('.pd-term-xterm-host[data-initial-size-ready="true"]')).toBeVisible({ timeout: 15_000 });
+    await stubConversation(app, {
+      tool: 'claude',
+      sessionId: 'e2e-session',
+      nodes: [
+        { index: 0, preview: '第一個提問', promptsFromEnd: 1 },
+        { index: 1, preview: '第二個提問', promptsFromEnd: 0 },
+      ],
+    });
 
     // 一般 shell（normal buffer）先確認不是對話軸模式。
     await expect(page.locator('.pd-term-navigation.is-messages')).toHaveCount(0);
@@ -128,13 +159,13 @@ test('alternate screen 的終端機改用對話軸，節點對齊訊息且點擊
 
     const rail = page.locator('.pd-term-navigation.is-messages');
     await expect(rail).toBeVisible({ timeout: 15_000 });
-    // 4 則對話（tool_result 被濾掉），順序為 提問／回覆／提問／回覆。
-    await expect(rail).toHaveAttribute('data-message-node-count', '4');
+    // 只保留 2 則使用者提問；tool_result 與 Claude 回覆都不建立節點。
+    await expect(rail).toHaveAttribute('data-message-node-count', '2');
     await expect(rail.locator('.pd-term-navigation-node.is-prompt')).toHaveCount(2);
-    await expect(rail.locator('.pd-term-navigation-node.is-reply')).toHaveCount(2);
+    await expect(rail.locator('.pd-term-navigation-node.is-reply')).toHaveCount(0);
     await expect(rail.locator('.pd-term-navigation-node').first()).toHaveAttribute(
       'aria-label',
-      '跳到第 1 則（你的提問）：第一個提問',
+      '跳到第 1 則你的提問：第一個提問',
     );
 
     // 點第一則提問：它前面還有 1 個 user prompt（第二個提問）→ Ctrl+O 後送 1 次 `{`。
@@ -144,7 +175,7 @@ test('alternate screen 的終端機改用對話軸，節點對齊訊息且點擊
     await rail.locator('.pd-term-navigation-node.is-prompt').first().click();
     await expect.poll(ptyWrites, { timeout: 5_000 }).toContain('\x0f{');
 
-    // 最新那則（第 4 則）之後沒有更多 prompt → 只送 Ctrl+O，不帶 `{`。
+    // 最新那則之後沒有更多 prompt → 只送 Ctrl+O，不帶 `{`。
     await rail.locator('.pd-term-navigation-node').last().click();
     await expect.poll(ptyWrites, { timeout: 5_000 }).toContain('\x0f');
 
@@ -157,6 +188,115 @@ test('alternate screen 的終端機改用對話軸，節點對齊訊息且點擊
   } finally {
     await app.close();
     rmSync(projectDir, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Codex 對話軸只顯示能唯一配對到 scrollback 的使用者提問', async () => {
+  const root = makeTempDir('pd-codex-rail-');
+  const dir = makeSubDir(root, 'codex-rail-ws');
+  const { app, page } = await launchApp();
+  try {
+    await stubFolderPicker(app, [dir]);
+    await addWorkspaceViaUI(page);
+    await page.locator('button[aria-label="開啟工作區 codex-rail-ws"]').click();
+    await page.locator('button[aria-label="新增終端機"]').click();
+    await expect(page.locator('.pd-term-xterm-host[data-initial-size-ready="true"]')).toBeVisible({ timeout: 15_000 });
+    await stubConversation(app, {
+      tool: 'codex',
+      nodes: [],
+      candidates: [
+        {
+          sessionId: 'codex-e2e',
+          nodes: [
+            { index: 0, preview: '第一個提問', matchText: '第一個提問' },
+            { index: 1, preview: '第二個提問', matchText: '第二個提問' },
+            { index: 2, preview: '已離開畫面的提問', matchText: '已離開畫面的提問' },
+          ],
+        },
+      ],
+    });
+    await emitFromPty(
+      page,
+      "Write-Output '› 第一個提問'; 1..35 | ForEach-Object { Write-Output ('MODEL-' + $_) }; Write-Output '› 第二個提問'\r",
+    );
+
+    const rail = page.locator('.pd-term-navigation.is-messages');
+    await expect(rail).toHaveAttribute('data-message-node-count', '2', { timeout: 15_000 });
+    await expect(rail.locator('.pd-term-navigation-node.is-prompt')).toHaveCount(2);
+    await expect(rail.locator('.pd-term-navigation-node').first()).toHaveAttribute('aria-label', '跳到你的提問：第一個提問');
+    await rail.locator('.pd-term-navigation-node').first().click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const host = document.querySelector('.pd-term-xterm-host') as HTMLElement & {
+            __pdTerm?: { buffer: { active: { viewportY: number } } };
+          };
+          return host.__pdTerm?.buffer.active.viewportY ?? -1;
+        }),
+      )
+      .toBeLessThan(5);
+  } finally {
+    await app.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('手動啟動 Codex 相容程序時走真 process、rollout 與 terminal 綁定鏈路', async () => {
+  const root = makeTempDir('pd-codex-real-chain-');
+  const dir = makeSubDir(root, 'codex-real-chain-ws');
+  const codexHome = makeTempDir('pd-codex-home-');
+  const date = new Date();
+  const sessionDir = join(
+    codexHome,
+    'sessions',
+    String(date.getFullYear()),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  );
+  mkdirSync(sessionDir, { recursive: true });
+  writeFileSync(
+    join(sessionDir, 'rollout-e2e-real-chain.jsonl'),
+    jsonl({
+      type: 'session_meta',
+      payload: { id: 'codex-real-chain', cwd: dir, source: 'cli', originator: 'codex-tui' },
+    }) +
+      jsonl({ type: 'event_msg', payload: { type: 'user_message', message: '真鏈路第一問' } }) +
+      jsonl({ type: 'event_msg', payload: { type: 'agent_message', message: '模型輸出不應成為節點' } }) +
+      jsonl({ type: 'event_msg', payload: { type: 'user_message', message: '真鏈路第二問' } }),
+  );
+  // process scanner 以 node.exe command line 的 codex.js 辨識官方 npm TUI；此 shim 只模擬程序形狀與畫面輸出。
+  writeFileSync(
+    join(dir, 'codex.js'),
+    [
+      "console.log('› 真鏈路第一問');",
+      "console.log('模型輸出不應成為節點');",
+      "console.log('› 真鏈路第二問');",
+      "setInterval(() => console.log('模型心跳'), 1000);",
+    ].join('\n'),
+  );
+
+  const { app, page } = await launchApp({ env: { CODEX_HOME: codexHome } });
+  try {
+    await stubFolderPicker(app, [dir]);
+    await addWorkspaceViaUI(page);
+    await page.locator('button[aria-label="開啟工作區 codex-real-chain-ws"]').click();
+    await page.locator('button[aria-label="新增終端機"]').click();
+    await expect(page.locator('.pd-term-xterm-host[data-initial-size-ready="true"]')).toBeVisible({ timeout: 15_000 });
+
+    await emitFromPty(page, 'node .\\codex.js\r');
+
+    const rail = page.locator('.pd-term-navigation.is-messages');
+    await expect(rail).toHaveAttribute('data-message-node-count', '2', { timeout: 30_000 });
+    await expect(rail.locator('.pd-term-navigation-node.is-prompt')).toHaveCount(2);
+    await expect(rail.locator('.pd-term-navigation-node.is-reply')).toHaveCount(0);
+    await expect(rail.locator('.pd-term-navigation-node').first()).toHaveAttribute(
+      'aria-label',
+      '跳到你的提問：真鏈路第一問',
+    );
+  } finally {
+    await app.close();
+    rmSync(codexHome, { recursive: true, force: true });
     rmSync(root, { recursive: true, force: true });
   }
 });

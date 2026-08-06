@@ -148,6 +148,7 @@ describe('installClaudeStatusHooks — 真實 fs 安裝（temp HOME）', () => {
       execFileSync('node', [scriptPath, 'awaiting'], {
         input: JSON.stringify({ session_id: 'abc123', cwd: 'C:/p/a', hook_event_name: 'Notification' }),
         encoding: 'utf8',
+        env: { ...process.env, POLYDESK_TERM_ID: 'term-123' },
       });
       const f = join(statusDir, 'abc123.json');
       expect(existsSync(f)).toBe(true);
@@ -155,6 +156,7 @@ describe('installClaudeStatusHooks — 真實 fs 安裝（temp HOME）', () => {
       expect(j.state).toBe('awaiting');
       expect(j.cwd).toBe('C:/p/a');
       expect(j.sessionId).toBe('abc123');
+      expect(j.termId).toBe('term-123');
       expect(typeof j.ts).toBe('number');
     } finally {
       rmSync(home, { recursive: true, force: true });
@@ -183,19 +185,21 @@ describe('installClaudeStatusHooks — 真實 fs 安裝（temp HOME）', () => {
       const { scriptPath, statusDir } = claudePaths(home);
       mkdirSync(statusDir, { recursive: true });
       // 殘留：上次 session 沒收到 Stop，留下 working（同工作區 C:/proj/a）。
-      writeFileSync(join(statusDir, 'old-sid.json'), JSON.stringify({ sessionId: 'old-sid', cwd: 'C:/proj/a', state: 'working', ts: 1 }));
-      // 別工作區（C:/proj/b）的 working 不該被誤刪。
-      writeFileSync(join(statusDir, 'other-ws.json'), JSON.stringify({ sessionId: 'other-ws', cwd: 'C:/proj/b', state: 'working', ts: 1 }));
+      writeFileSync(join(statusDir, 'old-sid.json'), JSON.stringify({ sessionId: 'old-sid', cwd: 'C:/proj/a', termId: 'term-a', state: 'working', ts: 1 }));
+      // 同工作區另一個終端機不該被誤刪。
+      writeFileSync(join(statusDir, 'other-ws.json'), JSON.stringify({ sessionId: 'other-ws', cwd: 'C:/proj/a', termId: 'term-b', state: 'working', ts: 1 }));
       // 新 session 在 C:/proj/a 啟動（SessionStart → reset）。
       execFileSync('node', [scriptPath, 'reset'], {
         input: JSON.stringify({ session_id: 'new-sid', cwd: 'C:/proj/a', hook_event_name: 'SessionStart' }),
         encoding: 'utf8',
+        env: { ...process.env, POLYDESK_TERM_ID: 'term-a' },
       });
-      expect(existsSync(join(statusDir, 'old-sid.json'))).toBe(false); // 同 cwd 殘留被清
-      expect(existsSync(join(statusDir, 'other-ws.json'))).toBe(true); // 別工作區未誤刪
+      expect(existsSync(join(statusDir, 'old-sid.json'))).toBe(false); // 同 terminal 殘留被清
+      expect(existsSync(join(statusDir, 'other-ws.json'))).toBe(true); // 同 cwd 另一 terminal 未誤刪
       const nf = join(statusDir, 'new-sid.json');
       expect(existsSync(nf)).toBe(true);
       expect(JSON.parse(readFileSync(nf, 'utf8')).state).toBe('done'); // 剛啟動 = 已停止（非執行中）
+      expect(JSON.parse(readFileSync(nf, 'utf8')).termId).toBe('term-a');
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

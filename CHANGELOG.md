@@ -7,6 +7,23 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.22.0（2026-08-06）
+
+Claude 與 Codex 的終端機對話軸改為「我的提問索引」：只顯示使用者文字，並以終端機級 session 綁定避免同工作區多個 AI 終端互相串線。
+
+### 2026-08-06｜Claude／Codex 對話軸只顯示使用者提問
+
+- Claude transcript reader 不再建立 assistant 節點；長刻度只代表使用者提問，點擊仍以 `Ctrl+O` 與相對 prompt 次數定位原回合。
+- 每個 PTY 在 spawn 前產生 `termId` 並注入子程序環境；Claude hook 把 `termId` 寫回 session 狀態，手動與快捷啟動都能精確綁定目前終端機，同 cwd 的另一個 Claude session 不再被 mtime 猜中。
+- Codex reader 只接受 `source=cli`、`originator=codex-tui` 的 `event_msg/user_message`，排除可能含系統注入上下文的 response user、subagent 與 exec rollout；並尊重官方 `CODEX_HOME`。
+- Codex 不以同 cwd 最新檔猜 session，而是讓目前 xterm 的 prompt 行唯一反證候選；只有恰好一個 session 能可靠配對時才顯示，點擊與 `Alt+↑／Alt+↓` 都捲到原始提問行。
+- AI 程序、terminal 或 session 無法可靠綁定時採 fail-closed 空軸，不回退把模型輸出當一般導覽節點；一般 PowerShell 的內容導覽維持原行為。
+
+### 驗證
+
+- 全量 ship gate 通過：TypeScript typecheck、正式 build、591 個 Vitest 與 109 個非豁免 Electron E2E 全綠；另有 3 個需要真 AI 帳號的 dogfood 案例正常跳過，既有 `REQ-PERF-001` 冷啟動案例依已核准豁免排除。
+- 其中 154 個 main／PTY／monitor／terminal Vitest 與 6 個真 Electron 目標旅程直接覆蓋本功能；Codex 另以未替換正式 IPC handler 的程序辨識→rollout→xterm 主鏈路驗證手動啟動。
+
 ## v0.21.0（2026-08-06）
 
 SCM 分支管理補上本地／遠端清楚分組與安全刪除完整鏈路；刪除影響範圍、阻擋原因與遠端身分都在操作前後保持明確。

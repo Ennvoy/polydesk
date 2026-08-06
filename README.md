@@ -1,6 +1,6 @@
 # Polydesk
 
-![version](https://img.shields.io/badge/version-v0.21.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+![version](https://img.shields.io/badge/version-v0.22.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
 
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
@@ -15,7 +15,7 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 | 功能 | 說明 |
 | --- | --- |
 | **多工作區** | 左側工作區列（可顯示/隱藏）切換專案；可加入既有資料夾，或透過 HTTPS／SSH Clone Git Repository 後直接開啟；GitHub 私有倉庫支援瀏覽器登入帳號並自動重試；每個工作區獨立狀態。 |
-| **終端機多開** | 同一工作區可並排/上下多開終端機、可拖曳調整，支援 PowerShell 等 shell；Windows 內建 shell 以絕對路徑啟動，不受其他軟體重排 PATH 影響，啟動失敗會顯示原因；工具列可一鍵建立並啟動 Claude bypass、Codex 或 Agy，且會核對 xterm 與 ConPTY 的實際欄列一致後才啟動 TUI；左側內容導覽軌可逐句跳轉長輸出，背景終端則以較低成本持續接收資料；選取文字後可用 `Ctrl+C` 在終端機間複製貼上，未選取時仍送出中斷訊號；按住 `Ctrl` 點擊輸出的檔案路徑可直接開檔並跳到指定行欄，點擊 HTTP／HTTPS 網址則交由系統瀏覽器開啟。 |
+| **終端機多開** | 同一工作區可並排/上下多開終端機、可拖曳調整，支援 PowerShell 等 shell；Windows 內建 shell 以絕對路徑啟動，不受其他軟體重排 PATH 影響，啟動失敗會顯示原因；工具列可一鍵建立並啟動 Claude bypass、Codex 或 Agy，且會核對 xterm 與 ConPTY 的實際欄列一致後才啟動 TUI；左側內容導覽軌可逐句跳轉長輸出，Claude／Codex 對話軸則只列你的提問，不再讓模型長回覆塞滿刻度；背景終端以較低成本持續接收資料；選取文字後可用 `Ctrl+C` 在終端機間複製貼上，未選取時仍送出中斷訊號；按住 `Ctrl` 點擊輸出的檔案路徑可直接開檔並跳到指定行欄，點擊 HTTP／HTTPS 網址則交由系統瀏覽器開啟。 |
 | **Monaco 編輯器** | 多分頁、分割並排、依視窗寬度自動換行；AI／外部工具改檔後，乾淨分頁與唯讀預覽會自動更新，大批改檔也會對帳；未存檔內容不會被覆蓋。分頁右鍵可關閉、關閉其他或關閉目前工作區的全部分頁。 |
 | **Git 原始碼控制** | status / stage / commit / push / pull / stash / branch / log / diff；分支頁分開顯示本地與遠端分支，支援安全刪除本地分支或精確刪除指定 remote 的遠端分支；可建立、切換、移出或連同資料夾刪除 worktree，並相容舊版以一般工作區加入的既有 worktree；SCM、活動列與狀態列共用短時 Git 快照，錯峰讀取不重複掃描工作樹；歷史／分支不因一般檔案變動重讀，大量變更每批渲染 200 項；fetch 後線圖會顯示尚未 pull 的遠端分支與同事提交；整合終端機或外部工具完成 commit / push 後會自動同步分支與未推送狀態；**AI 產生 commit message**（可切換 claude / codex / agy 引擎）。 |
 | **檔案總管** | VSCode 風右鍵編輯（新增/改名/刪除/剪貼）；可用 `Ctrl+V` 貼入外部檔案，也能把截圖工具、瀏覽器或通訊軟體複製的圖片直接存成 PNG，包含無路徑且使用通用 MIME 的虛擬圖片檔；刪除**移到資源回收桶**（可救回）。 |
@@ -35,6 +35,8 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 4. 登入流程需要 [GitHub CLI](https://cli.github.com/)；Token 由 `gh` 與 Windows 憑證庫保管，Polydesk 不會讀取或保存。Clone 完成後即可開終端機、編輯檔案、跑 Git、看 AI 狀態。
 
 終端機面板右上方提供三個 AI CLI 快捷按鈕：`Claude bypass` 會執行 `claude --dangerously-skip-permissions`，`Codex` 會執行 `codex`，`Agy` 會執行 `agy`。每次點擊都會建立一個獨立終端機，沿用目前工作區選定的 shell；Polydesk 會等 xterm 與 Windows ConPTY 回報相同欄列後才啟動工具，若尺寸未實際套用則自動重試，避免 Claude 等 TUI 先用錯誤欄寬排版。Claude bypass 會略過所有工具與檔案操作的權限確認，只能在你完全信任的工作區使用。
+
+Claude 與 Codex 的左側對話軸是「我的提問索引」：不論使用快捷按鈕或在終端機手動啟動，軸上都只顯示你的文字。Claude 點擊節點會開啟 transcript 並定位該回合；Codex 只顯示能與目前終端機 scrollback 唯一配對的提問，點擊後捲回原始行。若同工作區同時有多個 Codex session、session 尚未可靠綁定，或提問已離開 scrollback，Polydesk 會保守不顯示該節點，避免跳到另一個終端機的內容。
 
 Windows PowerShell、CMD 與 WSL 會由 Polydesk 使用系統絕對路徑啟動，即使安裝 Sunlike365 等軟體後 `PATH` 順序改變也不需手動修環境變數。PowerShell 7 或 Git Bash 若未安裝，終端機面板會顯示 `shell-not-found` 錯誤；工作區遺失或 ConPTY 無法建立時也會提供對應代碼，不再只像按鈕沒有反應。
 

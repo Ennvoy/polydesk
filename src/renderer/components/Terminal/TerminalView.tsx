@@ -42,10 +42,11 @@ import {
   buildTerminalNavigationNodes,
   type TerminalNavigationNode,
 } from './terminalNavigation';
+import { buildLogicalTerminalLines, selectCodexConversationSession } from './terminalConversation';
 import { PtyDataDispatcher } from './ptyDataDispatcher';
 import { editorBus } from '../../state/editorBus';
 import type { ILink, ITheme } from '@xterm/xterm';
-import type { ClaudeTranscriptNode, ShellKind } from '../../../shared/types';
+import type { ConversationRailNode, ConversationRailSnapshot, ShellKind } from '../../../shared/types';
 
 interface Props {
   termId: string;
@@ -78,13 +79,16 @@ const EMPTY_NAVIGATION: TerminalNavigationState = {
   altScreen: false,
 };
 
+const EMPTY_CONVERSATION: ConversationRailSnapshot = { tool: null, nodes: [] };
+
 // 串流輸出時，onWriteParsed 最多每 frame 觸發一次；導覽軌不需要同等更新頻率，稍作合併可避免
 // 長輸出期間反覆掃描最多 5,000 行 scrollback 與重建 React 節點。
 const NAVIGATION_REFRESH_MS = 300;
 
-// 對話軸（claude 等 alternate screen TUI）：資料源是磁碟上的 session transcript，不隨每次重繪變動，
-// 故比行導覽軌更慢的節流即可；只有在 alt buffer 且面板可見時才會發出 IPC。
+// AI 對話軸資料源是磁碟 session，不隨每次畫面重繪變動，故使用較慢的節流。
 const TRANSCRIPT_REFRESH_MS = 1200;
+// 已辨識 AI 時保留低頻健康檢查，讓無輸出的程序退出也能清空；一般 shell 不輪詢。
+const AI_TRANSCRIPT_IDLE_REFRESH_MS = 8_000;
 
 // preload 的 pty:data 是廣播通道；所有 TerminalView 共用一個 renderer listener，再依 termId O(1) 分流。
 const ptyDataDispatcher = new PtyDataDispatcher((listener) => ipc.pty.onData(listener));
@@ -156,8 +160,8 @@ export function TerminalView({
   const navigationRefreshRef = useRef<() => void>(() => {});
   const navigationNodesRef = useRef<TerminalNavigationNode[]>([]);
   const [navigation, setNavigation] = useState<TerminalNavigationState>(EMPTY_NAVIGATION);
-  // 對話軸節點（只有 alternate screen 的 claude 面板會有；空陣列＝沿用行導覽軌）。
-  const [transcriptNodes, setTranscriptNodes] = useState<ClaudeTranscriptNode[]>([]);
+  const [conversation, setConversation] = useState<ConversationRailSnapshot>(EMPTY_CONVERSATION);
+  const conversationRef = useRef<ConversationRailSnapshot>(EMPTY_CONVERSATION);
   const [selectedMessage, setSelectedMessage] = useState(-1);
   // 字型設定：建立時取當下值（ref 避免進主 effect deps 重建終端機）；變更由獨立 effect 就地套用。
   const { font } = useTerminalFont();
@@ -222,18 +226,52 @@ export function TerminalView({
     // TUI 切 buffer 時終端寬度忽大忽小。
     let navigationRefreshTimer: ReturnType<typeof setTimeout> | null = null;
     let transcriptRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-    // claude 這類 TUI 整個跑在 alternate buffer，行節點恆為空；改拉它自己的 session transcript，
-    // 讓軸的節點對齊「訊息」。非 alt buffer（PowerShell / codex）完全不發這個 IPC。
+    let transcriptRefreshDueAt = 0;
+    let transcriptRefreshInFlight = false;
+    let transcriptRefreshPending = false;
+    let codexBoundSessionId: string | null = null;
+    // main 依 term/process/session 綁定回 AI 使用者訊息；無可靠綁定時回空 AI 軸，不猜別的 session。
     const refreshTranscript = async (): Promise<void> => {
       transcriptRefreshTimer = null;
+      transcriptRefreshDueAt = 0;
       if (disposed) return;
-      const transcript = await ipc.claude.transcript({ wsId }).catch(() => null);
-      if (disposed) return;
-      setTranscriptNodes(transcript?.nodes ?? []);
+      if (transcriptRefreshInFlight) {
+        transcriptRefreshPending = true;
+        return;
+      }
+      transcriptRefreshInFlight = true;
+      try {
+        const snapshot = await ipc.ai
+          .conversation({ wsId, termId, sessionId: codexBoundSessionId ?? undefined })
+          .catch(() => EMPTY_CONVERSATION);
+        if (disposed) return;
+        if (snapshot.tool !== 'codex') codexBoundSessionId = null;
+        conversationRef.current = snapshot;
+        setConversation(snapshot);
+        scheduleNavigationRefresh();
+      } finally {
+        transcriptRefreshInFlight = false;
+        if (!disposed && transcriptRefreshPending) {
+          transcriptRefreshPending = false;
+          scheduleTranscriptRefresh(0);
+        } else if (!disposed && conversationRef.current.tool !== null) {
+          scheduleTranscriptRefresh(AI_TRANSCRIPT_IDLE_REFRESH_MS);
+        }
+      }
     };
-    const scheduleTranscriptRefresh = (): void => {
-      if (!visibleRef.current || transcriptRefreshTimer) return;
-      transcriptRefreshTimer = setTimeout(() => void refreshTranscript(), TRANSCRIPT_REFRESH_MS);
+    const scheduleTranscriptRefresh = (delay = TRANSCRIPT_REFRESH_MS): void => {
+      if (!visibleRef.current) return;
+      if (transcriptRefreshInFlight) {
+        transcriptRefreshPending = true;
+        return;
+      }
+      const dueAt = Date.now() + delay;
+      if (transcriptRefreshTimer) {
+        if (dueAt >= transcriptRefreshDueAt) return;
+        clearTimeout(transcriptRefreshTimer);
+      }
+      transcriptRefreshDueAt = dueAt;
+      transcriptRefreshTimer = setTimeout(() => void refreshTranscript(), delay);
     };
 
     const refreshNavigation = (): void => {
@@ -246,12 +284,18 @@ export function TerminalView({
         if (!bufferLine) continue;
         lines.push({ line, text: bufferLine.translateToString(true), isWrapped: bufferLine.isWrapped });
       }
-      const nodes = buildTerminalNavigationNodes(lines);
+      const snapshot = conversationRef.current;
+      let nodes: TerminalNavigationNode[];
+      if (snapshot.tool === 'codex') {
+        const selected = selectCodexConversationSession(snapshot.candidates ?? [], buildLogicalTerminalLines(lines));
+        codexBoundSessionId = selected?.sessionId ?? null;
+        nodes = selected?.nodes ?? [];
+      } else {
+        nodes = snapshot.tool === 'claude' ? [] : buildTerminalNavigationNodes(lines);
+      }
       navigationNodesRef.current = nodes;
       host.dataset.navigationNodeCount = String(nodes.length);
       const altScreen = buffer.type === 'alternate';
-      if (altScreen) scheduleTranscriptRefresh();
-      else setTranscriptNodes([]); // 退出 TUI 回到 shell：立刻交還行導覽軌
       setNavigation({
         nodes,
         bufferLength: buffer.length,
@@ -265,13 +309,20 @@ export function TerminalView({
       if (navigationRefreshTimer) return;
       navigationRefreshTimer = setTimeout(refreshNavigation, NAVIGATION_REFRESH_MS);
     };
-    navigationRefreshRef.current = scheduleNavigationRefresh;
-    const onWriteParsedDisp = term.onWriteParsed(scheduleNavigationRefresh);
+    navigationRefreshRef.current = () => {
+      scheduleNavigationRefresh();
+      scheduleTranscriptRefresh();
+    };
+    const onWriteParsedDisp = term.onWriteParsed(() => {
+      scheduleNavigationRefresh();
+      scheduleTranscriptRefresh();
+    });
     const onNavigationScrollDisp = term.onScroll((viewportLine) => {
       setNavigation((current) => (current.viewportLine === viewportLine ? current : { ...current, viewportLine }));
     });
     const onNavigationResizeDisp = term.onResize(scheduleNavigationRefresh);
     scheduleNavigationRefresh();
+    scheduleTranscriptRefresh();
 
     // 終端機檔案連結：只在 Ctrl+左鍵時啟用，避免一般點擊干擾文字選取與 TUI 滑鼠操作。
     // renderer 只辨識文字；存在性、工作區 containment、外部檔確認與危險副檔名封鎖都由 main 執行。
@@ -727,7 +778,8 @@ export function TerminalView({
       navigationNodesRef.current = [];
       keyTsQueueRef.current = [];
       setNavigation(EMPTY_NAVIGATION);
-      setTranscriptNodes([]);
+      conversationRef.current = EMPTY_CONVERSATION;
+      setConversation(EMPTY_CONVERSATION);
       setSelectedMessage(-1);
     };
   }, [termId, wsId]);
@@ -803,8 +855,10 @@ export function TerminalView({
     term.focus();
   };
 
-  // 對話軸模式：alternate screen 的 TUI 找得到 session transcript 時，軸改以「訊息」為節點。
-  const messageRail = navigation.altScreen && transcriptNodes.length > 0;
+  // Claude 在 alternate buffer 以等距 prompt 節點導航；Codex 使用已配對的真實 scrollback 行。
+  const transcriptNodes = conversation.tool === 'claude' ? conversation.nodes : [];
+  const messageRail = conversation.tool === 'claude' && navigation.altScreen && transcriptNodes.length > 0;
+  const conversationRail = conversation.tool === 'codex' || (conversation.tool === 'claude' && navigation.altScreen);
   const lastMessageIndex = transcriptNodes.length - 1;
   const activeMessageIndex =
     selectedMessage >= 0 && selectedMessage <= lastMessageIndex ? selectedMessage : lastMessageIndex;
@@ -814,8 +868,8 @@ export function TerminalView({
    * Ctrl+O 進去（停在最新），再往回跳 promptsFromEnd 個 user prompt。刻意不送 Enter——
    * 萬一使用者已經停在 transcript 檢視，最壞情況只是輸入框多出幾個 `{`，不會執行任何東西。
    */
-  const jumpToMessage = (node: ClaudeTranscriptNode): void => {
-    ipc.pty.write(termId, `\x0f${'{'.repeat(node.promptsFromEnd)}`);
+  const jumpToMessage = (node: ConversationRailNode): void => {
+    ipc.pty.write(termId, `\x0f${'{'.repeat(node.promptsFromEnd ?? 0)}`);
     setSelectedMessage(node.index);
     termRef.current?.focus();
   };
@@ -858,11 +912,17 @@ export function TerminalView({
           的值，FitAddon 以此量可用高度會把 padding 也算進去 → 多排一列、最後一列被裁掉。 */}
       <div ref={hostRef} className="pd-term-xterm-host" />
       <div
-        className={`pd-term-navigation${messageRail ? ' is-messages' : ''}`}
+        className={`pd-term-navigation${conversationRail ? ' is-messages' : ''}`}
         role="navigation"
-        aria-label={messageRail ? '對話導覽' : '終端機內容導覽'}
-        title={messageRail ? '點擊跳到該則對話（送 Ctrl+O 開啟 Claude 的對話檢視）' : '點擊節點跳轉；Alt+↑／Alt+↓ 前後跳轉'}
-        data-message-node-count={messageRail ? transcriptNodes.length : undefined}
+        aria-label={conversationRail ? '對話導覽' : '終端機內容導覽'}
+        title={
+          conversation.tool === 'claude'
+            ? '點擊跳到你的提問（送 Ctrl+O 開啟 Claude 的對話檢視）'
+            : conversation.tool === 'codex'
+              ? '點擊跳到終端機裡的原始提問；Alt+↑／Alt+↓ 前後跳轉'
+              : '點擊節點跳轉；Alt+↑／Alt+↓ 前後跳轉'
+        }
+        data-message-node-count={conversationRail ? (messageRail ? transcriptNodes.length : navigation.nodes.length) : undefined}
         onClick={jumpFromNavigationRail}
       >
         {messageRail
@@ -870,13 +930,11 @@ export function TerminalView({
               <button
                 key={node.index}
                 type="button"
-                className={`pd-term-navigation-node is-message ${node.role === 'user' ? 'is-prompt' : 'is-reply'}${
-                  node.index === activeMessageIndex ? ' is-active' : ''
-                }`}
+                className={`pd-term-navigation-node is-message is-prompt${node.index === activeMessageIndex ? ' is-active' : ''}`}
                 style={{ top: `${(node.index / Math.max(1, lastMessageIndex)) * 100}%` }}
-                aria-label={`跳到第 ${node.index + 1} 則（${node.role === 'user' ? '你的提問' : 'Claude 回覆'}）：${node.preview}`}
+                aria-label={`跳到第 ${node.index + 1} 則你的提問：${node.preview}`}
                 aria-current={node.index === activeMessageIndex ? 'location' : undefined}
-                title={`${node.role === 'user' ? '你' : 'Claude'}：${node.preview}`}
+                title={`你：${node.preview}`}
                 tabIndex={node.index === activeMessageIndex ? 0 : -1}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -884,7 +942,7 @@ export function TerminalView({
                 }}
               />
             ))
-          : navigationScrollable && (
+          : (conversation.tool === 'codex' || navigationScrollable) && (
               <>
                 <span
                   className="pd-term-navigation-viewport"
@@ -895,9 +953,15 @@ export function TerminalView({
                   <button
                     key={`${node.line}-${node.preview}`}
                     type="button"
-                    className={`pd-term-navigation-node${index === activeNavigationIndex ? ' is-active' : ''}`}
+                    className={`pd-term-navigation-node${conversation.tool === 'codex' ? ' is-message is-prompt' : ''}${
+                      index === activeNavigationIndex ? ' is-active' : ''
+                    }`}
                     style={{ top: `${(node.line / maxNavigationLine) * 100}%`, width: `${node.width}px` }}
-                    aria-label={`跳到終端機第 ${node.line + 1} 行：${node.preview}`}
+                    aria-label={
+                      conversation.tool === 'codex'
+                        ? `跳到你的提問：${node.preview}`
+                        : `跳到終端機第 ${node.line + 1} 行：${node.preview}`
+                    }
                     aria-current={index === activeNavigationIndex ? 'location' : undefined}
                     title={node.preview}
                     tabIndex={index === activeNavigationIndex ? 0 : -1}

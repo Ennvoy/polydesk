@@ -109,6 +109,7 @@ export const HOOK_SCRIPT = `#!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
 const state = process.argv[2] || 'done';
+const termId = String(process.env.POLYDESK_TERM_ID || '');
 // statusDir 相對本腳本位置（<home>/.claude/polydesk/status）——不假設 os.homedir，與主程序 claudePaths 一致。
 const statusDir = path.join(__dirname, 'status');
 function normCwd(p) {
@@ -134,7 +135,7 @@ function flush() {
     }
     let effState = state;
     if (state === 'reset') {
-      // SessionStart：清掉同工作區(cwd)所有舊狀態檔（清掉上次殘留的 working），自己標 done（已停止/等輸入）。
+      // SessionStart：Polydesk 內只清同 terminal 殘留；外部舊版 hook 才退回 cwd 清理。
       const nc = normCwd(cwd);
       try {
         const files = fs.readdirSync(statusDir);
@@ -142,7 +143,9 @@ function flush() {
           if (!files[i].endsWith('.json')) continue;
           try {
             const jj = JSON.parse(fs.readFileSync(path.join(statusDir, files[i]), 'utf8'));
-            if (jj && normCwd(jj.cwd) === nc) fs.unlinkSync(path.join(statusDir, files[i]));
+            const sameTerm = termId && jj && jj.termId === termId;
+            const sameLegacyCwd = !termId && jj && normCwd(jj.cwd) === nc;
+            if (sameTerm || sameLegacyCwd) fs.unlinkSync(path.join(statusDir, files[i]));
           } catch (e) {}
         }
       } catch (e) {}
@@ -150,7 +153,7 @@ function flush() {
     }
     const fin = path.join(statusDir, safe + '.json');
     const tmp = fin + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify({ sessionId: sid, cwd: cwd, state: effState, ts: Date.now() }));
+    fs.writeFileSync(tmp, JSON.stringify({ sessionId: sid, cwd: cwd, termId: termId || undefined, state: effState, ts: Date.now() }));
     fs.renameSync(tmp, fin);
   } catch (e) {}
   process.exit(0);

@@ -1,4 +1,4 @@
-<!-- constellation-map-synced-at: 6002a9fc83274fddeeb1c6fc14881fd13f5b2075 -->
+<!-- constellation-map-synced-at: 9649bc78fe9fe1e54c66e931339993c9fa98b238 -->
 # Polydesk 專案現況地圖
 
 ## 模組索引
@@ -37,8 +37,8 @@
 
 ## 終端機對話軸現況
 
-- Claude alternate screen 無 xterm scrollback，現行 `claude:transcript` 會讀 `~/.claude/projects/<slug>/*.jsonl`，並保留 `user` 與 `assistant` 角色節點（`src/main/claude/sessionTranscript.ts`、`src/renderer/components/Terminal/TerminalView.tsx`）。
-- Codex normal buffer 目前沒有角色化對話軸；畫面使用一般行導覽，會把 xterm 中每個非空白邏輯行都變成節點，因此模型長回覆會塞滿刻度。
-- Codex rollout JSONL 有結構化 `event_msg/user_message` 與 `response_item/message` 角色事件，可建立使用者提問節點，不應從 ANSI／終端機文字猜角色。
-- `TerminalPanel` 知道快捷啟動的是 Claude／Codex／Agy，但目前只保存 command 與顯示名稱，沒有把 AI 工具身分傳給 `TerminalView`；若要避免一般 PowerShell 誤套 Codex 對話軸，需補 term 級工具身分或等價的可靠程序對應。
-- 新需求：Claude 與 Codex 的對話軸只顯示使用者文字，不顯示模型文字；需同步調整 shared transcript 模型、main readers、IPC、TerminalView、單測與 Electron E2E。
+- `ai:conversation` 以 `wsId + termId` 讀取終端機級 AI 對話；`PtyManager` 於 spawn 前注入 `POLYDESK_TERM_ID`，`ClaudeStatusMonitor` 以 PTY root PID 判定目前 terminal 的工具。
+- Claude hook 狀態帶回 `termId`，reader 只讀指定 session 的 user prompt；alternate buffer 仍以 `Ctrl+O + {` 相對定位（`src/main/claude/sessionTranscript.ts`、`src/main/claude/statusHooks.ts`）。
+- Codex user-only reader 位於 `src/main/monitor/codexConversation.ts`，只接受互動式 `cli/codex-tui` 的 `event_msg/user_message`；同 cwd 只產生有限候選，不以最新 mtime 猜 session，綁定後沿用確切 path 且尊重 `CODEX_HOME`。
+- renderer 以 `terminalConversation.ts` 單次索引 xterm wrapped logical line；恰好一個 rollout 候選能命中帶 prompt marker 的目前 scrollback 才建節點，點擊與鍵盤導覽共用匹配後行號，長 session 固定最多 220 節點。
+- 無法可靠辨識工具／session、讀取失敗或文字配對歧義時，AI rail 保持空白；非 AI 終端機維持既有一般行導覽。

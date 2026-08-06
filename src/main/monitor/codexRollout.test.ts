@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseRolloutTail, parseSessionMetaCwd, readCodexSessions } from './codexRollout';
+import { codexSessionsRoot, parseRolloutTail, parseSessionMetaCwd, readCodexSessions } from './codexRollout';
 
 function metaLine(cwd: string): string {
   return JSON.stringify({ timestamp: '2026-06-30T09:05:35.875Z', type: 'session_meta', payload: { id: 'sid', cwd, cli_version: '0.133.0' } });
@@ -19,6 +19,12 @@ function callOutput(callId: string, ts: string): string {
 }
 
 describe('codexRollout 解析純函式', () => {
+  it('codexSessionsRoot 尊重 CODEX_HOME', () => {
+    expect(codexSessionsRoot('C:\\Users\\u', { CODEX_HOME: 'D:\\codex-home' })).toBe(
+      join('D:\\codex-home', 'sessions'),
+    );
+  });
+
   it('parseSessionMetaCwd 取 payload.cwd；壞檔/缺欄回 null', () => {
     expect(parseSessionMetaCwd(metaLine('C:\\proj\\a'))).toBe('C:\\proj\\a');
     expect(parseSessionMetaCwd('not json')).toBeNull();
