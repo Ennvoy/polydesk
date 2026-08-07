@@ -15,6 +15,16 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.23.0',
+    date: '2026-08-07',
+    highlights: [
+      '修正 Claude 終端機左側導覽軸擠滿密集刻度：辨識為 Claude 後只顯示你的提問',
+      'AI 終端機辨識在系統忙碌、程序掃描逾時的情況下改由 Claude 自己回報的終端機綁定接手',
+      '對話軸不再要求 Claude 切換到全螢幕終端機模式才生效，一般畫面下也會正常接手',
+      '已辨識為 Claude 但還沒有提問時整條軸留白，不再退回逐行刻度',
+    ],
+  },
+  {
     version: '0.22.0',
     date: '2026-08-06',
     highlights: [

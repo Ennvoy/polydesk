@@ -5,6 +5,7 @@ import { ClaudeStatusMonitor } from './ClaudeStatusMonitor';
 import type { EventChannels } from '../../shared/ipc';
 import type { Workspace } from '../../shared/types';
 import type { SessionStatus } from './claudeHookState';
+import type { AiShellPids } from './aiProcessScan';
 
 type StatusEvent = EventChannels['claude:status'];
 
@@ -268,5 +269,36 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
     expect(await mon.terminalTool('term')).toBe('codex');
     scanOk = false;
     expect(await mon.terminalTool('term')).toBeNull();
+  });
+
+  it('程序掃描認不出終端機時退到 Claude hook 的 termId 綁定；PTY 已死則仍回 null', async () => {
+    const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
+    let alive = true;
+    const pty = {
+      pidsOf: (): number[] => (alive ? [300] : []),
+      pidOf: (): number | null => (alive ? 300 : null),
+    };
+    // 掃描整輪失敗（null）與掃描成功卻沒抓到子程序（空集合），都走同一條 hook 綁定退路。
+    let scanResult: AiShellPids | null = null;
+    const mon = new ClaudeStatusMonitor(workspaces, pty, () => undefined, {
+      readSessions: async (): Promise<SessionStatus[]> => [
+        { sessionId: 'claude-a', termId: 'term-a', cwd: 'C:/p/a', state: 'done', ts: 1 },
+      ],
+      readCodex: async () => [],
+      readAgy: async () => [],
+      scanPids: async () => scanResult,
+      processScanMs: 0,
+      forceScanMinMs: 0,
+      watchFactory: noWatch,
+    });
+
+    expect(await mon.terminalTool('term-a')).toBe('claude');
+    expect(await mon.terminalTool('term-b')).toBeNull(); // 沒有 hook 綁定就不猜
+
+    scanResult = { claude: new Set<number>(), codex: new Set<number>(), agy: new Set<number>() };
+    expect(await mon.terminalTool('term-a')).toBe('claude');
+
+    alive = false;
+    expect(await mon.terminalTool('term-a')).toBeNull();
   });
 });

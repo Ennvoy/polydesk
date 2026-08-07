@@ -67,8 +67,6 @@ interface TerminalNavigationState {
   bufferLength: number;
   viewportLine: number;
   viewportRows: number;
-  /** TUI 已切到 alternate buffer：沒有 scrollback 可掃，行節點永遠建不出來。 */
-  altScreen: boolean;
 }
 
 const EMPTY_NAVIGATION: TerminalNavigationState = {
@@ -76,7 +74,6 @@ const EMPTY_NAVIGATION: TerminalNavigationState = {
   bufferLength: 0,
   viewportLine: 0,
   viewportRows: 0,
-  altScreen: false,
 };
 
 const EMPTY_CONVERSATION: ConversationRailSnapshot = { tool: null, nodes: [] };
@@ -295,13 +292,11 @@ export function TerminalView({
       }
       navigationNodesRef.current = nodes;
       host.dataset.navigationNodeCount = String(nodes.length);
-      const altScreen = buffer.type === 'alternate';
       setNavigation({
         nodes,
         bufferLength: buffer.length,
         viewportLine: buffer.viewportY,
         viewportRows: term.rows,
-        altScreen,
       });
     };
     const scheduleNavigationRefresh = (): void => {
@@ -855,10 +850,11 @@ export function TerminalView({
     term.focus();
   };
 
-  // Claude 在 alternate buffer 以等距 prompt 節點導航；Codex 使用已配對的真實 scrollback 行。
+  // Claude 以等距 prompt 節點導航（TUI 反覆重繪，scrollback 行號對不回單一提問）；Codex 使用已配對的
+  // 真實 scrollback 行。兩者都不看 buffer 型別：Claude Code 的 Ink TUI 跑在 normal buffer。
   const transcriptNodes = conversation.tool === 'claude' ? conversation.nodes : [];
-  const messageRail = conversation.tool === 'claude' && navigation.altScreen && transcriptNodes.length > 0;
-  const conversationRail = conversation.tool === 'codex' || (conversation.tool === 'claude' && navigation.altScreen);
+  const messageRail = conversation.tool === 'claude' && transcriptNodes.length > 0;
+  const conversationRail = conversation.tool === 'claude' || conversation.tool === 'codex';
   const lastMessageIndex = transcriptNodes.length - 1;
   const activeMessageIndex =
     selectedMessage >= 0 && selectedMessage <= lastMessageIndex ? selectedMessage : lastMessageIndex;
@@ -942,7 +938,8 @@ export function TerminalView({
                 }}
               />
             ))
-          : (conversation.tool === 'codex' || navigationScrollable) && (
+          : /* 已辨識為 Claude 但還沒配對到提問時整條留白（連 viewport 薄片都不畫），不退回一般行導覽。 */
+            (conversation.tool === 'codex' || (!conversationRail && navigationScrollable)) && (
               <>
                 <span
                   className="pd-term-navigation-viewport"

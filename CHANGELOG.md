@@ -7,6 +7,24 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.23.0（2026-08-07）
+
+修正 Claude 終端機的對話軸從未真正接手的問題：導覽軸不再把 TUI 重繪殘影逐行畫成密集刻度，辨識為 Claude 後只顯示使用者提問。
+
+### 2026-08-07｜Claude 對話軸辨識修正
+
+- `ClaudeStatusMonitor.terminalTool` 在程序掃描認不出終端機時改採 Claude hook 的 `termId` 綁定。該綁定由 Claude 自己回報，`SessionEnd` 會刪狀態檔、`SessionStart` 會清同 `termId` 殘留，因此比程序樹掃描可靠；忙碌 Windows 上掃描整輪逾時（`scanReliable` 全 false）是常態，先前只靠掃描會讓 AI 對話軸永遠退回一般行導覽。無綁定時仍 fail-closed 回 `null`。
+- 對話軸判準移除 alternate buffer 前提。Claude Code 的 Ink TUI 跑在 normal buffer，舊條件恆為 false，`v0.22.0` 的「只顯示使用者提問」在 Claude 上實際從未生效。
+- 已辨識為 Claude 但尚未配對到提問時整條軸留白，連 viewport 薄片都不繪製，不退回逐行刻度。
+- 對應 e2e 從「切 `?1049h` 進 alternate screen」改為驗證 normal buffer 下接手，並新增 session 結束後交還一般行導覽軌的斷言。
+
+### 驗證
+
+- TypeScript typecheck、正式 build 與全量 Vitest 通過（592 個案例；一次 `SearchService` tmp 目錄 EPERM 為 Windows 檔案鎖 flake，單獨重跑 23 綠）。
+- 真 Electron E2E：`terminal-transcript-rail` 與 `terminal-navigation` 全綠；新增 `claude-rail-dogfood`（預設跳過，`POLYDESK_DOGFOOD_CLAUDE_RAIL=1` 啟用）以真 Claude 驗證啟動後對話軸接手且尚未提問時零節點。
+- 另以真 hook 綁定＋真 transcript 走完整 main 鏈路手動驗證：軸只呈現單一使用者提問節點，`aria-label` 對應該則原文。
+- 全量 E2E 97 通過、4 跳過；12 個剪貼簿案例受驗證機台環境阻擋（`OpenClipboard` 對所有程序回 `ERROR_ACCESS_DENIED`，PowerShell `Set-Clipboard` 同樣失敗），與本次改動無關，待剪貼簿服務恢復後補驗。`perf` 案例單獨重跑通過。
+
 ## v0.22.0（2026-08-06）
 
 Claude 與 Codex 的終端機對話軸改為「我的提問索引」：只顯示使用者文字，並以終端機級 session 綁定避免同工作區多個 AI 終端互相串線。

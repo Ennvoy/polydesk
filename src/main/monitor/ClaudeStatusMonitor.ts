@@ -329,6 +329,10 @@ export class ClaudeStatusMonitor {
     if (this.scanReliable.claude && this.claudeShellPids.has(pid)) return 'claude';
     if (this.scanReliable.codex && this.codexShellPids.has(pid)) return 'codex';
     if (this.scanReliable.agy && this.agyShellPids.has(pid)) return 'agy';
+    // 掃描沒把這個終端機認成任何工具（忙碌 Windows 上整輪逾時、或抓不到子程序）時退到 hook 綁定：
+    // termId 由 Claude 自己回報，SessionEnd 刪檔、SessionStart 清同 termId 殘留，所以「有 session 檔」
+    // 就是這個終端機真的有 claude 在跑。仍 fail-closed——沒有綁定就回 null，不猜。
+    if (await this.claudeSessionForTerminal(termId)) return 'claude';
     return null;
   }
 

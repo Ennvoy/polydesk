@@ -1,10 +1,11 @@
-// 對話軸：claude 這類 TUI 一啟動就切 alternate screen，xterm alt buffer 沒有 scrollback →
-// 行導覽軌的條件（buffer 行數 > 可視列數）恆為 false。此規格驗證軸在 alt buffer 下改以
-// claude 自己的 session transcript 為資料源，節點對齊「訊息」，且點擊送出 Ctrl+O + `{` 定位。
+// 對話軸：終端機一旦辨識為 claude，軸就改以 claude 自己的 session transcript 為資料源，節點對齊
+// 「訊息」，且點擊送出 Ctrl+O + `{` 定位。判準只看辨識結果、不看 buffer 型別——Claude Code 的 Ink
+// TUI 跑在 normal buffer，早期版本要求 alternate screen 導致對話軸實際上從未接手，反而退回每行一
+// 節點的行導覽軌。此規格把「normal buffer 也接手」釘住。
 //
-// 不啟動真 claude（要帳號、慢）：改用真 PowerShell 印出 ?1049h 讓 xterm 真的切 buffer，
-// 並在該工作區對應的 ~/.claude/projects/<slug>/ 預先放一份 transcript。slug 來自 tmp 目錄，
-// 不會撞到使用者既有專案，測後整個目錄刪除。
+// 不啟動真 claude（要帳號、慢）：改用 stub 的 ai:conversation 快照，並在該工作區對應的
+// ~/.claude/projects/<slug>/ 預先放一份 transcript。slug 來自 tmp 目錄，不會撞到使用者既有專案，
+// 測後整個目錄刪除。
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -86,6 +87,9 @@ test('對話軸不改變終端機的可用版面與行距', async () => {
     await page.locator('button[aria-label="新增終端機"]').click();
     await expect(page.locator('.pd-term-xterm-host[data-initial-size-ready="true"]')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('.pd-term-navigation.is-messages')).toHaveCount(0);
+
+    const before = await terminalMetrics(page);
+
     await stubConversation(app, {
       tool: 'claude',
       sessionId: 'e2e-session',
@@ -95,10 +99,8 @@ test('對話軸不改變終端機的可用版面與行距', async () => {
       ],
     });
 
-    const before = await terminalMetrics(page);
-
-    // 切到 alternate screen → 對話軸接手。
-    await emitFromPty(page, '[Console]::Write([char]27 + "[?1049h" + "TUI-READY")\r');
+    // 一般輸出即可觸發重查；normal buffer 下對話軸就該接手，不必等 alternate screen。
+    await emitFromPty(page, "Write-Output 'CLAUDE-READY'\r");
     await expect(page.locator('.pd-term-navigation.is-messages')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('.pd-term-navigation-node.is-message')).toHaveCount(2);
 
@@ -112,7 +114,7 @@ test('對話軸不改變終端機的可用版面與行距', async () => {
   }
 });
 
-test('alternate screen 的終端機改用對話軸，節點對齊訊息且點擊送出定位按鍵', async () => {
+test('normal buffer 的 Claude 終端機改用對話軸，節點對齊訊息且點擊送出定位按鍵', async () => {
   const root = makeTempDir('pd-transcript-rail-');
   const dir = makeSubDir(root, 'transcript-ws');
   const projectDir = join(homedir(), '.claude', 'projects', claudeProjectSlug(dir));
@@ -133,6 +135,8 @@ test('alternate screen 的終端機改用對話軸，節點對齊訊息且點擊
     await page.locator('button[aria-label="開啟工作區 transcript-ws"]').click();
     await page.locator('button[aria-label="新增終端機"]').click();
     await expect(page.locator('.pd-term-xterm-host[data-initial-size-ready="true"]')).toBeVisible({ timeout: 15_000 });
+    // 尚未辨識為 AI 工具的一般 shell 先確認不是對話軸模式。
+    await expect(page.locator('.pd-term-navigation.is-messages')).toHaveCount(0);
     await stubConversation(app, {
       tool: 'claude',
       sessionId: 'e2e-session',
@@ -141,9 +145,6 @@ test('alternate screen 的終端機改用對話軸，節點對齊訊息且點擊
         { index: 1, preview: '第二個提問', promptsFromEnd: 0 },
       ],
     });
-
-    // 一般 shell（normal buffer）先確認不是對話軸模式。
-    await expect(page.locator('.pd-term-navigation.is-messages')).toHaveCount(0);
 
     // 記錄送往 PTY 的資料，稍後驗證點擊真的送出 Ctrl+O + `{`。
     await app.evaluate(({ ipcMain }) => {
@@ -154,8 +155,8 @@ test('alternate screen 的終端機改用對話軸，節點對齊訊息且點擊
       });
     });
 
-    // 真 PowerShell 輸出 ?1049h → xterm 切 alternate buffer（等同 claude 啟動時的動作）。
-    await emitFromPty(page, '[Console]::Write([char]27 + "[?1049h" + "TUI-READY")\r');
+    // 真 PowerShell 輸出（不切 buffer，等同 Claude Code 的 Ink TUI）觸發重查 → 對話軸接手。
+    await emitFromPty(page, "Write-Output 'CLAUDE-READY'\r");
 
     const rail = page.locator('.pd-term-navigation.is-messages');
     await expect(rail).toBeVisible({ timeout: 15_000 });
@@ -179,11 +180,11 @@ test('alternate screen 的終端機改用對話軸，節點對齊訊息且點擊
     await rail.locator('.pd-term-navigation-node').last().click();
     await expect.poll(ptyWrites, { timeout: 5_000 }).toContain('\x0f');
 
-    // 退出 alternate screen → 立刻交還原本的行導覽軌。
+    // Claude session 結束（SessionEnd 刪掉狀態檔 → 辨識回 null）→ 立刻交還原本的行導覽軌。
     // 先 Ctrl+C 清掉輸入行：上面點擊送出的 `{` 進了 PowerShell 的命令列，會把接下來的指令
     // 吃成 script block（這正是 jumpToMessage 刻意不送 Enter 的理由——誤觸只留字元、不會執行）。
+    await stubConversation(app, { tool: null, nodes: [] });
     await emitFromPty(page, '\x03');
-    await emitFromPty(page, '[Console]::Write([char]27 + "[?1049l")\r');
     await expect(page.locator('.pd-term-navigation.is-messages')).toHaveCount(0, { timeout: 10_000 });
   } finally {
     await app.close();
