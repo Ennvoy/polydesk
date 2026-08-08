@@ -17,6 +17,7 @@
 
 ## 證據在哪
 
+- 功能提交：`617db8c`。
 - 公開契約回歸：`tests/security/conversationAccess.test.ts`。
 - Claude／Codex 使用通用內容導覽的真 Electron 回歸：`e2e/terminal-ai-launch.spec.ts`。
 - 通用內容導覽行為：`src/renderer/components/Terminal/terminalNavigation.test.ts`、`e2e/terminal-navigation.spec.ts`。

@@ -11,6 +11,8 @@
 
 依 dogfood 回饋移除 Claude／Codex 專用對話軸；終端機不再讀取兩種工具的對話檔，左側統一回到只依目前 xterm 輸出建立的內容導覽。
 
+- 對應功能 commit：`617db8c`
+
 ### 2026-08-08｜移除 Claude／Codex 對話軸
 
 - shared contract、IPC 白名單與 main router 移除 `ai:conversation`；renderer 刪除對話背景輪詢、Claude transcript 定位、Codex session／scrollback 配對及專用訊息節點樣式。
