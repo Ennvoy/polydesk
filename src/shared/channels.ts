@@ -58,7 +58,6 @@ export const INVOKE_CHANNELS = [
   'git:worktreeSupported',
   'ai:generateCommitMessage',
   'ai:usage',
-  'ai:conversation',
   'claude:states',
   'pty:create',
   'pty:resize',

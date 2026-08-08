@@ -35,10 +35,9 @@
 - `remotes` 是本機 remote-tracking snapshot；未 fetch／prune 時可能過期。現有 fetch 未帶 `--prune`。
 - `remotes` 扁平欄位仍供既有 worktree 建立對話框使用；SCM 身分判斷不得退回依賴它。
 
-## 終端機對話軸現況
+## 終端機內容導覽現況
 
-- `ai:conversation` 以 `wsId + termId` 讀取終端機級 AI 對話；`PtyManager` 於 spawn 前注入 `POLYDESK_TERM_ID`，`ClaudeStatusMonitor` 以 PTY root PID 判定目前 terminal 的工具。
-- Claude hook 狀態帶回 `termId`，reader 只讀指定 session 的 user prompt；alternate buffer 仍以 `Ctrl+O + {` 相對定位（`src/main/claude/sessionTranscript.ts`、`src/main/claude/statusHooks.ts`）。
-- Codex user-only reader 位於 `src/main/monitor/codexConversation.ts`，只接受互動式 `cli/codex-tui` 的 `event_msg/user_message`；同 cwd 只產生有限候選，不以最新 mtime 猜 session，綁定後沿用確切 path 且尊重 `CODEX_HOME`。
-- renderer 以 `terminalConversation.ts` 單次索引 xterm wrapped logical line；恰好一個 rollout 候選能命中帶 prompt marker 的目前 scrollback 才建節點，點擊與鍵盤導覽共用匹配後行號，長 session 固定最多 220 節點。
-- 無法可靠辨識工具／session、讀取失敗或文字配對歧義時，AI rail 保持空白；非 AI 終端機維持既有一般行導覽。
+- Claude／Codex 專用對話軸已移除；shared contract、main router 與 renderer 都不再暴露或呼叫 `ai:conversation`。
+- `TerminalView` 一律依目前 xterm buffer 的非空邏輯行建立通用內容導覽節點，wrapped continuation 不重複建立；點擊或 `Alt+↑`／`Alt+↓` 只在目前終端機 scrollback 內移動。
+- Claude transcript reader、Codex rollout 對話 reader、session 配對、背景對話輪詢與專用訊息節點樣式均已刪除；終端機導覽不再讀取 AI 對話檔。
+- `POLYDESK_TERM_ID` 仍供 Claude hook 精確清理同 terminal 的殘留狀態；AI 快捷啟動、PTY 尺寸同步及工作區狀態徽章不受影響。

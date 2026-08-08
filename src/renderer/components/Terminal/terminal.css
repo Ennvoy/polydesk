@@ -154,20 +154,6 @@
   outline: none;
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent, #6e8efb), transparent 52%);
 }
-/* AI 對話軸只列使用者提問；alternate buffer 的節點等距排列。 */
-.pd-term-navigation-node.is-message {
-  height: 3px;
-}
-.pd-term-navigation-node.is-message.is-prompt {
-  width: 16px;
-  background: var(--accent, #6e8efb);
-  opacity: 0.72;
-}
-.pd-term-navigation-node.is-message.is-active {
-  opacity: 1;
-  background: var(--accent, #6e8efb);
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent, #6e8efb), transparent 60%);
-}
 @media (prefers-reduced-motion: reduce) {
   .pd-term-navigation-node {
     transition: none;

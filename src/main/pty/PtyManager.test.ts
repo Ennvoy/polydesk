@@ -159,7 +159,7 @@ describe('PtyManager 安全：shell allowlist（F-3-A1）', () => {
     expect(calls.every((file) => pathWin32.isAbsolute(file))).toBe(true);
   });
 
-  it('建立前產生 termId 並注入 PTY 環境，且可反查 pid 與工作區', () => {
+  it('建立前產生 termId 並注入 PTY 環境', () => {
     const fake = new FakePty(4321);
     let injected = '';
     const mgr = new PtyManager(ctx.workspaces, ctx.lifecycle, {
@@ -170,9 +170,6 @@ describe('PtyManager 安全：shell allowlist（F-3-A1）', () => {
     });
     const { termId } = mgr.create({ wsId: ctx.wsId, shell: 'powershell' });
     expect(injected).toBe(termId);
-    expect(mgr.pidOf(termId)).toBe(4321);
-    expect(mgr.workspaceOf(termId)).toBe(ctx.wsId);
-    expect(mgr.workspaceOf('missing')).toBeNull();
   });
 
   it('內建 shell 直接使用 SystemRoot 絕對路徑，不受 PATH 是否含尾分號影響', () => {

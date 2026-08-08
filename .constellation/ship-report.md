@@ -1,21 +1,23 @@
-# Claude／Codex 使用者提問對話軸出貨報告
+# 移除 Claude／Codex 專用對話軸出貨報告
 
 ## 做了什麼
 
-- 完成 1 張「使用者提問對話軸」票：Claude 與 Codex 的左側軸只顯示使用者文字，模型回覆不再產生刻度。
-- Claude 以 PTY 注入的 `termId` 綁定 hook session，快捷與手動啟動共用同一條路徑；Codex 只讀互動式 TUI 的乾淨 `user_message`，並以本 terminal 的 prompt 行唯一反證候選 session。
-- Claude 節點維持 transcript 回合定位；Codex 只建立能與目前 xterm scrollback 唯一配對的節點，程序掃描失敗、多候選命中或無可靠綁定時保守顯示空軸。
-- 版本同步至 v0.22.0，README、CHANGELOG 與內建版本重點均已更新。
+- 移除 Claude 與 Codex 的專用對話軸，兩種 AI 終端機統一使用既有通用內容導覽。
+- 刪除 `ai:conversation` IPC 契約與 handler、Claude transcript reader、Codex rollout 對話 reader、session／scrollback 配對、renderer 背景輪詢及專用節點樣式。
+- 終端機導覽不再讀取 AI 對話檔，只依目前 xterm buffer 的非空邏輯行建立節點。
+- 保留 `POLYDESK_TERM_ID` 的 Claude hook 狀態清理用途，以及 AI 快捷啟動、PTY 尺寸同步與工作區狀態徽章。
+- 版本同步至 v0.24.0，README、CHANGELOG、內建 release notes、tasks、MAP 與 HISTORY 均已更新。
 
 ## 驗了什麼
 
-- 全量 ship gate：TypeScript typecheck、正式 build、591 個 Vitest、109 個非豁免 Electron E2E 全綠；3 個真 AI dogfood 案例正常跳過，`REQ-PERF-001` 依既有核准豁免排除。
-- 功能縮圈：154 個 main／PTY／monitor／terminal Vitest 與 6 個真 Electron 旅程全綠；新增未替換正式 handler 的 Codex process→rollout→IPC→xterm 主鏈路。
-- Standards 與 Spec 兩軸獨立審查的阻擋候選均已修正並複驗；兩軸最終結果皆為無 blocker。
+- TypeScript typecheck 與正式 build 通過。
+- 目標回歸：50 個 main／PTY／monitor／terminal／安全 Vitest，以及 2 個真 Electron AI launch／內容導覽旅程全綠。
+- 全量 Vitest 共 564 案：高併發初跑 563 案通過；唯一既有 `FileWatcher` 事件洪水案例單 worker 隔離重跑 7/7 綠，接著完整序列重跑 564/564 全綠。
+- 全量 Electron E2E 共 109 案：106 通過，3 個需真 Agy／Codex 帳號的 dogfood 案例依既有條件跳過；四工作區串流與 worktree 效能門檻通過。
 
 ## 證據在哪
 
-- 全量 runner 簽章證據：`.constellation/ship-evidence.md`。
-- 驗收票、票級指令與簽章：`.constellation/tickets/T-002-user-only-conversation-rail.md`。
-- 需求與設計決議：`.constellation/decisions/006-user-only-conversation-rail.md` 至 `009-split-feature-releases.md`，以及 `011-conversation-rail-design-final.md`。
-- 功能回歸：`src/main/claude/sessionTranscript.test.ts`、`src/main/monitor/codexConversation.test.ts`、`src/renderer/components/Terminal/terminalConversation.test.ts`、`e2e/terminal-transcript-rail.spec.ts`。
+- 公開契約回歸：`tests/security/conversationAccess.test.ts`。
+- Claude／Codex 使用通用內容導覽的真 Electron 回歸：`e2e/terminal-ai-launch.spec.ts`。
+- 通用內容導覽行為：`src/renderer/components/Terminal/terminalNavigation.test.ts`、`e2e/terminal-navigation.spec.ts`。
+- 版本與使用說明：`src/shared/releaseNotes.ts`、`README.md`、`CHANGELOG.md`。

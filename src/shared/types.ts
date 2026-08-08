@@ -43,34 +43,6 @@ export interface ClaudeStatus {
   exitCode?: number;
 }
 
-/** AI 對話軸的一則使用者提問。 */
-export interface ConversationRailNode {
-  /** 在目前 session 的使用者提問序號（0 起）。 */
-  index: number;
-  /** 單行摘要，供軸上 tooltip。 */
-  preview: string;
-  /** Claude：從最新往回數幾個 prompt。 */
-  promptsFromEnd?: number;
-  /** Codex：與 xterm scrollback 配對用的完整使用者文字。 */
-  matchText?: string;
-}
-/** 一個可供終端機畫面反證的 AI session；Codex 可能同 cwd 有數個候選。 */
-export interface ConversationRailSession {
-  sessionId: string;
-  nodes: ConversationRailNode[];
-}
-/** 某一個 Polydesk 終端機的 AI 對話軸快照；tool=null 代表一般終端機。 */
-export interface ConversationRailSnapshot {
-  tool: 'claude' | 'codex' | null;
-  /** 無法可靠綁定時省略 sessionId 並回空 nodes（fail-closed）。 */
-  sessionId?: string;
-  nodes: ConversationRailNode[];
-  /** Codex：main 無法只憑 cwd 選 session，交由此 terminal 的 scrollback 唯一反證。 */
-  candidates?: ConversationRailSession[];
-}
-/** Claude reader 的內部輸出；只含使用者提問。 */
-export type ClaudeTranscript = ConversationRailSession;
-
 export interface Workspace {
   id: string;
   name: string;

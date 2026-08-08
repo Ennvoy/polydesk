@@ -7,6 +7,24 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.24.0（2026-08-08）
+
+依 dogfood 回饋移除 Claude／Codex 專用對話軸；終端機不再讀取兩種工具的對話檔，左側統一回到只依目前 xterm 輸出建立的內容導覽。
+
+### 2026-08-08｜移除 Claude／Codex 對話軸
+
+- shared contract、IPC 白名單與 main router 移除 `ai:conversation`；renderer 刪除對話背景輪詢、Claude transcript 定位、Codex session／scrollback 配對及專用訊息節點樣式。
+- 刪除 Claude transcript reader、Codex rollout 對話 reader、renderer 配對 helper，以及其單元與專用 Electron 測試；新增安全回歸，禁止 renderer 再取得對話讀取通道。
+- Claude／Codex 終端機一律使用既有通用內容導覽，只掃描目前 xterm buffer 的非空邏輯行；`Alt+↑`／`Alt+↓`、點擊跳轉與 5,000 行 scrollback 行為不變。
+- `POLYDESK_TERM_ID` 保留給 Claude hook 清理同 terminal 的殘留狀態；AI 快捷啟動、xterm／ConPTY 尺寸同步及工作區狀態徽章不受影響。
+- 版本同步至 v0.24.0，README、內建關於視窗、專案地圖與出貨歷程一併更新。
+
+### 驗證
+
+- TypeScript typecheck 與正式 build 通過；目標 Vitest 50 案、Claude／Codex 快捷啟動與內容導覽真 Electron 2 案全綠。
+- 全量 Vitest 共 564 案：高併發初跑 563 案通過，既有 `FileWatcher` 事件洪水案例未收到 chokidar 事件；單 worker 先隔離重跑該 suite 7/7 綠，再以同設定完整重跑 564/564 全綠，判定為 Windows watcher 時序 flake，未修改產品碼或測試門檻。
+- 全量 Electron E2E 共 109 案：106 通過，3 個需要真 Agy／Codex 帳號的 dogfood 案例依既有條件跳過；本輪未出現剪貼簿環境阻擋，四工作區串流與 worktree 效能門檻亦通過。
+
 ## v0.23.0（2026-08-07）
 
 修正 Claude 終端機的對話軸從未真正接手的問題：導覽軸不再把 TUI 重繪殘影逐行畫成密集刻度，辨識為 Claude 後只顯示使用者提問。

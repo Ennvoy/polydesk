@@ -5,7 +5,6 @@ import { ClaudeStatusMonitor } from './ClaudeStatusMonitor';
 import type { EventChannels } from '../../shared/ipc';
 import type { Workspace } from '../../shared/types';
 import type { SessionStatus } from './claudeHookState';
-import type { AiShellPids } from './aiProcessScan';
 
 type StatusEvent = EventChannels['claude:status'];
 
@@ -228,77 +227,4 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
     expect(emitted).toContainEqual({ wsId: 'a', tool: 'codex', status: { state: 'done' } });
   });
 
-  it('terminalTool 與 Claude session 依 termId 綁定，不以同 cwd 猜另一個終端機', async () => {
-    const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
-    const pty = { pidsOf: (): number[] => [100, 200], pidOf: (termId: string): number | null => (termId === 'term-a' ? 100 : termId === 'term-b' ? 200 : null) };
-    const sessions: SessionStatus[] = [
-      { sessionId: 'claude-a', termId: 'term-a', cwd: 'C:/p/a', state: 'done', ts: 1 },
-      { sessionId: 'claude-b', termId: 'term-b', cwd: 'C:/p/a', state: 'done', ts: 2 },
-    ];
-    const mon = new ClaudeStatusMonitor(workspaces, pty, () => undefined, {
-      readSessions: async () => sessions,
-      readCodex: async () => [],
-      readAgy: async () => [],
-      scanPids: async () => ({ claude: new Set([100]), codex: new Set([200]), agy: new Set<number>() }),
-      processScanMs: 0,
-      forceScanMinMs: 0,
-      watchFactory: noWatch,
-    });
-
-    expect(await mon.terminalTool('term-a')).toBe('claude');
-    expect(await mon.terminalTool('term-b')).toBe('codex');
-    expect(await mon.claudeSessionForTerminal('term-a')).toBe('claude-a');
-    expect(await mon.claudeSessionForTerminal('missing')).toBeNull();
-  });
-
-  it('terminalTool 的程序掃描失敗時 fail-closed，不沿用徽章的舊 PID 快取', async () => {
-    const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
-    const pty = { pidsOf: (): number[] => [200], pidOf: (): number => 200 };
-    let scanOk = true;
-    const mon = new ClaudeStatusMonitor(workspaces, pty, () => undefined, {
-      readSessions: async () => [],
-      readCodex: async () => [],
-      readAgy: async () => [],
-      scanPids: async () =>
-        scanOk ? { claude: new Set<number>(), codex: new Set([200]), agy: new Set<number>() } : null,
-      processScanMs: 0,
-      forceScanMinMs: 0,
-      watchFactory: noWatch,
-    });
-
-    expect(await mon.terminalTool('term')).toBe('codex');
-    scanOk = false;
-    expect(await mon.terminalTool('term')).toBeNull();
-  });
-
-  it('程序掃描認不出終端機時退到 Claude hook 的 termId 綁定；PTY 已死則仍回 null', async () => {
-    const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
-    let alive = true;
-    const pty = {
-      pidsOf: (): number[] => (alive ? [300] : []),
-      pidOf: (): number | null => (alive ? 300 : null),
-    };
-    // 掃描整輪失敗（null）與掃描成功卻沒抓到子程序（空集合），都走同一條 hook 綁定退路。
-    let scanResult: AiShellPids | null = null;
-    const mon = new ClaudeStatusMonitor(workspaces, pty, () => undefined, {
-      readSessions: async (): Promise<SessionStatus[]> => [
-        { sessionId: 'claude-a', termId: 'term-a', cwd: 'C:/p/a', state: 'done', ts: 1 },
-      ],
-      readCodex: async () => [],
-      readAgy: async () => [],
-      scanPids: async () => scanResult,
-      processScanMs: 0,
-      forceScanMinMs: 0,
-      watchFactory: noWatch,
-    });
-
-    expect(await mon.terminalTool('term-a')).toBe('claude');
-    expect(await mon.terminalTool('term-b')).toBeNull(); // 沒有 hook 綁定就不猜
-
-    scanResult = { claude: new Set<number>(), codex: new Set<number>(), agy: new Set<number>() };
-    expect(await mon.terminalTool('term-a')).toBe('claude');
-
-    alive = false;
-    expect(await mon.terminalTool('term-a')).toBeNull();
-  });
 });

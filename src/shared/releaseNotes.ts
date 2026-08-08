@@ -15,6 +15,16 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.24.0',
+    date: '2026-08-08',
+    highlights: [
+      '移除 Claude 與 Codex 的專用對話軸，終端機不再讀取 transcript 或 rollout 對話檔',
+      '左側恢復為一致的終端機內容導覽，只依目前 xterm 輸出建立可跳轉節點',
+      '移除對話讀取 IPC、背景輪詢、session 配對與專用節點樣式，降低不必要的處理成本',
+      'Claude／Codex 快捷啟動、PTY 尺寸同步與工作區 AI 狀態徽章維持不變',
+    ],
+  },
+  {
     version: '0.23.0',
     date: '2026-08-07',
     highlights: [

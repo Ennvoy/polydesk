@@ -529,22 +529,6 @@ export class PtyManager {
     return out;
   }
 
-  /** 單一終端機的 PTY root pid；供 AI 子程序精確歸戶。 */
-  pidOf(termId: string): number | null {
-    const t = this.terms.get(termId);
-    if (!t || !t.alive) return null;
-    try {
-      return t.pty.pid;
-    } catch {
-      return null;
-    }
-  }
-
-  /** 驗證 termId 所屬工作區，避免 renderer 跨工作區讀取對話。 */
-  workspaceOf(termId: string): string | null {
-    return this.terms.get(termId)?.wsId ?? null;
-  }
-
   /** teardown：殺該 wsId 所有 pty（含子程序樹）並移除（REQ-WS-009）；resolve 於所有 tree kill 完成。 */
   killWorkspace(wsId: string): Promise<void> {
     const kills: Promise<void>[] = [];

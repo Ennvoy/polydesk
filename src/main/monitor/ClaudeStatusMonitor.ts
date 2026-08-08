@@ -37,7 +37,7 @@ function sameSet(a: Set<number>, b: Set<number>): boolean {
 }
 
 type WorkspacesView = Pick<WorkspaceManager, 'list'>;
-type PtyView = Pick<PtyManager, 'pidsOf'> & Partial<Pick<PtyManager, 'pidOf'>>;
+type PtyView = Pick<PtyManager, 'pidsOf'>;
 type EmitFn = (payload: EventChannels['claude:status']) => void;
 
 /** 待確認桌面通知（PE-2）；預設 Electron Notification，測試可注入。 */
@@ -131,8 +131,6 @@ export class ClaudeStatusMonitor {
   private claudeShellPids = new Set<number>();
   private codexShellPids = new Set<number>();
   private agyShellPids = new Set<number>();
-  /** 狀態徽章可 fail-open；對話軸則只接受最近一輪該工具掃描成功的結果。 */
-  private scanReliable = { claude: false, codex: false, agy: false };
   private lastScanAt = 0;
   /** 掃描 single-flight（in-flight 時重複要求共用同一趟）。 */
   private scanning: Promise<void> | null = null;
@@ -279,29 +277,23 @@ export class ClaudeStatusMonitor {
     this.scanning = this.scanPids()
       .catch(() => null)
       .then((r) => {
-        if (!r) {
-          this.scanReliable = { claude: false, codex: false, agy: false };
-          return;
-        }
+        if (!r) return;
         let changed = false;
         if (r.claude) {
-          this.scanReliable.claude = true;
           if (!sameSet(r.claude, this.claudeShellPids)) changed = true;
           this.claudeShellPids = r.claude;
           this.scannedOnce = true;
-        } else this.scanReliable.claude = false;
+        }
         if (r.codex) {
-          this.scanReliable.codex = true;
           if (!sameSet(r.codex, this.codexShellPids)) changed = true;
           this.codexShellPids = r.codex;
           this.scannedOnce = true;
-        } else this.scanReliable.codex = false;
+        }
         if (r.agy) {
-          this.scanReliable.agy = true;
           if (!sameSet(r.agy, this.agyShellPids)) changed = true;
           this.agyShellPids = r.agy;
           this.scannedOnce = true;
-        } else this.scanReliable.agy = false;
+        }
         if (changed) void this.recompute();
       })
       .finally(() => {
@@ -318,29 +310,6 @@ export class ClaudeStatusMonitor {
       out.push({ wsId: key.slice(0, i), tool: key.slice(i + 2) as AiTool, status: { state } });
     }
     return out;
-  }
-
-  /** 將目前 Polydesk terminal 精確對到 process scanner 的工具；手動與快捷啟動共用。 */
-  async terminalTool(termId: string): Promise<AiTool | null> {
-    const scan = this.maybeScanPids(true);
-    if (scan) await scan;
-    const pid = this.pty.pidOf?.(termId) ?? null;
-    if (!pid) return null;
-    if (this.scanReliable.claude && this.claudeShellPids.has(pid)) return 'claude';
-    if (this.scanReliable.codex && this.codexShellPids.has(pid)) return 'codex';
-    if (this.scanReliable.agy && this.agyShellPids.has(pid)) return 'agy';
-    // 掃描沒把這個終端機認成任何工具（忙碌 Windows 上整輪逾時、或抓不到子程序）時退到 hook 綁定：
-    // termId 由 Claude 自己回報，SessionEnd 刪檔、SessionStart 清同 termId 殘留，所以「有 session 檔」
-    // 就是這個終端機真的有 claude 在跑。仍 fail-closed——沒有綁定就回 null，不猜。
-    if (await this.claudeSessionForTerminal(termId)) return 'claude';
-    return null;
-  }
-
-  /** Claude hook 帶回的 termId 是 session 與 terminal 的唯一可靠綁定。 */
-  async claudeSessionForTerminal(termId: string): Promise<string | null> {
-    const sessions = await this.readSessions().catch(() => [] as SessionStatus[]);
-    const matches = sessions.filter((session) => session.termId === termId).sort((a, b) => b.ts - a.ts);
-    return matches[0]?.sessionId ?? null;
   }
 
   /** 預設 session 讀取：掃 statusDir 的 *.json（壞檔/缺欄略過，永不丟例外）。 */
@@ -364,7 +333,6 @@ export class ClaudeStatusMonitor {
             state: j.state as SessionStatus['state'],
             ts: typeof j.ts === 'number' ? j.ts : 0,
             tool: 'claude',
-            termId: typeof j.termId === 'string' ? j.termId : undefined,
           });
         }
       } catch {

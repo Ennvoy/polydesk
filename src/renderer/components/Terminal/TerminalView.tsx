@@ -42,11 +42,10 @@ import {
   buildTerminalNavigationNodes,
   type TerminalNavigationNode,
 } from './terminalNavigation';
-import { buildLogicalTerminalLines, selectCodexConversationSession } from './terminalConversation';
 import { PtyDataDispatcher } from './ptyDataDispatcher';
 import { editorBus } from '../../state/editorBus';
 import type { ILink, ITheme } from '@xterm/xterm';
-import type { ConversationRailNode, ConversationRailSnapshot, ShellKind } from '../../../shared/types';
+import type { ShellKind } from '../../../shared/types';
 
 interface Props {
   termId: string;
@@ -76,16 +75,9 @@ const EMPTY_NAVIGATION: TerminalNavigationState = {
   viewportRows: 0,
 };
 
-const EMPTY_CONVERSATION: ConversationRailSnapshot = { tool: null, nodes: [] };
-
 // 串流輸出時，onWriteParsed 最多每 frame 觸發一次；導覽軌不需要同等更新頻率，稍作合併可避免
 // 長輸出期間反覆掃描最多 5,000 行 scrollback 與重建 React 節點。
 const NAVIGATION_REFRESH_MS = 300;
-
-// AI 對話軸資料源是磁碟 session，不隨每次畫面重繪變動，故使用較慢的節流。
-const TRANSCRIPT_REFRESH_MS = 1200;
-// 已辨識 AI 時保留低頻健康檢查，讓無輸出的程序退出也能清空；一般 shell 不輪詢。
-const AI_TRANSCRIPT_IDLE_REFRESH_MS = 8_000;
 
 // preload 的 pty:data 是廣播通道；所有 TerminalView 共用一個 renderer listener，再依 termId O(1) 分流。
 const ptyDataDispatcher = new PtyDataDispatcher((listener) => ipc.pty.onData(listener));
@@ -157,9 +149,6 @@ export function TerminalView({
   const navigationRefreshRef = useRef<() => void>(() => {});
   const navigationNodesRef = useRef<TerminalNavigationNode[]>([]);
   const [navigation, setNavigation] = useState<TerminalNavigationState>(EMPTY_NAVIGATION);
-  const [conversation, setConversation] = useState<ConversationRailSnapshot>(EMPTY_CONVERSATION);
-  const conversationRef = useRef<ConversationRailSnapshot>(EMPTY_CONVERSATION);
-  const [selectedMessage, setSelectedMessage] = useState(-1);
   // 字型設定：建立時取當下值（ref 避免進主 effect deps 重建終端機）；變更由獨立 effect 就地套用。
   const { font } = useTerminalFont();
   const fontRef = useRef(font);
@@ -222,55 +211,6 @@ export function TerminalView({
     // 由純函式等距壓縮，保持固定 DOM 成本。alternate buffer 沒有 scrollback 時仍保留 rail 空槽，避免
     // TUI 切 buffer 時終端寬度忽大忽小。
     let navigationRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-    let transcriptRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-    let transcriptRefreshDueAt = 0;
-    let transcriptRefreshInFlight = false;
-    let transcriptRefreshPending = false;
-    let codexBoundSessionId: string | null = null;
-    // main 依 term/process/session 綁定回 AI 使用者訊息；無可靠綁定時回空 AI 軸，不猜別的 session。
-    const refreshTranscript = async (): Promise<void> => {
-      transcriptRefreshTimer = null;
-      transcriptRefreshDueAt = 0;
-      if (disposed) return;
-      if (transcriptRefreshInFlight) {
-        transcriptRefreshPending = true;
-        return;
-      }
-      transcriptRefreshInFlight = true;
-      try {
-        const snapshot = await ipc.ai
-          .conversation({ wsId, termId, sessionId: codexBoundSessionId ?? undefined })
-          .catch(() => EMPTY_CONVERSATION);
-        if (disposed) return;
-        if (snapshot.tool !== 'codex') codexBoundSessionId = null;
-        conversationRef.current = snapshot;
-        setConversation(snapshot);
-        scheduleNavigationRefresh();
-      } finally {
-        transcriptRefreshInFlight = false;
-        if (!disposed && transcriptRefreshPending) {
-          transcriptRefreshPending = false;
-          scheduleTranscriptRefresh(0);
-        } else if (!disposed && conversationRef.current.tool !== null) {
-          scheduleTranscriptRefresh(AI_TRANSCRIPT_IDLE_REFRESH_MS);
-        }
-      }
-    };
-    const scheduleTranscriptRefresh = (delay = TRANSCRIPT_REFRESH_MS): void => {
-      if (!visibleRef.current) return;
-      if (transcriptRefreshInFlight) {
-        transcriptRefreshPending = true;
-        return;
-      }
-      const dueAt = Date.now() + delay;
-      if (transcriptRefreshTimer) {
-        if (dueAt >= transcriptRefreshDueAt) return;
-        clearTimeout(transcriptRefreshTimer);
-      }
-      transcriptRefreshDueAt = dueAt;
-      transcriptRefreshTimer = setTimeout(() => void refreshTranscript(), delay);
-    };
-
     const refreshNavigation = (): void => {
       navigationRefreshTimer = null;
       if (disposed) return;
@@ -281,15 +221,7 @@ export function TerminalView({
         if (!bufferLine) continue;
         lines.push({ line, text: bufferLine.translateToString(true), isWrapped: bufferLine.isWrapped });
       }
-      const snapshot = conversationRef.current;
-      let nodes: TerminalNavigationNode[];
-      if (snapshot.tool === 'codex') {
-        const selected = selectCodexConversationSession(snapshot.candidates ?? [], buildLogicalTerminalLines(lines));
-        codexBoundSessionId = selected?.sessionId ?? null;
-        nodes = selected?.nodes ?? [];
-      } else {
-        nodes = snapshot.tool === 'claude' ? [] : buildTerminalNavigationNodes(lines);
-      }
+      const nodes = buildTerminalNavigationNodes(lines);
       navigationNodesRef.current = nodes;
       host.dataset.navigationNodeCount = String(nodes.length);
       setNavigation({
@@ -304,20 +236,13 @@ export function TerminalView({
       if (navigationRefreshTimer) return;
       navigationRefreshTimer = setTimeout(refreshNavigation, NAVIGATION_REFRESH_MS);
     };
-    navigationRefreshRef.current = () => {
-      scheduleNavigationRefresh();
-      scheduleTranscriptRefresh();
-    };
-    const onWriteParsedDisp = term.onWriteParsed(() => {
-      scheduleNavigationRefresh();
-      scheduleTranscriptRefresh();
-    });
+    navigationRefreshRef.current = scheduleNavigationRefresh;
+    const onWriteParsedDisp = term.onWriteParsed(scheduleNavigationRefresh);
     const onNavigationScrollDisp = term.onScroll((viewportLine) => {
       setNavigation((current) => (current.viewportLine === viewportLine ? current : { ...current, viewportLine }));
     });
     const onNavigationResizeDisp = term.onResize(scheduleNavigationRefresh);
     scheduleNavigationRefresh();
-    scheduleTranscriptRefresh();
 
     // 終端機檔案連結：只在 Ctrl+左鍵時啟用，避免一般點擊干擾文字選取與 TUI 滑鼠操作。
     // renderer 只辨識文字；存在性、工作區 containment、外部檔確認與危險副檔名封鎖都由 main 執行。
@@ -743,7 +668,6 @@ export function TerminalView({
       if (initialReadyTimer) clearTimeout(initialReadyTimer);
       if (outputSizeHealTimer) clearTimeout(outputSizeHealTimer);
       if (navigationRefreshTimer) clearTimeout(navigationRefreshTimer);
-      if (transcriptRefreshTimer) clearTimeout(transcriptRefreshTimer);
       themeObserver.disconnect();
       ro.disconnect();
       host.removeEventListener('focusin', onFocusIn);
@@ -773,9 +697,6 @@ export function TerminalView({
       navigationNodesRef.current = [];
       keyTsQueueRef.current = [];
       setNavigation(EMPTY_NAVIGATION);
-      conversationRef.current = EMPTY_CONVERSATION;
-      setConversation(EMPTY_CONVERSATION);
-      setSelectedMessage(-1);
     };
   }, [termId, wsId]);
 
@@ -850,37 +771,11 @@ export function TerminalView({
     term.focus();
   };
 
-  // Claude 以等距 prompt 節點導航（TUI 反覆重繪，scrollback 行號對不回單一提問）；Codex 使用已配對的
-  // 真實 scrollback 行。兩者都不看 buffer 型別：Claude Code 的 Ink TUI 跑在 normal buffer。
-  const transcriptNodes = conversation.tool === 'claude' ? conversation.nodes : [];
-  const messageRail = conversation.tool === 'claude' && transcriptNodes.length > 0;
-  const conversationRail = conversation.tool === 'claude' || conversation.tool === 'codex';
-  const lastMessageIndex = transcriptNodes.length - 1;
-  const activeMessageIndex =
-    selectedMessage >= 0 && selectedMessage <= lastMessageIndex ? selectedMessage : lastMessageIndex;
-
-  /**
-   * alt buffer 沒有 scrollback，拿不到絕對行號，只能借 claude 自己的 transcript 檢視定位：
-   * Ctrl+O 進去（停在最新），再往回跳 promptsFromEnd 個 user prompt。刻意不送 Enter——
-   * 萬一使用者已經停在 transcript 檢視，最壞情況只是輸入框多出幾個 `{`，不會執行任何東西。
-   */
-  const jumpToMessage = (node: ConversationRailNode): void => {
-    ipc.pty.write(termId, `\x0f${'{'.repeat(node.promptsFromEnd ?? 0)}`);
-    setSelectedMessage(node.index);
-    termRef.current?.focus();
-  };
-
   const jumpFromNavigationRail = (event: React.MouseEvent<HTMLDivElement>): void => {
-    if (event.target !== event.currentTarget) return;
+    if (event.target !== event.currentTarget || navigation.nodes.length === 0) return;
     const rect = event.currentTarget.getBoundingClientRect();
     if (rect.height <= 0) return;
     const ratio = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
-    if (messageRail) {
-      const target = Math.round(ratio * lastMessageIndex);
-      jumpToMessage(transcriptNodes[Math.max(0, Math.min(lastMessageIndex, target))]);
-      return;
-    }
-    if (navigation.nodes.length === 0) return;
     const targetLine = ratio * Math.max(1, navigation.bufferLength - 1);
     let nearest = navigation.nodes[0];
     for (const node of navigation.nodes) {
@@ -908,68 +803,36 @@ export function TerminalView({
           的值，FitAddon 以此量可用高度會把 padding 也算進去 → 多排一列、最後一列被裁掉。 */}
       <div ref={hostRef} className="pd-term-xterm-host" />
       <div
-        className={`pd-term-navigation${conversationRail ? ' is-messages' : ''}`}
+        className="pd-term-navigation"
         role="navigation"
-        aria-label={conversationRail ? '對話導覽' : '終端機內容導覽'}
-        title={
-          conversation.tool === 'claude'
-            ? '點擊跳到你的提問（送 Ctrl+O 開啟 Claude 的對話檢視）'
-            : conversation.tool === 'codex'
-              ? '點擊跳到終端機裡的原始提問；Alt+↑／Alt+↓ 前後跳轉'
-              : '點擊節點跳轉；Alt+↑／Alt+↓ 前後跳轉'
-        }
-        data-message-node-count={conversationRail ? (messageRail ? transcriptNodes.length : navigation.nodes.length) : undefined}
+        aria-label="終端機內容導覽"
+        title="點擊節點跳轉；Alt+↑／Alt+↓ 前後跳轉"
         onClick={jumpFromNavigationRail}
       >
-        {messageRail
-          ? transcriptNodes.map((node) => (
-              <button
-                key={node.index}
-                type="button"
-                className={`pd-term-navigation-node is-message is-prompt${node.index === activeMessageIndex ? ' is-active' : ''}`}
-                style={{ top: `${(node.index / Math.max(1, lastMessageIndex)) * 100}%` }}
-                aria-label={`跳到第 ${node.index + 1} 則你的提問：${node.preview}`}
-                aria-current={node.index === activeMessageIndex ? 'location' : undefined}
-                title={`你：${node.preview}`}
-                tabIndex={node.index === activeMessageIndex ? 0 : -1}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  jumpToMessage(node);
-                }}
-              />
-            ))
-          : /* 已辨識為 Claude 但還沒配對到提問時整條留白（連 viewport 薄片都不畫），不退回一般行導覽。 */
-            (conversation.tool === 'codex' || (!conversationRail && navigationScrollable)) && (
-              <>
-                <span
-                  className="pd-term-navigation-viewport"
-                  style={{ top: `${Math.min(100 - viewportHeight, viewportTop)}%`, height: `${viewportHeight}%` }}
-                  aria-hidden="true"
-                />
-                {navigation.nodes.map((node, index) => (
-                  <button
-                    key={`${node.line}-${node.preview}`}
-                    type="button"
-                    className={`pd-term-navigation-node${conversation.tool === 'codex' ? ' is-message is-prompt' : ''}${
-                      index === activeNavigationIndex ? ' is-active' : ''
-                    }`}
-                    style={{ top: `${(node.line / maxNavigationLine) * 100}%`, width: `${node.width}px` }}
-                    aria-label={
-                      conversation.tool === 'codex'
-                        ? `跳到你的提問：${node.preview}`
-                        : `跳到終端機第 ${node.line + 1} 行：${node.preview}`
-                    }
-                    aria-current={index === activeNavigationIndex ? 'location' : undefined}
-                    title={node.preview}
-                    tabIndex={index === activeNavigationIndex ? 0 : -1}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      jumpToNavigationLine(node.line);
-                    }}
-                  />
-                ))}
-              </>
-            )}
+        {navigationScrollable && (
+          <span
+            className="pd-term-navigation-viewport"
+            style={{ top: `${Math.min(100 - viewportHeight, viewportTop)}%`, height: `${viewportHeight}%` }}
+            aria-hidden="true"
+          />
+        )}
+        {navigationScrollable &&
+          navigation.nodes.map((node, index) => (
+            <button
+              key={`${node.line}-${node.preview}`}
+              type="button"
+              className={`pd-term-navigation-node${index === activeNavigationIndex ? ' is-active' : ''}`}
+              style={{ top: `${(node.line / maxNavigationLine) * 100}%`, width: `${node.width}px` }}
+              aria-label={`跳到終端機第 ${node.line + 1} 行：${node.preview}`}
+              aria-current={index === activeNavigationIndex ? 'location' : undefined}
+              title={node.preview}
+              tabIndex={index === activeNavigationIndex ? 0 : -1}
+              onClick={(event) => {
+                event.stopPropagation();
+                jumpToNavigationLine(node.line);
+              }}
+            />
+          ))}
       </div>
       {exitCode !== null && (
         <div
