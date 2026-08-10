@@ -1,6 +1,6 @@
 # Polydesk
 
-![version](https://img.shields.io/badge/version-v0.25.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+![version](https://img.shields.io/badge/version-v0.26.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
 
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
@@ -15,7 +15,7 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 | 功能 | 說明 |
 | --- | --- |
 | **多工作區** | 左側工作區列（可顯示/隱藏）切換專案；可加入既有資料夾，或透過 HTTPS／SSH Clone Git Repository 後直接開啟；GitHub 私有倉庫支援瀏覽器登入帳號並自動重試；每個工作區獨立狀態。 |
-| **終端機多開** | 同一工作區可並排/上下多開終端機、可拖曳調整，支援 PowerShell 等 shell；Windows 內建 shell 以絕對路徑啟動，不受其他軟體重排 PATH 影響，啟動失敗會顯示原因；工具列可一鍵建立並啟動 Claude bypass、Codex 或 Agy，且會核對 xterm 與 ConPTY 的實際欄列一致後才啟動 TUI；左側內容導覽軌可逐句跳轉目前終端機的長輸出，不讀取 Claude transcript 或 Codex rollout 對話檔；背景終端以較低成本持續接收資料；選取文字後可用 `Ctrl+C` 在終端機間複製貼上，未選取時仍送出中斷訊號；按住 `Ctrl` 點擊輸出的檔案路徑可直接開檔並跳到指定行欄，點擊 HTTP／HTTPS 網址則交由系統瀏覽器開啟。 |
+| **終端機多開** | 同一工作區可並排/上下多開終端機、可拖曳調整，支援 PowerShell 等 shell；Windows 內建 shell 以絕對路徑啟動，不受其他軟體重排 PATH 影響，啟動失敗會顯示原因；工具列可一鍵建立並啟動 Claude bypass、Codex 或 Agy，且會核對 xterm 與 ConPTY 的實際欄列一致後才啟動 TUI；所有終端機都直接使用完整 xterm 畫面，不再顯示左側內容／對話導覽軸；背景終端以較低成本持續接收資料；選取文字後可用 `Ctrl+C` 在終端機間複製貼上，未選取時仍送出中斷訊號；按住 `Ctrl` 點擊輸出的檔案路徑可直接開檔並跳到指定行欄，點擊 HTTP／HTTPS 網址則交由系統瀏覽器開啟。 |
 | **Monaco 編輯器** | 多分頁、分割並排、依視窗寬度自動換行；AI／外部工具改檔後，乾淨分頁與唯讀預覽會自動更新，大批改檔也會對帳；未存檔內容不會被覆蓋。分頁右鍵可關閉、關閉其他或關閉目前工作區的全部分頁。 |
 | **可停靠版面** | 側欄、編輯器與終端機可拖曳停靠及調整大小；按編輯器／終端機標頭的 `×` 只會原地隱藏 panel，從上方按鈕叫回時側欄會維持操作前的寬度與高度。 |
 | **Git 原始碼控制** | status / stage / commit / push / pull / stash / branch / log / diff；分支頁分開顯示本地與遠端分支，支援安全刪除本地分支或精確刪除指定 remote 的遠端分支；可建立、切換、移出或連同資料夾刪除 worktree，並相容舊版以一般工作區加入的既有 worktree；SCM、活動列與狀態列共用短時 Git 快照，錯峰讀取不重複掃描工作樹；歷史／分支不因一般檔案變動重讀，大量變更每批渲染 200 項；fetch 後線圖會顯示尚未 pull 的遠端分支與同事提交；整合終端機或外部工具完成 commit / push 後會自動同步分支與未推送狀態；**AI 產生 commit message**（可切換 claude / codex / agy 引擎）。 |
@@ -37,7 +37,7 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 
 終端機面板右上方提供三個 AI CLI 快捷按鈕：`Claude bypass` 會執行 `claude --dangerously-skip-permissions`，`Codex` 會執行 `codex`，`Agy` 會執行 `agy`。每次點擊都會建立一個獨立終端機，沿用目前工作區選定的 shell；Polydesk 會等 xterm 與 Windows ConPTY 回報相同欄列後才啟動工具，若尺寸未實際套用則自動重試，避免 Claude 等 TUI 先用錯誤欄寬排版。Claude bypass 會略過所有工具與檔案操作的權限確認，只能在你完全信任的工作區使用。
 
-Claude 與 Codex 不再使用專用對話軸。左側一律沿用通用終端機內容導覽，只根據目前 xterm scrollback 建立節點；Polydesk 不會為了導覽去讀取 Claude transcript 或 Codex rollout 對話檔。AI CLI 快捷啟動、尺寸同步與工作區狀態徽章不受影響。
+終端機內容／對話導覽軸已從 Polydesk 完整移除，Claude、Codex、Agy 與一般 shell 都不再顯示左側節點，也不會在背景掃描 xterm scrollback 或攔截 `Alt+↑`／`Alt+↓`。AI CLI 快捷啟動、尺寸同步、scrollback 與工作區狀態徽章不受影響。
 
 Windows PowerShell、CMD 與 WSL 會由 Polydesk 使用系統絕對路徑啟動，即使安裝 Sunlike365 等軟體後 `PATH` 順序改變也不需手動修環境變數。PowerShell 7 或 Git Bash 若未安裝，終端機面板會顯示 `shell-not-found` 錯誤；工作區遺失或 ConPTY 無法建立時也會提供對應代碼，不再只像按鈕沒有反應。
 
@@ -57,9 +57,7 @@ AI 執行狀態監控使用 `SystemRoot` 下的 Windows PowerShell／WMIC 絕對
 
 在截圖工具、瀏覽器或通訊軟體複製圖片後，先點一下檔案總管中的目標資料夾，再按 `Ctrl+V`，圖片會存成 `貼上圖片.png`；若檔名已存在會自動建立 `貼上圖片 copy.png`，不會覆蓋舊檔。此流程同時支援某些軟體用「無磁碟路徑、通用 MIME 虛擬檔案」提供的圖片，且不依賴系統 `PATH`。從 Windows 檔案總管複製既有圖片檔時，仍會保留原始檔名與格式。
 
-### 終端機內容導覽與多工作區效能
-
-每個終端機左側都有一條內容導覽軌。每個短線代表一個非空的邏輯行；自動換行的延續列不會重複產生節點。點擊節點可跳到該段輸出，滑鼠停留會顯示文字預覽，`Alt+↑`／`Alt+↓` 可跳到上一句或下一句，目前所在節點與可視範圍會持續標示。很長的工作階段最多顯示 220 個均勻取樣節點，但底層 5,000 行 scrollback 不會被刪減。
+### 終端機與多工作區效能
 
 同時開啟多個工作區時，背景終端仍會保留 PTY 與完整輸出，但純背景串流的 IPC 合併週期由 16ms 放寬為 100ms；renderer 使用單一 PTY 事件入口分流，不再讓每個終端重複接收所有資料事件，WebGL 也只配置給目前可見的終端。任何終端收到鍵盤輸入後 250ms 內的回應會優先以 4ms flush，避免節流拖慢互動；重新切回工作區時也會立即補送累積輸出並重新 fit，不需犧牲內容正確性。
 

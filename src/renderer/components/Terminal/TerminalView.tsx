@@ -17,7 +17,7 @@
 // 安全：以 createSecureTerminalOptions 初始化（關閉視窗/標題回報＝防回灌注入；不掛 clipboard
 // addon＝不寫剪貼簿，REQ-TERM-008）。
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
@@ -36,12 +36,6 @@ import { stripEnclosingKeycap } from './displayNormalize';
 import { DRAG_PATH_MIME, formatPathsForShell } from './pathDrop';
 import { findTerminalFileCellLinks } from './terminalFileLinks';
 import { findTerminalWebCellLinks, openTerminalWebLink } from './terminalWebLinks';
-import {
-  activeTerminalNavigationIndex,
-  adjacentTerminalNavigationIndex,
-  buildTerminalNavigationNodes,
-  type TerminalNavigationNode,
-} from './terminalNavigation';
 import { PtyDataDispatcher } from './ptyDataDispatcher';
 import { editorBus } from '../../state/editorBus';
 import type { ILink, ITheme } from '@xterm/xterm';
@@ -60,24 +54,6 @@ interface Props {
   /** 首次有效 fit 已同步到 PTY 且尺寸靜置穩定（含字型就緒）；快捷啟動器用此時機才送出 TUI 命令。 */
   onInitialSizeReady?: (termId: string) => void;
 }
-
-interface TerminalNavigationState {
-  nodes: TerminalNavigationNode[];
-  bufferLength: number;
-  viewportLine: number;
-  viewportRows: number;
-}
-
-const EMPTY_NAVIGATION: TerminalNavigationState = {
-  nodes: [],
-  bufferLength: 0,
-  viewportLine: 0,
-  viewportRows: 0,
-};
-
-// 串流輸出時，onWriteParsed 最多每 frame 觸發一次；導覽軌不需要同等更新頻率，稍作合併可避免
-// 長輸出期間反覆掃描最多 5,000 行 scrollback 與重建 React 節點。
-const NAVIGATION_REFRESH_MS = 300;
 
 // preload 的 pty:data 是廣播通道；所有 TerminalView 共用一個 renderer listener，再依 termId O(1) 分流。
 const ptyDataDispatcher = new PtyDataDispatcher((listener) => ipc.pty.onData(listener));
@@ -146,9 +122,6 @@ export function TerminalView({
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
   const webglAddonRef = useRef<{ dispose(): void } | null>(null);
-  const navigationRefreshRef = useRef<() => void>(() => {});
-  const navigationNodesRef = useRef<TerminalNavigationNode[]>([]);
-  const [navigation, setNavigation] = useState<TerminalNavigationState>(EMPTY_NAVIGATION);
   // 字型設定：建立時取當下值（ref 避免進主 effect deps 重建終端機）；變更由獨立 effect 就地套用。
   const { font } = useTerminalFont();
   const fontRef = useRef(font);
@@ -205,44 +178,6 @@ export function TerminalView({
     fitRef.current = fit;
 
     let disposed = false;
-
-    // 對話／輸出導覽軌：xterm buffer 已完成 ANSI、游標移動與換行解析，故以 buffer 的「非空白
-    // 邏輯行起點」當節點，不從原始 PTY bytes 猜句子。wrapped continuation 不重複列節點；長 session
-    // 由純函式等距壓縮，保持固定 DOM 成本。alternate buffer 沒有 scrollback 時仍保留 rail 空槽，避免
-    // TUI 切 buffer 時終端寬度忽大忽小。
-    let navigationRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-    const refreshNavigation = (): void => {
-      navigationRefreshTimer = null;
-      if (disposed) return;
-      const buffer = term.buffer.active;
-      const lines = [];
-      for (let line = 0; line < buffer.length; line++) {
-        const bufferLine = buffer.getLine(line);
-        if (!bufferLine) continue;
-        lines.push({ line, text: bufferLine.translateToString(true), isWrapped: bufferLine.isWrapped });
-      }
-      const nodes = buildTerminalNavigationNodes(lines);
-      navigationNodesRef.current = nodes;
-      host.dataset.navigationNodeCount = String(nodes.length);
-      setNavigation({
-        nodes,
-        bufferLength: buffer.length,
-        viewportLine: buffer.viewportY,
-        viewportRows: term.rows,
-      });
-    };
-    const scheduleNavigationRefresh = (): void => {
-      if (!visibleRef.current) return;
-      if (navigationRefreshTimer) return;
-      navigationRefreshTimer = setTimeout(refreshNavigation, NAVIGATION_REFRESH_MS);
-    };
-    navigationRefreshRef.current = scheduleNavigationRefresh;
-    const onWriteParsedDisp = term.onWriteParsed(scheduleNavigationRefresh);
-    const onNavigationScrollDisp = term.onScroll((viewportLine) => {
-      setNavigation((current) => (current.viewportLine === viewportLine ? current : { ...current, viewportLine }));
-    });
-    const onNavigationResizeDisp = term.onResize(scheduleNavigationRefresh);
-    scheduleNavigationRefresh();
 
     // 終端機檔案連結：只在 Ctrl+左鍵時啟用，避免一般點擊干擾文字選取與 TUI 滑鼠操作。
     // renderer 只辨識文字；存在性、工作區 containment、外部檔確認與危險副檔名封鎖都由 main 執行。
@@ -547,23 +482,6 @@ export function TerminalView({
     // xterm 預設 Ctrl+V→送控制字元 ^V（不貼上）。攔截判定為貼上/複製的鍵：return false 讓 xterm 不送 ^V，
     // 改由我們讀剪貼簿後 term.paste（原生 paste 已被上方阻斷，故此處是唯一貼上來源、不重複）。
     term.attachCustomKeyEventHandler((e) => {
-      if (
-        e.type === 'keydown' &&
-        e.altKey &&
-        !e.ctrlKey &&
-        !e.metaKey &&
-        !e.shiftKey &&
-        (e.key === 'ArrowUp' || e.key === 'ArrowDown')
-      ) {
-        const nodes = navigationNodesRef.current;
-        const direction = e.key === 'ArrowUp' ? -1 : 1;
-        const index = adjacentTerminalNavigationIndex(nodes, term.buffer.active.viewportY, direction);
-        if (index >= 0) {
-          e.preventDefault();
-          term.scrollToLine(nodes[index].line);
-          return false;
-        }
-      }
       const action = classifyClipboardKey(e);
       if (!action) return true;
       // Ctrl+C 沒有選取時不可攔截，必須交還 xterm 送出 ^C / SIGINT。
@@ -667,7 +585,6 @@ export function TerminalView({
       if (fitRetryTimer) clearTimeout(fitRetryTimer);
       if (initialReadyTimer) clearTimeout(initialReadyTimer);
       if (outputSizeHealTimer) clearTimeout(outputSizeHealTimer);
-      if (navigationRefreshTimer) clearTimeout(navigationRefreshTimer);
       themeObserver.disconnect();
       ro.disconnect();
       host.removeEventListener('focusin', onFocusIn);
@@ -683,20 +600,14 @@ export function TerminalView({
       view?.removeEventListener('drop', onDrop);
       clearDropHint();
       onDataDisp.dispose();
-      onWriteParsedDisp.dispose();
-      onNavigationScrollDisp.dispose();
-      onNavigationResizeDisp.dispose();
       linkProviderDisp.dispose();
       offData();
       fitNowRef.current = () => {};
-      navigationRefreshRef.current = () => {};
       webglAddonRef.current = null;
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
-      navigationNodesRef.current = [];
       keyTsQueueRef.current = [];
-      setNavigation(EMPTY_NAVIGATION);
     };
   }, [termId, wsId]);
 
@@ -760,35 +671,8 @@ export function TerminalView({
     const host = hostRef.current;
     if (!host || host.offsetWidth === 0 || host.offsetHeight === 0) return;
     fitNowRef.current(); // 走同一條 safeFit（含極窄寬守衛 + 更新反震盪基準）
-    navigationRefreshRef.current();
     termRef.current?.focus();
   }, [visible, termId]);
-
-  const jumpToNavigationLine = (line: number): void => {
-    const term = termRef.current;
-    if (!term) return;
-    term.scrollToLine(line);
-    term.focus();
-  };
-
-  const jumpFromNavigationRail = (event: React.MouseEvent<HTMLDivElement>): void => {
-    if (event.target !== event.currentTarget || navigation.nodes.length === 0) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    if (rect.height <= 0) return;
-    const ratio = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
-    const targetLine = ratio * Math.max(1, navigation.bufferLength - 1);
-    let nearest = navigation.nodes[0];
-    for (const node of navigation.nodes) {
-      if (Math.abs(node.line - targetLine) < Math.abs(nearest.line - targetLine)) nearest = node;
-    }
-    jumpToNavigationLine(nearest.line);
-  };
-
-  const activeNavigationIndex = activeTerminalNavigationIndex(navigation.nodes, navigation.viewportLine);
-  const maxNavigationLine = Math.max(1, navigation.bufferLength - 1);
-  const viewportTop = (navigation.viewportLine / maxNavigationLine) * 100;
-  const viewportHeight = Math.min(100, Math.max(4, (navigation.viewportRows / Math.max(1, navigation.bufferLength)) * 100));
-  const navigationScrollable = navigation.bufferLength > navigation.viewportRows;
 
   return (
     <div
@@ -802,38 +686,6 @@ export function TerminalView({
       {/* 邊距用 inset 而非 padding：Chromium 在 border-box 下 getComputedStyle().height 回傳含 padding
           的值，FitAddon 以此量可用高度會把 padding 也算進去 → 多排一列、最後一列被裁掉。 */}
       <div ref={hostRef} className="pd-term-xterm-host" />
-      <div
-        className="pd-term-navigation"
-        role="navigation"
-        aria-label="終端機內容導覽"
-        title="點擊節點跳轉；Alt+↑／Alt+↓ 前後跳轉"
-        onClick={jumpFromNavigationRail}
-      >
-        {navigationScrollable && (
-          <span
-            className="pd-term-navigation-viewport"
-            style={{ top: `${Math.min(100 - viewportHeight, viewportTop)}%`, height: `${viewportHeight}%` }}
-            aria-hidden="true"
-          />
-        )}
-        {navigationScrollable &&
-          navigation.nodes.map((node, index) => (
-            <button
-              key={`${node.line}-${node.preview}`}
-              type="button"
-              className={`pd-term-navigation-node${index === activeNavigationIndex ? ' is-active' : ''}`}
-              style={{ top: `${(node.line / maxNavigationLine) * 100}%`, width: `${node.width}px` }}
-              aria-label={`跳到終端機第 ${node.line + 1} 行：${node.preview}`}
-              aria-current={index === activeNavigationIndex ? 'location' : undefined}
-              title={node.preview}
-              tabIndex={index === activeNavigationIndex ? 0 : -1}
-              onClick={(event) => {
-                event.stopPropagation();
-                jumpToNavigationLine(node.line);
-              }}
-            />
-          ))}
-      </div>
       {exitCode !== null && (
         <div
           className="pd-term-exit"

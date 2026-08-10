@@ -85,79 +85,10 @@
   inset: 0;
 }
 
-/* 終端機內容導覽軌：左側常駐窄槽不因有無 scrollback 改變 xterm 寬度，避免 Claude/Codex TUI
-   在 rail 出現瞬間重新排版。節點對應非空白邏輯行，viewport 薄片顯示目前閱讀範圍。 */
 .pd-term-xterm-host {
   position: absolute;
   inset: var(--space-2);
-  left: calc(var(--space-2) + 18px);
   overflow: hidden;
-}
-.pd-term-navigation {
-  position: absolute;
-  z-index: 4;
-  top: var(--space-2);
-  bottom: var(--space-2);
-  left: var(--space-1);
-  width: 18px;
-  cursor: pointer;
-  overflow: hidden;
-}
-.pd-term-navigation::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 8px;
-  width: 1px;
-  background: color-mix(in oklab, var(--border), transparent 42%);
-}
-.pd-term-navigation-viewport {
-  position: absolute;
-  z-index: 1;
-  left: 5px;
-  width: 7px;
-  min-height: 6px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in oklab, var(--accent, #6e8efb), transparent 76%);
-  pointer-events: none;
-}
-.pd-term-navigation-node {
-  position: absolute;
-  z-index: 2;
-  left: 0;
-  height: 2px;
-  min-width: 5px;
-  max-width: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: var(--meta);
-  opacity: 0.48;
-  transform: translateY(-50%);
-  transform-origin: left center;
-  cursor: pointer;
-  transition: opacity 0.12s var(--ease-standard, ease), background 0.12s var(--ease-standard, ease), transform 0.12s var(--ease-standard, ease);
-}
-.pd-term-navigation-node:hover,
-.pd-term-navigation-node:focus-visible {
-  opacity: 0.95;
-  background: var(--fg-2);
-  transform: translateY(-50%) scaleX(1.08);
-}
-.pd-term-navigation-node.is-active {
-  opacity: 1;
-  background: var(--accent, #6e8efb);
-  min-height: 3px;
-}
-.pd-term-navigation-node:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent, #6e8efb), transparent 52%);
-}
-@media (prefers-reduced-motion: reduce) {
-  .pd-term-navigation-node {
-    transition: none;
-  }
 }
 /* 背景停放區：隱藏／非 active 工作區的 host 停在此，不佔版面、不渲染，但 React 仍掛載。 */
 .pd-term-stash {

@@ -7,6 +7,26 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.26.0（2026-08-10）
+
+依使用者再次確認，完整移除終端機內容／對話導覽軸；不只 Claude／Codex，Agy 與一般 shell 也不再顯示或執行這套功能。
+
+- 對應功能 commit：待回填
+
+### 2026-08-10｜完整移除終端機導覽軸
+
+- `TerminalView` 刪除 xterm buffer 掃描、節點取樣狀態、scroll／resize 更新、點擊跳轉與 `Alt+↑`／`Alt+↓` 攔截，不留隱藏中的背景處理。
+- 刪除 `terminalNavigation.ts`、純函式單測、真 PowerShell 導覽 E2E 與整組 `.pd-term-navigation*` 樣式；AI 快捷啟動回歸改為斷言整頁不存在導覽 DOM。
+- xterm host 收回原本固定預留的 18 px 左側空間；PTY、5,000 行 scrollback、AI 快捷啟動、尺寸同步與狀態徽章維持不變。
+- 版本同步至 v0.26.0，README、內建關於視窗、dogfood 歷程、專案地圖與出貨報告一併更新。
+
+### 驗證
+
+- 修正前真 Electron 回歸可找到 1 個導覽軸；完整移除後 Claude bypass、Codex、Agy 三種快捷終端正常啟動，整頁 `.pd-term-navigation` 為 0。
+- TypeScript typecheck、正式 build 與完整序列 Vitest 通過：65 個測試檔、562/562 案全綠；刪除數精確對應原導覽純函式 3 案。
+- 真 Electron E2E 共 108 案：105 通過，3 個需要真 Agy／Codex 帳號的 dogfood 案例依既有條件跳過；第 8 shard 初跑有一次檔案連結 Ctrl+點擊時序 flake，單案與完整 shard 重跑皆綠。`REQ-PERF-001` 沿用既有核准豁免。
+- 效能回歸維持：四工作區串流 frame p95 16.9 ms、renderer CPU 1.4%、working set 179.9 MB；worktree list p50 232 ms 通過既有 regression guard，報表 p95 461 ms（N=3）高於文字 budget 300 ms，但現行測試契約僅以 p50 守衛，未在本輪擴張修改。
+
 ## v0.25.0（2026-08-10）
 
 修正編輯器／終端機標頭 `×` 會移除 panel、讓側欄跟著重新分配尺寸的問題；關閉改為原地隱藏，重新顯示後沿用原本版面與工作狀態。

@@ -169,6 +169,7 @@
 - [x] **DF-30 SCM 分支分組與安全刪除**（2026-08-06 dogfood 需求）— 分支頁將本地與遠端分成可獨立收合的群組並顯示數量，`⋯` 與右鍵共用操作選單；本地分支只走 `git branch -d`，目前分支、worktree 使用中與未合併狀態均具名阻擋。遠端刪除以結構化 remote／branch 執行真正的 push-delete，支援 `team/backend` 斜線 remote，保留本地同名分支；錯誤採結構化分類並中和控制字元。驗證：typecheck、build、574 個 Vitest、110 個非豁免 Electron E2E 全綠；既有冷啟動效能案依使用者核准豁免，門檻與測試不變。
 - [x] **DF-31 移除 Claude／Codex 專用對話軸**（2026-08-08 dogfood 回饋：對話軸實用性不足）— 移除 `ai:conversation` shared／main／renderer 鏈路、Claude transcript 與 Codex rollout 對話 reader、session 配對、背景輪詢、專用節點樣式與對應測試；兩種 AI 終端機統一使用只依目前 xterm buffer 建立的通用內容導覽，不再為導覽讀取對話檔。保留 AI 快捷啟動、PTY 尺寸同步、Claude hook 狀態清理與工作區 AI 徽章。驗證：typecheck、build、目標 Vitest 50 案與真 Electron 2 案全綠；全量 Vitest 初跑 563/564，唯一既有 FileWatcher flake 隔離重跑 7/7 後，以單 worker 完整重跑 564/564 全綠；全量 Electron E2E 106 通過、3 個真 AI dogfood 依條件跳過。
 - [x] **DF-32 標頭 × 隱藏面板時維持側欄尺寸**（2026-08-10 dogfood 回饋）— dockview 預設 `×` 原本直接移除 editor／terminal panel，造成版面樹重排與側欄寬高漂移；改由自訂 tab 把 `×` 接回共用 `setVisible` 顯隱路徑，切換前後將側欄設回當下實際寬高，並保留 editor／terminal component。新增 layout 純函式單測與真 Electron 標頭關閉回歸，修正前重現側欄寬度漂移 49 px；typecheck、build、完整 Vitest 565/565，以及 106 個非 dogfood Electron E2E 全綠，3 個真 AI dogfood 依條件跳過，冷啟動既有門檻沿用核准豁免。
+- [x] **DF-33 完整移除終端機內容／對話導覽軸**（2026-08-10 dogfood 澄清：要拿掉整個功能，不是只移除 Claude／Codex 專用資料源）— 刪除所有終端的導覽 DOM／CSS、xterm buffer 掃描、節點取樣、點擊與 Alt 鍵跳轉、純函式與真 PowerShell E2E；xterm 收回 18 px 預留空間。AI 快捷啟動回歸覆蓋 Claude／Codex／Agy 正常啟動且整頁導覽元素為 0；typecheck、build、完整 Vitest 562/562，以及 105 個非 dogfood Electron E2E 全綠，3 個真 AI dogfood 依條件跳過；檔案連結 Ctrl+點擊初跑一次時序 flake，單案與完整 shard 重跑皆綠，冷啟動既有門檻沿用核准豁免。
 
 ## 規劃增強（dogfood 提出、AskUserQuestion 定版範圍、ship 後交付）
 

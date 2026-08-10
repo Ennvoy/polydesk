@@ -1,3 +1,9 @@
+## 2026-08-10 完整移除終端機導覽軸
+- 依使用者澄清，移除的是整個終端機內容／對話導覽功能，不再保留通用 xterm 導覽作為 Claude／Codex 專用軸的替代。
+- 刪除 renderer DOM／CSS、buffer 掃描、節點與鍵盤跳轉、純函式單測及真 PowerShell 導覽 E2E；所有終端收回左側預留空間。
+- Claude bypass、Codex、Agy 快捷啟動真 Electron 回歸綠，整頁導覽元素為 0；PTY、scrollback、尺寸同步與 AI 狀態不變。
+- typecheck、build、完整 Vitest 562/562 與 105 個非 dogfood Electron E2E 綠；3 個真 AI dogfood 依條件跳過，檔案連結初跑一次時序 flake 於單案與完整 shard 重跑皆綠。
+
 ## 2026-08-10 標頭關閉維持側欄尺寸
 - 編輯器／終端機標頭 `×` 改為原地隱藏，不再移除 panel 並觸發版面樹重排。
 - 隱藏或叫回編輯器／終端機時，側欄維持操作前的實際寬度與高度；component 與工作狀態留在原實例。

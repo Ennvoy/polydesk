@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.26.0',
+    date: '2026-08-10',
+    highlights: [
+      '完整移除所有終端機左側的內容導覽軸，不再區分 Claude、Codex、Agy 或一般 shell',
+      '刪除 xterm buffer 掃描、節點取樣、點擊跳轉與 Alt+方向鍵導覽處理',
+      '終端機收回原本預留給導覽軸的左側空間，PTY、快捷啟動與 scrollback 行為維持不變',
+    ],
+  },
+  {
     version: '0.25.0',
     date: '2026-08-10',
     highlights: [

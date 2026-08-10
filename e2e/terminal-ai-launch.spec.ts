@@ -74,10 +74,6 @@ test('Claude bypass / Codex / Agy 按鈕會各開終端機並送出對應命令'
   await expect
     .poll(() => readTermBuffer(page, 0), { timeout: 15000 })
     .toContain(`FAKE_CLAUDE_COLS:${claudeCols}`);
-  const claudeNavigation = page.locator('.pd-term-view').nth(0).locator('.pd-term-navigation');
-  await expect(claudeNavigation).toHaveAttribute('aria-label', '終端機內容導覽');
-  await expect(claudeNavigation).not.toHaveAttribute('data-message-node-count', /.+/);
-
   // 首屏穩定窗回歸（DF-19）：命令送出後的短窗內欄數不得再變——遲到的 resize（版面收斂尾巴、
   // 字型載入改格寬、失敗補送）撞上 TUI 靜態歡迎橫幅繪製，就是「偶發首屏殘影跑版」的病根。
   await page.waitForTimeout(600);
@@ -101,13 +97,12 @@ test('Claude bypass / Codex / Agy 按鈕會各開終端機並送出對應命令'
   await expect(page.locator('.pd-term-pane')).toHaveCount(2, { timeout: 15000 });
   await expect(page.locator('[data-term-unicode]').nth(1)).toHaveAttribute('data-initial-size-ready', 'true');
   await expect.poll(() => readTermBuffer(page, 1), { timeout: 15000 }).toContain('FAKE_CODEX_STARTED');
-  const codexNavigation = page.locator('.pd-term-view').nth(1).locator('.pd-term-navigation');
-  await expect(codexNavigation).toHaveAttribute('aria-label', '終端機內容導覽');
-  await expect(codexNavigation).not.toHaveAttribute('data-message-node-count', /.+/);
   await page.getByRole('button', { name: '開啟 Agy' }).click();
   await expect(page.locator('.pd-term-pane')).toHaveCount(3, { timeout: 15000 });
   await expect(page.locator('[data-term-unicode]').nth(2)).toHaveAttribute('data-initial-size-ready', 'true');
   await expect.poll(() => readTermBuffer(page, 2), { timeout: 15000 }).toContain('FAKE_AGY_STARTED');
+  // 終端機內容導覽功能已完整移除：Claude、Codex、Agy 與一般 shell 都不得再渲染該 DOM。
+  await expect(page.locator('.pd-term-navigation')).toHaveCount(0);
 
   await expect(page.locator('.pd-term-pane-label')).toHaveText(['Claude bypass', 'Codex', 'Agy']);
 

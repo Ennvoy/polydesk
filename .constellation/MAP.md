@@ -35,12 +35,12 @@
 - `remotes` 是本機 remote-tracking snapshot；未 fetch／prune 時可能過期。現有 fetch 未帶 `--prune`。
 - `remotes` 扁平欄位仍供既有 worktree 建立對話框使用；SCM 身分判斷不得退回依賴它。
 
-## 終端機內容導覽現況
+## 終端機導覽移除現況
 
-- Claude／Codex 專用對話軸已移除；shared contract、main router 與 renderer 都不再暴露或呼叫 `ai:conversation`。
-- `TerminalView` 一律依目前 xterm buffer 的非空邏輯行建立通用內容導覽節點，wrapped continuation 不重複建立；點擊或 `Alt+↑`／`Alt+↓` 只在目前終端機 scrollback 內移動。
-- Claude transcript reader、Codex rollout 對話 reader、session 配對、背景對話輪詢與專用訊息節點樣式均已刪除；終端機導覽不再讀取 AI 對話檔。
-- `POLYDESK_TERM_ID` 仍供 Claude hook 精確清理同 terminal 的殘留狀態；AI 快捷啟動、PTY 尺寸同步及工作區狀態徽章不受影響。
+- 終端機內容／對話導覽軸已完整移除；Claude、Codex、Agy 與一般 shell 都不再渲染導覽 DOM 或預留左側空間。
+- `TerminalView` 不再掃描 xterm buffer、建立節點、訂閱導覽用 scroll／resize 事件或攔截 `Alt+↑`／`Alt+↓`；`terminalNavigation` 純函式、樣式與專用 E2E 亦已刪除。
+- 先前移除的 `ai:conversation` shared／main／renderer 鏈路、Claude transcript reader、Codex rollout reader、session 配對與背景輪詢維持不存在。
+- `POLYDESK_TERM_ID` 仍供 Claude hook 精確清理同 terminal 的殘留狀態；xterm scrollback、AI 快捷啟動、PTY 尺寸同步及工作區狀態徽章不受影響。
 
 ## Dock 版面顯隱現況
 
