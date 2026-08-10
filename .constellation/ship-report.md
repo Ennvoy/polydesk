@@ -19,6 +19,7 @@
 
 ## 證據在哪
 
+- 功能提交：`ad93a35`。
 - 最終 runner 證據：`.constellation/archive/2026-08-10-workspace-header-onboarding-help-splash/ship-evidence.md`，簽章 `890184bf0336cce155524fbbd2a1525af9dc69a63036be45d995576567a27bc6`。
 - 需求與票據：同一 archive 下的 `tickets/`、`grill-close.md` 與 `design-frozen.json`；關鍵決策為 `.constellation/decisions/012`–`038`。
 - 核心實作：`src/main/index.ts`、`src/main/window/splashWindow.ts`、`src/renderer/components/WorkspaceRail.tsx`、`src/renderer/components/ActivityBar.tsx`、`src/renderer/components/Help/`、`src/main/store/` 與 `src/shared/`。

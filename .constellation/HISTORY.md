@@ -2,7 +2,7 @@
 - 完成 3 張票：移除最左側活動列並把四個入口放進工作區標頭；新增首次 7 步導覽、可搜尋完整指南與冷啟動 splash。
 - 導覽狀態以 schema v3 安全持久化，手動重開不覆寫首次狀態；功能文件涵蓋總覽用量與 AI commit 草稿等既有入口。
 - splash 等待工作區載入、`ready-to-show` 與固定白名單 renderer-ready 握手後才交接主窗；失敗可重試／退出，第二實例不會提前顯示。
-- 完整 ship runner：Vitest 571/571、112 個非豁免 Electron E2E 全綠，3 個真 AI dogfood 跳過；Spec／Standards 複核皆 0 blocker。冷啟動 p95 3,896 ms 依既有核准豁免揭露，門檻未放寬。
+- 功能提交 `ad93a35`；完整 ship runner：Vitest 571/571、112 個非豁免 Electron E2E 全綠，3 個真 AI dogfood 跳過；Spec／Standards 複核皆 0 blocker。冷啟動 p95 3,896 ms 依既有核准豁免揭露，門檻未放寬。
 
 ## 2026-08-10 完整移除終端機導覽軸
 - 依使用者澄清，移除的是整個終端機內容／對話導覽功能，不再保留通用 xterm 導覽作為 Claude／Codex 專用軸的替代。
