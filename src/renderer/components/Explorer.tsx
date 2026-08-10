@@ -611,10 +611,10 @@ export function Explorer(): React.JSX.Element {
         <span>總管{ws ? `：${ws.name}` : ''}</span>
         {wsId ? (
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
-            <button className="pd-activity-btn" style={{ width: 24, height: 24, color: 'var(--meta)' }} aria-label="在根目錄新增檔案" title="新增檔案" onClick={() => startCreate('', false)}>
+            <button className="pd-compact-icon-btn" style={{ width: 24, height: 24, color: 'var(--meta)' }} aria-label="在根目錄新增檔案" title="新增檔案" onClick={() => startCreate('', false)}>
               ＋
             </button>
-            <button className="pd-activity-btn" style={{ width: 24, height: 24, color: 'var(--meta)' }} aria-label="重新整理檔案樹" title="重新整理" onClick={() => void loadDir('')}>
+            <button className="pd-compact-icon-btn" style={{ width: 24, height: 24, color: 'var(--meta)' }} aria-label="重新整理檔案樹" title="重新整理" onClick={() => void loadDir('')}>
               <RefreshIcon />
             </button>
           </span>

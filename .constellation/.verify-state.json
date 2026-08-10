@@ -1,5 +1,6 @@
 {
   "targets": {
-    "ship": 0
+    "ship": 0,
+    ".constellation/tickets/T-002-workspace-header-navigation.md": 0
   }
 }

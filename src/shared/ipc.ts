@@ -23,6 +23,7 @@ import type {
   PersistState,
   AiCommitSettings,
   TerminalFontSettings,
+  OnboardingState,
   AiUsage,
   McpWireResult,
   ConflictInfo,
@@ -39,6 +40,10 @@ import type {
 /** invoke 通道：renderer 經 preload 呼叫、main `ipcMain.handle` 回應（一次性 Promise）。 */
 export interface InvokeChannels {
   // 應用程式層操作
+  'app:rendererReady': {
+    req: void;
+    res: { ok: true };
+  };
   'app:openExternalUrl': {
     req: { url: string };
     res: { opened: true } | { error: 'invalid-url' | 'open-failed' };
@@ -219,6 +224,7 @@ export interface InvokeChannels {
   'store:setRailWidth': { req: { width: number }; res: { ok: true } };
   'store:setAiCommit': { req: { cfg: AiCommitSettings }; res: { ok: true } };
   'store:setTerminalFont': { req: { cfg: TerminalFontSettings }; res: { ok: true } };
+  'store:setOnboarding': { req: { onboarding: OnboardingState }; res: { ok: true } };
   'store:export': { req: void; res: { json: string } };
   'store:import': { req: { json: string }; res: { ok: true } | { error: string } };
   // 更新

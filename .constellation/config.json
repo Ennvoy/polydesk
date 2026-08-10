@@ -1,5 +1,6 @@
 {
   "approved": true,
+  "timeoutSec": 3600,
   "commands": {
     "test": [
       "cmd /c npm run typecheck -- --pretty false",

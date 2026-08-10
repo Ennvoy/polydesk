@@ -1,0 +1,28 @@
+{
+  "frozen": [
+    "src/main/window/splashWindow.ts",
+    "src/renderer/components/ActivityBar.tsx",
+    "src/renderer/components/WorkspaceRail.tsx",
+    "src/renderer/components/TitleBar.tsx",
+    "src/renderer/components/Settings/SettingsPanel.tsx",
+    "src/renderer/components/Help/GuidedTour.tsx",
+    "src/renderer/components/Help/HelpCenter.tsx",
+    "src/renderer/components/Help/help.css",
+    "src/renderer/components/Help/tour.css",
+    "src/renderer/theme/components.css"
+  ],
+  "log": [
+    { "path": "src/main/window/splashWindow.ts", "action": "freeze", "at": "2026-08-10T16:40:56.7477506+08:00", "reason": "design 定稿" },
+    { "path": "src/renderer/components/ActivityBar.tsx", "action": "freeze", "at": "2026-08-10T16:40:56.7477506+08:00", "reason": "design 定稿" },
+    { "path": "src/renderer/components/WorkspaceRail.tsx", "action": "freeze", "at": "2026-08-10T16:40:56.7477506+08:00", "reason": "design 定稿" },
+    { "path": "src/renderer/components/TitleBar.tsx", "action": "freeze", "at": "2026-08-10T16:40:56.7477506+08:00", "reason": "design 定稿" },
+    { "path": "src/renderer/components/Settings/SettingsPanel.tsx", "action": "freeze", "at": "2026-08-10T16:40:56.7477506+08:00", "reason": "design 定稿" },
+    { "path": "src/renderer/components/Help/GuidedTour.tsx", "action": "freeze", "at": "2026-08-10T16:40:56.7477506+08:00", "reason": "design 定稿" },
+    { "path": "src/renderer/components/Help/HelpCenter.tsx", "action": "freeze", "at": "2026-08-10T16:40:56.7477506+08:00", "reason": "design 定稿" },
+    { "path": "src/renderer/components/Help/help.css", "action": "freeze", "at": "2026-08-10T16:40:56.7477506+08:00", "reason": "design 定稿" },
+    { "path": "src/renderer/components/Help/tour.css", "action": "freeze", "at": "2026-08-10T16:40:56.7477506+08:00", "reason": "design 定稿" },
+    { "path": "src/renderer/theme/components.css", "action": "freeze", "at": "2026-08-10T16:40:56.7477506+08:00", "reason": "design 定稿" },
+    { "path": "src/renderer/components/Help/HelpCenter.tsx", "action": "unfreeze", "at": "2026-08-10T18:25:06.8554868+08:00", "reason": "使用者同意修正 Spec 軸完整指南缺口，見 decisions/038" },
+    { "path": "src/renderer/components/Help/HelpCenter.tsx", "action": "freeze", "at": "2026-08-10T18:32:10.3812068+08:00", "reason": "Spec 完整性缺口修正並通過目標驗證後重新凍結" }
+  ]
+}

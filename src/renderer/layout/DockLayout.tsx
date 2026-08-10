@@ -22,6 +22,7 @@ import {
   toggleTerminalMaximize,
   togglePanel,
   togglePanelPreservingSize,
+  panelVisibleById,
   withinSizeLimit,
   type LayoutUiState,
   type ToolbarState,
@@ -39,6 +40,16 @@ const SIDEBAR_ID = 'sidebar';
 const TERMINAL_ID = 'terminal';
 const EDITOR_ID = 'editor';
 const TOGGLEABLE: readonly string[] = [SIDEBAR_ID, EDITOR_ID, TERMINAL_ID];
+export type LayoutPanelName = 'sidebar' | 'editor' | 'terminal';
+const layoutUserRevision: Record<LayoutPanelName, number> = {
+  sidebar: 0,
+  editor: 0,
+  terminal: 0,
+};
+
+function panelId(which: LayoutPanelName): string {
+  return which === 'sidebar' ? SIDEBAR_ID : which === 'editor' ? EDITOR_ID : TERMINAL_ID;
+}
 
 // 模組級單例 api，供 F-10 / features 取用（toggle/maximize/reset/開檔聚焦編輯區）。
 let layoutApi: DockviewApi | null = null;
@@ -137,6 +148,9 @@ function showAllGroupHeaders(api: DockviewApi): void {
 export function resetLayout(): void {
   const api = layoutApi;
   if (!api) return;
+  for (const which of Object.keys(layoutUserRevision) as LayoutPanelName[]) {
+    layoutUserRevision[which] += 1;
+  }
   // 1. 退出任何最大化（最大化態下 move 行為不可預期）。
   try {
     api.exitMaximizedGroup();
@@ -177,15 +191,39 @@ export function resetLayout(): void {
 }
 
 /** 供標題列「檢視」選單切換面板顯隱（toolbar 視覺態經 dockview onDidLayoutChange 自動 re-sync）。 */
-export function toggleLayoutPanel(which: 'sidebar' | 'editor' | 'terminal'): void {
+export function toggleLayoutPanel(which: LayoutPanelName, source: 'user' | 'tour' = 'user'): void {
   const api = layoutApi;
   if (!api) return;
+  if (source === 'user') layoutUserRevision[which] += 1;
   if (which === 'sidebar') togglePanel(api, SIDEBAR_ID, () => addSidebar(api));
   else if (which === 'editor') {
     togglePanelPreservingSize(api, EDITOR_ID, () => addEditor(api), SIDEBAR_ID);
   } else {
     togglePanelPreservingSize(api, TERMINAL_ID, () => addTerminal(api), SIDEBAR_ID);
   }
+}
+
+export function setLayoutPanelVisible(which: LayoutPanelName, visible: boolean): void {
+  const api = layoutApi;
+  if (!api) return;
+  const current = panelVisibleById(api, panelId(which));
+  if (current !== visible) toggleLayoutPanel(which, 'user');
+}
+
+/** 導覽暫時顯示 panel；使用者中途親自改過版面後，cleanup 不覆蓋其新選擇。 */
+export function revealLayoutPanelForTour(which: LayoutPanelName): () => void {
+  const api = layoutApi;
+  if (!api) return () => undefined;
+  const id = panelId(which);
+  const revision = layoutUserRevision[which];
+  const changed = !panelVisibleById(api, id);
+  if (changed) toggleLayoutPanel(which, 'tour');
+  return () => {
+    const currentApi = layoutApi;
+    if (changed && currentApi && layoutUserRevision[which] === revision && panelVisibleById(currentApi, id)) {
+      toggleLayoutPanel(which, 'tour');
+    }
+  };
 }
 
 /** dockview 標頭 × 與工具列共用原地顯隱，避免移除 panel 後重排版面並 dispose 工作狀態。 */
@@ -422,6 +460,7 @@ export function DockLayout(): React.JSX.Element {
     >
       <div
         className="pd-panel-header pd-docklayout-toolbar"
+        data-tour="layout-toolbar"
         role="toolbar"
         aria-label="版面控制"
         style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', textTransform: 'none' }}
@@ -504,7 +543,7 @@ export function DockLayout(): React.JSX.Element {
         </button>
       </div>
 
-      <div className="pd-docklayout-body" style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+      <div className="pd-docklayout-body" data-tour="dock-workbench" style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <DockviewReact
           className={`polydesk-dockview ${themeClass}`}
           components={dockviewComponents}

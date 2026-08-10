@@ -2,9 +2,11 @@
 // 提供 seedWorkspace 等真實鏈路工具（經真 fs 建資料夾，由真 IPC 加入工作區）。
 
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
-import { mkdtempSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { CURRENT_SCHEMA_VERSION } from '../src/main/store/schema';
+import { ONBOARDING_VERSION } from '../src/shared/constants';
 
 export interface LaunchedApp {
   app: ElectronApplication;
@@ -12,16 +14,54 @@ export interface LaunchedApp {
   userData: string;
 }
 
+export interface LaunchOptions {
+  userData?: string;
+  env?: Record<string, string>;
+  showOnboarding?: boolean;
+}
+
 const mainEntry = (): string => join(process.cwd(), 'out', 'main', 'index.js');
 
-export async function launchApp(opts?: { userData?: string; env?: Record<string, string> }): Promise<LaunchedApp> {
+export async function launchRawApp(opts?: LaunchOptions): Promise<{ app: ElectronApplication; userData: string }> {
   const userData = opts?.userData ?? mkdtempSync(join(tmpdir(), 'polydesk-e2e-'));
+  // 多數既有 E2E 測的是各自功能，不應被首次導覽卡片遮住。只有導覽專案明確要求時
+  // 才保留真正的全新狀態；若呼叫端已 seed state.json，絕不覆蓋。
+  const statePath = join(userData, 'state.json');
+  if (!opts?.showOnboarding && !existsSync(statePath)) {
+    mkdirSync(userData, { recursive: true });
+    writeFileSync(statePath, JSON.stringify({
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      onboarding: { version: ONBOARDING_VERSION, status: 'completed', step: 0 },
+    }), 'utf-8');
+  }
   const app = await electron.launch({
     args: [mainEntry()],
     cwd: process.cwd(),
     env: { ...process.env, POLYDESK_USER_DATA: userData, ...opts?.env } as Record<string, string>,
   });
-  const page = await app.firstWindow();
+  return { app, userData };
+}
+
+export async function launchApp(opts?: LaunchOptions): Promise<LaunchedApp> {
+  const { app, userData } = await launchRawApp(opts);
+  // splash 也是 BrowserWindow；必須挑出真正的 renderer 主視窗，不能把 data: splash
+  // 誤當成待測頁面。
+  const deadline = Date.now() + 12_000;
+  let page: Page | undefined;
+  while (!page && Date.now() < deadline) {
+    for (const candidate of app.windows()) {
+      const url = candidate.url();
+      if (!url.startsWith('data:') && (url.includes('/renderer/index.html') || url.includes('localhost'))) {
+        page = candidate;
+        break;
+      }
+    }
+    if (!page) await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  if (!page) {
+    await app.close();
+    throw new Error('等待 Polydesk 主視窗逾時');
+  }
   await page.waitForLoadState('domcontentloaded');
   return { app, page, userData };
 }

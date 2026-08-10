@@ -1,5 +1,5 @@
-// 活動列（REQ-UI-001）：切換側欄視圖（檔案/搜尋/原始碼控制）+ 開設定。
-// 深層客製化（自畫，不吃框架預設）；每鈕含 aria-label + 可見 focus（X-3 再強化）。
+// 工作區標頭工具列：切換側欄視圖（檔案/搜尋/原始碼控制）+ 開設定。
+// 取代原本固定佔 48px 的最左活動列；保留 SCM badge、active 與無障礙狀態。
 
 import React from 'react';
 import { appStore, useAppState, type ActivityView } from '../state/appStore';
@@ -57,7 +57,7 @@ function IconButton(props: {
   const title = props.badge ? `${props.label}（${props.badge} 個未提交變更）` : props.label;
   return (
     <button
-      className={`pd-activity-btn${props.active ? ' is-active' : ''}`}
+      className={`pd-workspace-tool-btn${props.active ? ' is-active' : ''}`}
       aria-label={props.label}
       aria-pressed={props.active}
       title={title}
@@ -67,7 +67,7 @@ function IconButton(props: {
         {props.children}
       </svg>
       {props.badge ? (
-        <span className="pd-activity-badge" aria-hidden="true" data-testid="scm-change-count">
+        <span className="pd-workspace-tool-badge" aria-hidden="true" data-testid="scm-change-count">
           {badgeText}
         </span>
       ) : null}
@@ -75,7 +75,7 @@ function IconButton(props: {
   );
 }
 
-export function ActivityBar(): React.JSX.Element {
+export function WorkspaceToolbar(): React.JSX.Element {
   const { activeView, activeWorkspaceId } = useAppState();
   const [scmChangeCount, setScmChangeCount] = React.useState(0);
 
@@ -117,25 +117,22 @@ export function ActivityBar(): React.JSX.Element {
   }, [activeWorkspaceId]);
 
   return (
-    <nav className="pd-activitybar" aria-label="活動列">
-      <div className="pd-activity-group">
-        {ITEMS.map((it) => (
-          <IconButton
-            key={it.view}
-            label={it.label}
-            active={activeView === it.view}
-            badge={it.view === 'scm' ? scmChangeCount : undefined}
-            onClick={() => appStore.setActiveView(it.view)}
-          >
-            {it.icon}
-          </IconButton>
-        ))}
-      </div>
-      <div className="pd-activity-group">
-        <IconButton label="設定" onClick={() => void dialog.open((close) => <SettingsPanel onClose={() => close()} />)}>
-          {I.gear}
+    <nav className="pd-workspace-toolbar" aria-label="工作區功能" data-tour="workspace-tools">
+      {ITEMS.map((it) => (
+        <IconButton
+          key={it.view}
+          label={it.label}
+          active={activeView === it.view}
+          badge={it.view === 'scm' ? scmChangeCount : undefined}
+          onClick={() => appStore.setActiveView(it.view)}
+        >
+          {it.icon}
         </IconButton>
-      </div>
+      ))}
+      <span className="pd-workspace-tool-separator" aria-hidden="true" />
+      <IconButton label="設定" onClick={() => void dialog.open((close) => <SettingsPanel onClose={() => close()} />)}>
+        {I.gear}
+      </IconButton>
     </nav>
   );
 }

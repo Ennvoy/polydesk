@@ -223,7 +223,7 @@ export function Search(): React.JSX.Element {
         <span>搜尋</span>
         <button
           type="button"
-          className="pd-activity-btn"
+          className="pd-compact-icon-btn"
           aria-label={showReplace ? '隱藏取代欄' : '顯示取代欄'}
           aria-pressed={showReplace}
           title="取代"

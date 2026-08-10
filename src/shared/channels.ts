@@ -4,6 +4,7 @@
 import type { InvokeChannel, EventChannel } from './ipc';
 
 export const INVOKE_CHANNELS = [
+  'app:rendererReady',
   'app:openExternalUrl',
   'workspace:list',
   'workspace:add',
@@ -80,6 +81,7 @@ export const INVOKE_CHANNELS = [
   'store:setRailWidth',
   'store:setAiCommit',
   'store:setTerminalFont',
+  'store:setOnboarding',
   'store:export',
   'store:import',
   'update:check',

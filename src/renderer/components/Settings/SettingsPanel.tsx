@@ -9,6 +9,8 @@ import { TERMINAL_FONT_SIZE_MAX, TERMINAL_FONT_SIZE_MIN } from '../../../shared/
 import { appStore } from '../../state/appStore';
 import { ipc } from '../../ipc/client';
 import type { ThemeId } from '../../../shared/types';
+import { openHelpCenter } from '../Help/HelpCenter';
+import { tourBus } from '../../state/tourBus';
 
 const THEMES: { id: ThemeId; label: string; desc: string }[] = [
   { id: 'dark', label: '深色', desc: 'near-black 畫布 · 工程感' },
@@ -158,6 +160,17 @@ export function SettingsPanel({ onClose }: { onClose: () => void }): React.JSX.E
           <button className="pd-btn" onClick={() => void onExport()} aria-label="匯出設定">匯出設定</button>
           <button className="pd-btn" onClick={() => fileRef.current?.click()} aria-label="匯入設定">匯入設定</button>
           <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={(e) => void onImportFile(e)} />
+        </div>
+      </section>
+
+      <section style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+        <h3 style={{ margin: '0 0 8px', fontSize: 'var(--text-sm)', color: 'var(--muted)', fontWeight: 600 }}>學習 Polydesk</h3>
+        <p style={{ margin: '0 0 10px', color: 'var(--meta)', fontSize: 'var(--text-xs)', lineHeight: 1.5 }}>
+          重新走一次真實介面導覽，或搜尋所有功能、狀態與問題排除方式。
+        </p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="pd-btn" onClick={() => { onClose(); window.setTimeout(() => tourBus.start('manual'), 0); }}>教學導覽</button>
+          <button className="pd-btn" onClick={() => { onClose(); window.setTimeout(openHelpCenter, 0); }}>使用說明</button>
         </div>
       </section>
 

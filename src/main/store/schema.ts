@@ -1,9 +1,9 @@
 // 持久化 schema 版本 + 遷移鏈 + 預設狀態 + 正規化（design §5.3、REQ-PERSIST-004）。
 
-import type { PersistState, TerminalFontSettings, ThemeId } from '../../shared/types';
+import type { OnboardingState, PersistState, TerminalFontSettings, ThemeId } from '../../shared/types';
 import { TERMINAL_FONT_SIZE_MAX, TERMINAL_FONT_SIZE_MIN } from '../../shared/constants';
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 const THEMES: readonly ThemeId[] = ['dark', 'light', 'warm'];
 
@@ -19,6 +19,7 @@ export function defaultState(): PersistState {
     railWidth: undefined,
     aiCommit: undefined,
     terminalFont: undefined,
+    onboarding: { version: 0, status: 'not-started', step: 0 },
   };
 }
 
@@ -32,6 +33,8 @@ const MIGRATIONS: Record<number, Migration> = {
   // v1 → v2：新增 Workspace.worktree? 標記（第二迭代）。既有工作區不帶＝非 worktree，
   // 逐筆 sanitize 由 normalize 的 sanitizeWorkspaces 負責（不在此塞欄位）。
   1: (s) => ({ ...s, schemaVersion: 2 }),
+  // v2 → v3：新增版本化首次導覽狀態；既有使用者視為尚未看過本版導覽。
+  2: (s) => ({ ...s, schemaVersion: 3, onboarding: { version: 0, status: 'not-started', step: 0 } }),
 };
 
 /**
@@ -75,6 +78,19 @@ export function sanitizeTerminalFont(v: unknown): TerminalFontSettings | undefin
   if (!family) return undefined;
   const size = Math.min(TERMINAL_FONT_SIZE_MAX, Math.max(TERMINAL_FONT_SIZE_MIN, Math.round(o.size)));
   return { family, size };
+}
+
+const ONBOARDING_STATUS = ['not-started', 'in-progress', 'completed', 'skipped'] as const;
+
+/** 導覽狀態容錯：不接受負版本、負步驟或越界狀態；壞值退回未開始。 */
+export function sanitizeOnboardingState(v: unknown): OnboardingState {
+  const fallback: OnboardingState = { version: 0, status: 'not-started', step: 0 };
+  if (typeof v !== 'object' || v === null) return fallback;
+  const o = v as Record<string, unknown>;
+  if (typeof o.version !== 'number' || !Number.isInteger(o.version) || o.version < 0) return fallback;
+  if (typeof o.step !== 'number' || !Number.isInteger(o.step) || o.step < 0) return fallback;
+  if (!ONBOARDING_STATUS.includes(o.status as OnboardingState['status'])) return fallback;
+  return { version: o.version, status: o.status as OnboardingState['status'], step: o.step };
 }
 
 const SHELLS = ['powershell', 'cmd', 'pwsh', 'gitbash', 'wsl'];
@@ -130,5 +146,6 @@ function normalize(s: AnyState): PersistState {
     railWidth: typeof s.railWidth === 'number' ? s.railWidth : d.railWidth,
     aiCommit: isValidAiCommit(s.aiCommit) ? (s.aiCommit as PersistState['aiCommit']) : d.aiCommit,
     terminalFont: sanitizeTerminalFont(s.terminalFont),
+    onboarding: sanitizeOnboardingState(s.onboarding),
   };
 }

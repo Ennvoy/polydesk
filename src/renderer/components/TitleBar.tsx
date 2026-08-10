@@ -8,6 +8,8 @@ import { dialog } from './Dialogs/host';
 import { AboutDialog } from './Dialogs/AboutDialog';
 import { SettingsPanel } from './Settings/SettingsPanel';
 import { resetLayout, toggleLayoutPanel, toggleTerminalMax } from '../layout/DockLayout';
+import { openHelpCenter } from './Help/HelpCenter';
+import { tourBus } from '../state/tourBus';
 
 interface MenuItem {
   label: string;
@@ -92,6 +94,9 @@ export function TitleBar(): React.JSX.Element {
     {
       label: '說明',
       items: [
+        { label: '教學導覽…', onClick: () => tourBus.start('manual') },
+        { label: '使用說明…', onClick: openHelpCenter },
+        { label: '', separator: true },
         // 版本可視化（PE-3）：版本號/更新重點的唯一入口之一（另一個在狀態列右下）。
         { label: '關於 Polydesk', onClick: () => void dialog.open((close) => <AboutDialog onClose={() => close()} />) },
       ],
@@ -123,6 +128,7 @@ export function TitleBar(): React.JSX.Element {
               className={`pd-titlebar-menubtn${openMenu === menu.label ? ' is-open' : ''}`}
               aria-haspopup="menu"
               aria-expanded={openMenu === menu.label}
+              data-tour={menu.label === '說明' ? 'help-menu' : undefined}
               onClick={() => setOpenMenu((m) => (m === menu.label ? null : menu.label))}
               onMouseEnter={() => openMenu && setOpenMenu(menu.label)}
             >

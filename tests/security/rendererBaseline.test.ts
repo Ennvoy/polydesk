@@ -20,7 +20,7 @@ describe('BrowserWindow 安全旗標', () => {
 
 describe('prod CSP', () => {
   // 取 applyContentSecurityPolicy 的 prod 分支字串（isDev 三元的 false 側）。
-  const prod = indexSrc.split("? ")[1]?.split(': "')[1]?.split('";')[0] ?? indexSrc;
+  const prod = indexSrc.match(/const csp = isDev\s*\?\s*"[^"]*"\s*:\s*"([^"]*)";/s)?.[1] ?? '';
   it("含 default-src 'self' 與 script-src 'self'", () => {
     expect(prod).toContain("default-src 'self'");
     expect(prod).toContain("script-src 'self'");

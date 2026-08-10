@@ -7,6 +7,28 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.27.0（2026-08-10）
+
+將檔案總管、搜尋、SCM 與設定移到工作區標頭，並以首次導覽、可搜尋的完整使用指南與冷啟動開啟畫面降低第一次使用成本。
+
+- 對應功能 commit：`待提交`
+
+### 2026-08-10｜工作區標頭、首次導覽與啟動畫面
+
+- 移除最左側 48 px 固定活動列，四個入口改放工作區標頭；保留目前檢視、SCM 即時變更角標、無障礙狀態與側欄尺寸契約。
+- 新增只在第一次啟動自動出現的 7 步導覽，保存完成／略過／中斷續接狀態；「說明」與設定都可手動重開，且手動導覽不會改寫首次狀態。
+- 新增可搜尋的完整使用指南，涵蓋工作區、檔案、搜尋、Git／worktree、AI commit 草稿、編輯器、終端機、AI 用量、版面、設定及安全問題排除。
+- 冷啟動較久時顯示 420×230 輕量開啟畫面；主視窗等待工作區載入與 renderer-ready 握手後才交接，失敗時提供重試或退出，第二實例不會提前顯示未就緒主窗。
+- 專案 `AGENTS.md` 與 `CLAUDE.md` 加入長期維護規則：使用者可見功能新增、變更或移除時，必須同步檢查並更新導覽與使用說明。
+- 影響 renderer 工作區／說明／版面、main 啟動生命週期、shared IPC／持久化 schema、真 Electron 回歸與發布文件；既有設定會由 schema v2 安全遷移至 v3。
+
+### 驗證
+
+- 票級 typecheck、正式 build、StateStore 28 案、工作區／SCM 2 案、啟動畫面 3 案與 onboarding/help 4 案全綠；出貨審查修正後 renderer security baseline 8/8 與 splash／shell 4/4 通過。
+- 最終 ship runner：66 個 Vitest 檔、571/571 案全綠，正式 build 通過；12 個單 worker E2E shard 共 112 通過、3 個真 AI dogfood 依條件跳過。
+- 未排除完整 E2E 另行實跑 116 案，唯一紅燈為既有核准豁免 `REQ-PERF-001`：cold-start p95 3,896 ms，高於原 3,000 ms 門檻；產品 budget 與斷言均未放寬。
+- 其餘效能案例通過：四工作區串流 frame p95 16.9 ms、renderer CPU 1.2%、working set 181.2 MB；worktree list p95 223 ms、建立 1,158 ms。Spec 與 Standards 獨立複核皆為 0 blocker、0 suggestion。
+
 ## v0.26.0（2026-08-10）
 
 依使用者再次確認，完整移除終端機內容／對話導覽軸；不只 Claude／Codex，Agy 與一般 shell 也不再顯示或執行這套功能。

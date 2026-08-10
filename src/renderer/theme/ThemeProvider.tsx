@@ -5,6 +5,7 @@ import { ipc } from '../ipc/client';
 import type { ThemeId } from '../../shared/types';
 import './tokens.css';
 import './components.css';
+import './compactButtons.css';
 
 interface ThemeContextValue {
   theme: ThemeId;

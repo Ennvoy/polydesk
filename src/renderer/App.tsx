@@ -1,8 +1,7 @@
-// App 外殼（整合接縫，REQ-UI-001）：活動列 + 工作區列表（F-1）+ 可停靠版面 + dialog host + 狀態列。
-// 類 VSCode 版面：[ActivityBar | WorkspaceRail | DockLayout]，底部 status bar。
+// App 外殼（整合接縫，REQ-UI-001）：工作區列表 + 可停靠版面 + dialog host + 狀態列。
+// 視圖切換與設定已整合進 WorkspaceRail 標頭，不再保留最左活動列。
 
 import React from 'react';
-import { ActivityBar } from './components/ActivityBar';
 import { TitleBar } from './components/TitleBar';
 import { DockLayout } from './layout/DockLayout';
 import { DialogHost, dialog } from './components/Dialogs/host';
@@ -18,6 +17,7 @@ import { ipc } from './ipc/client';
 import { invalidateGitSnapshot, loadGitSnapshot } from './state/gitSnapshot';
 import type { GitStatus } from '../shared/types';
 import { APP_VERSION } from '../shared/releaseNotes';
+import { GuidedTourHost } from './components/Help/GuidedTour';
 
 /** 狀態列 git 分支（底部常駐顯示目前分支＋領先/落後，像 VSCode 左下角）。查 git status、訂閱 fs 變動更新；切換工作區以 alive 旗標丟棄 stale。 */
 function StatusBarBranch({ wsId }: { wsId: string }): React.JSX.Element | null {
@@ -72,7 +72,7 @@ function StatusBar(): React.JSX.Element {
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
   const { running, awaiting } = useClaudeCounts(); // PE-2：多專案 AI 狀態總覽
   return (
-    <footer className="pd-statusbar" aria-label="狀態列">
+    <footer className="pd-statusbar" aria-label="狀態列" data-tour="statusbar">
       <span>Polydesk</span>
       <span style={{ color: 'var(--meta)' }}>·</span>
       <span>{active ? active.name : '未選工作區'}</span>
@@ -106,6 +106,9 @@ function StatusBar(): React.JSX.Element {
 export function App(): React.JSX.Element {
   const [railVisible, setRailVisible] = React.useState(railBus.isVisible());
   React.useEffect(() => railBus.subscribe(setRailVisible), []);
+  React.useEffect(() => {
+    void ipc.app.rendererReady();
+  }, []);
   // 桌面通知點擊 → 切到該工作區（main 端已聚焦/還原視窗，見 ClaudeStatusMonitor.defaultNotifyAwait）。
   React.useEffect(() => ipc.events.workspace.activate(({ wsId }) => appStore.setActiveWorkspace(wsId)), []);
   // app 關閉攔截（main close 事件推播）：仍有 alive 終端機 → 彙總確認彈窗，核可才放行退出。
@@ -127,7 +130,6 @@ export function App(): React.JSX.Element {
     <div className="pd-root">
       <TitleBar />
       <div className="pd-shell">
-        <ActivityBar />
         {railVisible && <WorkspaceRail />}
         {railVisible && <RailResizer />}
         <div className="pd-shell-main" style={{ position: 'relative' }}>
@@ -138,6 +140,7 @@ export function App(): React.JSX.Element {
           <OverviewPanel />
         </div>
         <DialogHost />
+        <GuidedTourHost />
       </div>
     </div>
   );

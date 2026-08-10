@@ -46,6 +46,15 @@ describe('StateStore', () => {
     expect(reopened.load().aiCommit).toEqual({ engine: 'agy' });
   });
 
+  it('首次導覽進度可持久化', () => {
+    const store = new StateStore(file);
+    store.load();
+    store.setOnboarding({ version: 1, status: 'in-progress', step: 3 });
+
+    const reopened = new StateStore(file);
+    expect(reopened.load().onboarding).toEqual({ version: 1, status: 'in-progress', step: 3 });
+  });
+
   it('故意寫壞檔 → 偵測到 → 備份 + 回預設、不丟例外', () => {
     writeFileSync(file, '{ 這不是合法 json ', 'utf-8');
     const store = new StateStore(file);

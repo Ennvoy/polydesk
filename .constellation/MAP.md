@@ -6,7 +6,7 @@
 - `src/main/`：Electron 特權層。`ipc/router.ts` 註冊服務；`git/GitService.ts` 執行系統 Git；`git/gitSafeArgs.ts` 驗證 ref 與參數；`git/gitSerialQueue.ts` 序列化同 repository 操作。其餘模組負責 workspace、PTY、檔案、搜尋、LSP、AI 監控、狀態儲存與更新。
 - `src/preload/`：固定白名單 IPC bridge，只暴露 namespaced API，不暴露 raw `ipcRenderer` 或 Node API。
 - `src/shared/`：跨程序契約單一來源。`channels.ts` 定義 channel 白名單，`ipc.ts` 定義 request/response，`types.ts` 定義 Workspace、GitStatus、GitLogRef、GitWorktree 等模型。
-- `src/renderer/`：React UI。`components/SourceControl/SourceControlPanel.tsx` 負責 SCM 的變更、歷史、分支與 stash；`components/Worktree/` 已有本地／遠端分支來源分流；`state/` 管理工作區與 Git snapshot；`theme/` 提供共用樣式與色彩 token。
+- `src/renderer/`：React UI。`components/ActivityBar.tsx` 現匯出水平 `WorkspaceToolbar`，由 `WorkspaceRail.tsx` 放在工作區標頭提供檔案總管／搜尋／SCM／設定入口；`components/Help/` 提供 7 步首次導覽與可搜尋完整指南，`TitleBar.tsx` 與設定共用重開入口。`components/SourceControl/SourceControlPanel.tsx` 負責 SCM 的變更、歷史、分支與 stash；`components/Worktree/` 已有本地／遠端分支來源分流；`state/` 管理工作區、Git snapshot 與導覽匯流排；`theme/compactButtons.css` 提供無框小圖示按鈕樣式。
 - `tests/` 與並置 `*.test.ts`：單元、整合與安全邊界測試；`e2e/` 以真 Electron、真 Git／bare remote、真檔案系統驗證完整鏈路。
 - `specs/`：`requirements.md`、`design.md`、`architecture.md`、`tasks.md` 分別保存需求、安全／IPC 設計、架構與迭代歷程。部分舊架構路徑已漂移，使用前須對照實際程式。
 - `build/`：圖示與 electron-builder 後處理；portable 產物輸出至 repository 外的 `../polydesk-dist/`。
@@ -34,6 +34,7 @@
 - 遠端刪除可能因認證、網路、逾時、預設分支或保護規則被拒絕；失敗需結構化分類並顯示可行下一步，不得偽裝成功。
 - `remotes` 是本機 remote-tracking snapshot；未 fetch／prune 時可能過期。現有 fetch 未帶 `--prune`。
 - `remotes` 扁平欄位仍供既有 worktree 建立對話框使用；SCM 身分判斷不得退回依賴它。
+- 導覽內容若因主要介面變動而失效，應調升 `ONBOARDING_VERSION` 讓舊完成狀態重新開始；一般功能新增、變更或移除則必須同步更新導覽與完整使用指南。
 
 ## 終端機導覽移除現況
 
@@ -47,3 +48,17 @@
 - `DockLayout.tsx` 以自訂 `PolydeskDockTab` 接管側欄、編輯器與終端機標頭的 `×`；三者都走 group `setVisible` 原地顯隱，不移除 panel 或 dispose component。
 - 編輯器／終端機切換顯隱時，`layoutPersist.togglePanelPreservingSize` 會記住可見側欄的實際寬高，待 dockview 重分配空間後設回；上方按鈕、檢視選單與面板內關閉入口共用同一路徑。
 - 顯隱狀態仍由 dockview panel／group 推導並寫入 layout envelope；重啟還原與一鍵重設契約不變。
+
+## 工作區導航與雙層式教學現況
+
+- 原 48 px 垂直活動列 DOM 已移除；`WorkspaceToolbar` 將檔案總管、搜尋、原始碼控制與設定整合到工作區標頭，保留 SCM 即時角標、active、tooltip 與 `aria-pressed` 契約。
+- `GuidedTour` 有 7 步，第一次啟動自動出現並以 schema v3 的 `onboarding` 欄位保存完成、略過或中斷進度；手動重開不改寫首次狀態，導覽只還原自己暫時顯示且未被使用者覆寫的版面。
+- `HelpCenter` 是可搜尋的完整使用指南，涵蓋一般使用者可操作功能、畫面狀態、處理方式與安全導航；「說明」選單與設定都可重開導覽或指南。
+- 專案根目錄 `AGENTS.md` 與 `CLAUDE.md` 已記錄同步規則：使用者可見功能新增、變更或移除時，必須檢查並更新導覽與使用指南。
+
+## 冷啟動視窗現況
+
+- `src/main/window/splashWindow.ts` 提供 420×230 的本機 `data:` 開啟畫面；啟動超過 250 ms 才顯示，維持 sandbox、無 Node 整合、禁止外部導航，主視窗快速完成時不閃現。
+- renderer 先載入工作區狀態再 render，`App` commit 後以固定白名單 `app:rendererReady` 握手；main 同時取得正確 webContents 的 `ready-to-show` 與 renderer-ready 才關閉 splash、顯示主窗並記錄 `window:interactive`。
+- 啟動失敗時 splash 顯示具名原因並提供重試或退出；主視窗尚未 interactive 時，第二實例事件不會提前把隱藏主窗顯示出來。
+- `e2e/perf.spec.ts` 的冷啟動 p95 3 秒門檻維持未放寬；既有環境豁免必須在出貨證據中明確記錄，不得把 splash 首次顯示當成可互動時間。

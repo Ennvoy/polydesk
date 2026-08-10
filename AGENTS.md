@@ -31,6 +31,10 @@ Commit 使用 Conventional Commits：`feat/fix/chore/refactor/docs/test(scope): 
 
 每次完成程式、介面或設定調整並通過驗證後，必須先更新 `CHANGELOG.md` 與 `README.md`，再依序執行 commit、push 與 `npm run dist`。Changelog 應記錄日期、使用者可感知變化、原因、影響範圍與已存在的短 commit hash；README 應同步目前功能、使用方式或開發流程。打包完成後回報 portable exe 路徑、檔案大小與 SHA-256。除非任務明確要求，勿把 `.flow` journal／ledger 的非產品變更混入功能 commit。
 
+## 導覽與使用說明同步
+
+任何使用者可見功能的新增、變更或移除，都必須在同一批變更內同步檢查並更新首次／手動教學導覽與程式內完整使用說明，包含入口位置、操作步驟、畫面狀態、錯誤處理及高風險提示。相關導覽步驟、目標 selector、說明內容與回歸測試必須跟產品程式一起驗證；若確認不受影響，也要在驗證結果中明確記錄，不得默默略過。
+
 ## 安全與設定
 
 維持 `contextIsolation` 與 sandbox，不向 renderer 暴露原始 `ipcRenderer`、Node API 或任意 shell。新增 IPC 必須使用固定白名單 channel、驗證工作區與路徑；PTY shell、拖放路徑及外部 CLI 輸入皆需保留既有 allowlist 與清理策略。不要提交憑證、token、使用者資料或本機路徑設定。

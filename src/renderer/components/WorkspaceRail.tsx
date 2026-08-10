@@ -24,6 +24,7 @@ import { CreateWorktreeDialog } from './Worktree/CreateWorktreeDialog';
 import { CloneRepositoryDialog } from './CloneRepositoryDialog';
 import { worktreeBranchDisplay } from './Worktree/worktreeModel';
 import type { Workspace } from '../../shared/types';
+import { WorkspaceToolbar } from './ActivityBar';
 
 // ── 一次性注入本 feature 的 rail 樣式（不改 P-2 的 components.css；全用 var(--*) token）──
 const STYLE_ID = 'pdws-rail-style';
@@ -325,6 +326,7 @@ export function WorkspaceRail(): React.JSX.Element {
   return (
     <aside
       aria-label="工作區列表"
+      data-tour="workspace-rail"
       style={{
         width: 'var(--rail-w)',
         flexShrink: 0,
@@ -335,18 +337,20 @@ export function WorkspaceRail(): React.JSX.Element {
         minHeight: 0,
       }}
     >
-      <div className="pd-panel-header" style={{ position: 'relative' }}>
-        <span>工作區</span>
-        <button
+      <div className="pd-workspace-rail-header" style={{ position: 'relative' }}>
+        <div className="pd-workspace-rail-title-row">
+          <span>工作區</span>
+          <button
           className="pdws-actbtn"
           aria-label="新增"
           title="新增工作區 / worktree"
           aria-haspopup="menu"
           aria-expanded={addMenuOpen}
           onClick={() => setAddMenuOpen((v) => !v)}
-        >
-          ＋
-        </button>
+          >
+            ＋
+          </button>
+        </div>
         {addMenuOpen && (
           <>
             {/* 點外關閉 */}
@@ -406,6 +410,7 @@ export function WorkspaceRail(): React.JSX.Element {
             </div>
           </>
         )}
+        <WorkspaceToolbar />
       </div>
 
       {ordered.length === 0 ? (

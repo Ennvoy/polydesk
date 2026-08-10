@@ -1,6 +1,6 @@
 // Polydesk main 入口：單一實例 + 安全基線 BrowserWindow + CSP + 狀態持久化 + perf 埋點。
 
-import { app, BrowserWindow, Menu, screen, session, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, screen, session, shell } from 'electron';
 import { join } from 'node:path';
 import { StateStore } from './store/StateStore';
 import { registerIpcHandlers, type MainServices } from './ipc/router';
@@ -14,6 +14,7 @@ import { APP_NAME, STATE_FILE_NAME } from '../shared/constants';
 import type { WindowBounds } from '../shared/types';
 import { isEditorPasteShortcut } from './window/pasteShortcut';
 import { normalizeExternalHttpUrl } from '../shared/externalUrl';
+import { createSplashWindow, type SplashController } from './window/splashWindow';
 
 mark('main:start'); // 冷啟動量測起點（REQ-PERF-001）
 // 診斷 seam（X-1 perf harness 經 electronApp.evaluate 讀 main 埋點；非 IPC、不影響執行期）。
@@ -27,12 +28,40 @@ if (userDataOverride) app.setPath('userData', userDataOverride);
 // 也永遠走 prod 嚴格分支（嚴 CSP + 擋導航），不被外部 URL 接管殼。
 const isDev = !app.isPackaged && !!process.env['ELECTRON_RENDERER_URL'];
 
+// 真 Electron E2E seam：只在未打包程序生效，正式 portable 永遠忽略。
+// 用來穩定重現超過 splash 門檻，以及首次主畫面載入失敗後重試。
+const e2eMainLoadDelayMs = !app.isPackaged
+  ? Math.min(5_000, Math.max(0, Number(process.env['POLYDESK_E2E_MAIN_LOAD_DELAY_MS']) || 0))
+  : 0;
+const e2eRendererReadyDelayMs = !app.isPackaged
+  ? Math.min(5_000, Math.max(0, Number(process.env['POLYDESK_E2E_RENDERER_READY_DELAY_MS']) || 0))
+  : 0;
+let e2eFailFirstMainLoad = !app.isPackaged && process.env['POLYDESK_E2E_MAIN_LOAD_MODE'] === 'fail-once';
+
 let mainWindow: BrowserWindow | null = null;
 let store: StateStore;
 let services: MainServices;
+let splash: SplashController | null = null;
+let mainInteractive = false;
 
 function stateFilePath(): string {
   return join(app.getPath('userData'), STATE_FILE_NAME);
+}
+
+function loadMainContent(win: BrowserWindow, delay = true): void {
+  const load = (): void => {
+    if (win.isDestroyed()) return;
+    if (e2eFailFirstMainLoad) {
+      e2eFailFirstMainLoad = false;
+      void win.loadFile(join(__dirname, '../renderer/__e2e_missing__.html'));
+    } else if (isDev) {
+      void win.loadURL(process.env['ELECTRON_RENDERER_URL']!);
+    } else {
+      void win.loadFile(join(__dirname, '../renderer/index.html'));
+    }
+  };
+  if (delay && e2eMainLoadDelayMs > 0) setTimeout(load, e2eMainLoadDelayMs);
+  else load();
 }
 
 /** 設定 CSP 回應標頭（REQ-SEC-001）。dev 放寬以容 Vite HMR；prod 嚴設。 */
@@ -72,6 +101,7 @@ function ensureVisibleBounds(bounds: WindowBounds | undefined): WindowBounds | u
 
 function createWindow(): void {
   closeGate.reset();
+  mainInteractive = false;
   const bounds = ensureVisibleBounds(store.get('windowBounds'));
   mainWindow = new BrowserWindow({
     width: bounds?.width ?? 1280,
@@ -111,12 +141,49 @@ function createWindow(): void {
   mainWindow.on('maximize', () => emit('window:maximizedChange', { maximized: true }));
   mainWindow.on('unmaximize', () => emit('window:maximizedChange', { maximized: false }));
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
+  let readyToShow = false;
+  let rendererReady = false;
+  let interactive = false;
+  const finishInteractive = (): void => {
+    if (interactive || !readyToShow || !rendererReady || !mainWindow) return;
+    interactive = true;
+    mainInteractive = true;
+    splash?.complete();
+    splash = null;
+    mainWindow.show();
     mark('window:interactive');
     const coldMs = measure('coldStart', 'main:start', 'window:interactive');
     // eslint-disable-next-line no-console
     console.log(`[Polydesk] cold-start to interactive: ${coldMs.toFixed(1)} ms`);
+  };
+  mainWindow.on('ready-to-show', () => {
+    if (interactive || !mainWindow) return;
+    const currentUrl = mainWindow.webContents.getURL();
+    const isRendererReady = isDev
+      ? !!process.env['ELECTRON_RENDERER_URL'] && currentUrl.startsWith(process.env['ELECTRON_RENDERER_URL'])
+      : currentUrl.endsWith('/renderer/index.html');
+    // BrowserWindow 在尚未導航的 about:blank 也可能發 ready-to-show；那不是主程式可互動。
+    if (!isRendererReady) return;
+    readyToShow = true;
+    finishInteractive();
+  });
+
+  // renderer 完成工作區狀態載入並提交 React 外殼後才算可操作；固定 IPC 白名單且只接受本主視窗。
+  ipcMain.removeHandler('app:rendererReady');
+  ipcMain.handle('app:rendererReady', async (event) => {
+    if (event.sender !== mainWindow?.webContents) return { ok: true } as const;
+    if (e2eRendererReadyDelayMs > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, e2eRendererReadyDelayMs));
+    }
+    if (event.sender === mainWindow?.webContents && !event.sender.isDestroyed()) {
+      rendererReady = true;
+      finishInteractive();
+    }
+    return { ok: true } as const;
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_event, _code, description, _url, isMainFrame) => {
+    if (isMainFrame) splash?.fail(description || '主畫面載入失敗，請重試或退出程式。');
   });
 
   // 外開連結一律拒絕 app 內導航，改丟系統瀏覽器（REQ-SEC-001）
@@ -155,14 +222,11 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     services.editorPasteFocus.clear(webContentsId);
     setMainWindow(null);
+    mainInteractive = false;
     mainWindow = null;
   });
 
-  if (isDev) {
-    void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']!);
-  } else {
-    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
-  }
+  loadMainContent(mainWindow);
 }
 
 // 單一實例（REQ-PERSIST-002）：第二實例把現有視窗帶到前景。
@@ -171,7 +235,7 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
+    if (mainWindow && mainInteractive) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
@@ -182,6 +246,19 @@ if (!gotTheLock) {
   app.setAppUserModelId('com.polydesk.app');
 
   app.whenReady().then(() => {
+    splash = createSplashWindow({
+      retry: () => {
+        const wc = mainWindow?.webContents;
+        if (!wc || wc.isDestroyed()) {
+          app.relaunch();
+          app.exit(0);
+          return;
+        }
+        splash?.retrying();
+        loadMainContent(mainWindow!, false);
+      },
+      exit: () => app.quit(),
+    });
     Menu.setApplicationMenu(null); // 無框：移除預設原生 File/Edit 選單列（改由自訂標題列提供）
     store = new StateStore(stateFilePath());
     store.load();
@@ -197,6 +274,8 @@ if (!gotTheLock) {
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
+  }).catch(() => {
+    splash?.fail('Polydesk 初始化失敗，請重試或退出程式。');
   });
 
   app.on('window-all-closed', () => {

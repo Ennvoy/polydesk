@@ -22,11 +22,12 @@ import { getMeasures, clearPerf } from '../shared/perf';
 (window as unknown as { __pdPerf?: unknown }).__pdPerf = { getMeasures, clearPerf };
 
 registerAllFeatures();
-// 啟動即載入工作區清單（lazy 實體化：被點到才 hydrate）。
-void appStore.loadWorkspaces();
-
 const rootEl = document.getElementById('root');
-if (rootEl) {
+
+async function startRenderer(): Promise<void> {
+  // 先取得可操作外殼需要的工作區狀態；讀取失敗仍以空狀態渲染，避免啟動永久卡住。
+  await appStore.loadWorkspaces().catch(() => []);
+  if (!rootEl) return;
   createRoot(rootEl).render(
     <React.StrictMode>
       <ThemeProvider>
@@ -37,3 +38,5 @@ if (rootEl) {
     </React.StrictMode>,
   );
 }
+
+void startRenderer();

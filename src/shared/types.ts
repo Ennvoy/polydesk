@@ -246,6 +246,16 @@ export interface WindowBounds {
   height: number;
 }
 
+export type OnboardingStatus = 'not-started' | 'in-progress' | 'completed' | 'skipped';
+
+/** 版本化首次導覽狀態；手動重跑不寫入此狀態。 */
+export interface OnboardingState {
+  version: number;
+  status: OnboardingStatus;
+  /** 只在 in-progress 有意義，從 0 起算；新版導覽不沿用舊版步驟。 */
+  step: number;
+}
+
 /** 持久化根狀態（design §5 schema）。 */
 export interface PersistState {
   schemaVersion: number;
@@ -264,6 +274,8 @@ export interface PersistState {
   aiCommit?: AiCommitSettings;
   /** 終端機字型（undefined＝預設 Consolas 14）。 */
   terminalFont?: TerminalFontSettings;
+  /** 首次導覽完成／略過／中斷進度；重大 UI 改版以 version 觸發重播。 */
+  onboarding: OnboardingState;
 }
 
 /** 終端機字型設定（undefined＝預設 Consolas 14，對齊 VS Code Windows 預設）。 */

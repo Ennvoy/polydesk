@@ -1,4 +1,4 @@
-// Activity Bar 原始碼控制徽章：顯示目前工作區的未提交檔案數，切換工作區後不可殘留前一個數字。
+// 工作區標頭原始碼控制徽章：顯示目前工作區的未提交檔案數，切換工作區後不可殘留前一個數字。
 import { test, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';

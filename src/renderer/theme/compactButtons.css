@@ -1,0 +1,21 @@
+.pd-compact-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.pd-compact-icon-btn:hover {
+  background: var(--surface-warm);
+  color: var(--fg);
+}
+
+.pd-compact-icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
