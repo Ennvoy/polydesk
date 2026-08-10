@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.25.0',
+    date: '2026-08-10',
+    highlights: [
+      '按編輯器或終端機標頭的 × 時改為原地隱藏，不再移除 panel 並重排版面',
+      '隱藏與重新顯示編輯器／終端機時，側欄維持操作前的寬度與高度',
+      '編輯器內容與終端機 panel 保留在原本實例，從上方版面按鈕即可叫回',
+    ],
+  },
+  {
     version: '0.24.0',
     date: '2026-08-08',
     highlights: [

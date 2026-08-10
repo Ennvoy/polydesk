@@ -4,8 +4,8 @@
 // features 不碰本檔；所有顯隱/最大化判定一律以 dockview 為單一真相（見 layoutPersist 紅軍註解）。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DockviewReact } from 'dockview-react';
-import type { DockviewApi, DockviewReadyEvent } from 'dockview';
+import { DockviewDefaultTab, DockviewReact } from 'dockview-react';
+import type { DockviewApi, DockviewReadyEvent, IDockviewPanelHeaderProps } from 'dockview';
 import 'dockview-core/dist/styles/dockview.css';
 import { dockviewComponents } from './panelRegistry';
 import { useTheme } from '../theme/ThemeProvider';
@@ -21,6 +21,7 @@ import {
   serialize,
   toggleTerminalMaximize,
   togglePanel,
+  togglePanelPreservingSize,
   withinSizeLimit,
   type LayoutUiState,
   type ToolbarState,
@@ -180,8 +181,22 @@ export function toggleLayoutPanel(which: 'sidebar' | 'editor' | 'terminal'): voi
   const api = layoutApi;
   if (!api) return;
   if (which === 'sidebar') togglePanel(api, SIDEBAR_ID, () => addSidebar(api));
-  else if (which === 'editor') togglePanel(api, EDITOR_ID, () => addEditor(api));
-  else togglePanel(api, TERMINAL_ID, () => addTerminal(api));
+  else if (which === 'editor') {
+    togglePanelPreservingSize(api, EDITOR_ID, () => addEditor(api), SIDEBAR_ID);
+  } else {
+    togglePanelPreservingSize(api, TERMINAL_ID, () => addTerminal(api), SIDEBAR_ID);
+  }
+}
+
+/** dockview 標頭 × 與工具列共用原地顯隱，避免移除 panel 後重排版面並 dispose 工作狀態。 */
+function PolydeskDockTab(props: IDockviewPanelHeaderProps): React.JSX.Element {
+  const closeActionOverride = (): void => {
+    if (props.api.id === SIDEBAR_ID) toggleLayoutPanel('sidebar');
+    else if (props.api.id === EDITOR_ID) toggleLayoutPanel('editor');
+    else if (props.api.id === TERMINAL_ID) toggleLayoutPanel('terminal');
+    else props.api.close();
+  };
+  return <DockviewDefaultTab {...props} closeActionOverride={closeActionOverride} />;
 }
 
 /** 供標題列「檢視」選單切換終端機最大化。 */
@@ -372,23 +387,17 @@ export function DockLayout(): React.JSX.Element {
   }, []);
 
   const onToggleSidebar = useCallback(() => {
-    const api = layoutApi;
-    if (!api) return;
-    togglePanel(api, SIDEBAR_ID, () => addSidebar(api));
+    toggleLayoutPanel('sidebar');
     syncToolbar();
   }, [syncToolbar]);
 
   const onToggleEditor = useCallback(() => {
-    const api = layoutApi;
-    if (!api) return;
-    togglePanel(api, EDITOR_ID, () => addEditor(api));
+    toggleLayoutPanel('editor');
     syncToolbar();
   }, [syncToolbar]);
 
   const onToggleTerminal = useCallback(() => {
-    const api = layoutApi;
-    if (!api) return;
-    togglePanel(api, TERMINAL_ID, () => addTerminal(api));
+    toggleLayoutPanel('terminal');
     syncToolbar();
   }, [syncToolbar]);
 
@@ -499,6 +508,7 @@ export function DockLayout(): React.JSX.Element {
         <DockviewReact
           className={`polydesk-dockview ${themeClass}`}
           components={dockviewComponents}
+          defaultTabComponent={PolydeskDockTab}
           onReady={onReady}
         />
       </div>

@@ -1,3 +1,9 @@
+## 2026-08-10 標頭關閉維持側欄尺寸
+- 編輯器／終端機標頭 `×` 改為原地隱藏，不再移除 panel 並觸發版面樹重排。
+- 隱藏或叫回編輯器／終端機時，側欄維持操作前的實際寬度與高度；component 與工作狀態留在原實例。
+- 新增純函式尺寸契約與真 Electron 標頭關閉回歸，修正前實測側欄寬度漂移 49 px。
+- typecheck、build、完整 Vitest 565/565 與 106 個非 dogfood Electron E2E 綠；3 個真 AI dogfood 依條件跳過，冷啟動既有門檻沿用核准豁免。
+
 ## 2026-08-08 移除 Claude／Codex 專用對話軸
 - 依 dogfood 回饋移除專用對話軸，兩種 AI 終端機回到一致的通用內容導覽。
 - 刪除 shared IPC、main readers／session 配對、renderer 輪詢與專用樣式；終端機不再為導覽讀取 transcript／rollout。

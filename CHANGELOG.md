@@ -7,6 +7,26 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.25.0（2026-08-10）
+
+修正編輯器／終端機標頭 `×` 會移除 panel、讓側欄跟著重新分配尺寸的問題；關閉改為原地隱藏，重新顯示後沿用原本版面與工作狀態。
+
+- 對應功能 commit：待回填
+
+### 2026-08-10｜標頭關閉維持側欄尺寸
+
+- dockview 預設標頭 `×` 由 Polydesk 接管並導向共用顯隱路徑，不再呼叫 panel remove；側欄、編輯器與終端機的標頭關閉行為與上方版面按鈕一致。
+- 隱藏或叫回編輯器／終端機前先記住側欄實際寬高，dockview 完成空間重分配後立即設回，支援使用者自行拖曳停靠後的版面。
+- panel 只改 group 可見性，不 dispose React component；編輯器內容與終端機 panel 可原地保留。
+- 版本同步至 v0.25.0，README、內建關於視窗、dogfood 歷程與專案地圖一併更新。
+
+### 驗證
+
+- TypeScript typecheck、正式 build 與完整序列 Vitest 通過；66 個測試檔、565/565 案全綠。
+- 真 Electron E2E 依 Windows 穩定設定拆成 12 個單 worker shard：109 案中 106 通過，3 個需要真 Agy／Codex 帳號的 dogfood 案例依既有條件跳過；`REQ-PERF-001` 冷啟動案例沿用既有核准豁免，未修改門檻或測試。
+- 新增 `layout-close-size` 真 Electron 回歸，修正前重現側欄寬度漂移 49 px；修正後編輯器與終端機標頭 `×` 的隱藏／叫回流程皆維持側欄寬高，panel DOM 原地保留。
+- 效能回歸維持門檻內：四工作區串流 frame p95 18.2 ms、renderer CPU 2.3%；worktree 列表載入 p95 179 ms、建立 884 ms。
+
 ## v0.24.0（2026-08-08）
 
 依 dogfood 回饋移除 Claude／Codex 專用對話軸；終端機不再讀取兩種工具的對話檔，左側統一回到只依目前 xterm 輸出建立的內容導覽。

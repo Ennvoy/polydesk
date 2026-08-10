@@ -1,24 +1,24 @@
-# 移除 Claude／Codex 專用對話軸出貨報告
+# 標頭關閉維持側欄尺寸出貨報告
 
 ## 做了什麼
 
-- 移除 Claude 與 Codex 的專用對話軸，兩種 AI 終端機統一使用既有通用內容導覽。
-- 刪除 `ai:conversation` IPC 契約與 handler、Claude transcript reader、Codex rollout 對話 reader、session／scrollback 配對、renderer 背景輪詢及專用節點樣式。
-- 終端機導覽不再讀取 AI 對話檔，只依目前 xterm buffer 的非空邏輯行建立節點。
-- 保留 `POLYDESK_TERM_ID` 的 Claude hook 狀態清理用途，以及 AI 快捷啟動、PTY 尺寸同步與工作區狀態徽章。
-- 版本同步至 v0.24.0，README、CHANGELOG、內建 release notes、tasks、MAP 與 HISTORY 均已更新。
+- dockview 標頭 `×` 由 Polydesk 接管，側欄、編輯器與終端機統一走 group `setVisible` 原地顯隱，不再 remove panel。
+- 編輯器／終端機顯隱前記住側欄實際寬高，dockview 重分配空間後立即設回；上方版面按鈕、檢視選單與面板內關閉入口共用同一路徑。
+- editor／terminal component 不再因標頭關閉而 dispose，叫回後沿用原本 panel 實例與工作狀態。
+- 版本同步至 v0.25.0，README、CHANGELOG、內建 release notes、tasks、MAP 與 HISTORY 均已更新。
 
 ## 驗了什麼
 
-- TypeScript typecheck 與正式 build 通過。
-- 目標回歸：50 個 main／PTY／monitor／terminal／安全 Vitest，以及 2 個真 Electron AI launch／內容導覽旅程全綠。
-- 全量 Vitest 共 564 案：高併發初跑 563 案通過；唯一既有 `FileWatcher` 事件洪水案例單 worker 隔離重跑 7/7 綠，接著完整序列重跑 564/564 全綠。
-- 全量 Electron E2E 共 109 案：106 通過，3 個需真 Agy／Codex 帳號的 dogfood 案例依既有條件跳過；四工作區串流與 worktree 效能門檻通過。
+- 修正前真 Electron 回歸重現：按編輯器標頭 `×` 後側欄寬度漂移 49 px。
+- TypeScript typecheck、正式 build 與完整序列 Vitest 通過：66 個測試檔、565/565 案全綠。
+- 真 Electron E2E 依 12 個單 worker shard 執行：109 案中 106 通過，3 個需真 Agy／Codex 帳號的 dogfood 案例依既有條件跳過；`REQ-PERF-001` 沿用既有核准豁免。
+- 新增 `layout-close-size` 回歸覆蓋編輯器與終端機標頭 `×`、側欄寬高與 panel DOM 原地保留；既有 editor reveal、terminal header／toggle 與 reset layout 旅程全綠。
+- 效能門檻通過：四工作區串流 frame p95 18.2 ms、renderer CPU 2.3%；worktree 列表 p95 179 ms、建立 884 ms。
 
 ## 證據在哪
 
-- 功能提交：`617db8c`。
-- 公開契約回歸：`tests/security/conversationAccess.test.ts`。
-- Claude／Codex 使用通用內容導覽的真 Electron 回歸：`e2e/terminal-ai-launch.spec.ts`。
-- 通用內容導覽行為：`src/renderer/components/Terminal/terminalNavigation.test.ts`、`e2e/terminal-navigation.spec.ts`。
+- 功能提交：待回填。
+- 尺寸保留與顯隱契約：`src/renderer/layout/layoutPersist.ts`、`src/renderer/layout/layoutPersist.test.ts`。
+- dockview 標頭接管：`src/renderer/layout/DockLayout.tsx`。
+- 真 Electron 回歸：`e2e/layout-close-size.spec.ts`、`e2e/editor-reveal-on-open.spec.ts`、`e2e/terminal-header.spec.ts`。
 - 版本與使用說明：`src/shared/releaseNotes.ts`、`README.md`、`CHANGELOG.md`。

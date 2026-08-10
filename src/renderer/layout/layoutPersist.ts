@@ -44,6 +44,9 @@ export const DEFAULT_UI: LayoutUiState = { hidden: [], maximized: false };
 export interface PanelLike {
   readonly id: string;
   readonly api: {
+    readonly width: number;
+    readonly height: number;
+    setSize(size: { width?: number; height?: number }): void;
     isMaximized(): boolean;
     maximize(): void;
     exitMaximized(): void;
@@ -195,6 +198,32 @@ export function togglePanel(api: DockApiLike, id: string, add: () => void): bool
   }
   ensurePanel(api, id, add);
   return true;
+}
+
+/**
+ * 切換 panel 顯隱時保留另一個 panel 的實際寬高。dockview 會把隱藏 panel 釋出的空間按比例分配給
+ * 其他 group；若不把側欄設回切換前尺寸，按標頭 × 隱藏編輯器／終端機時側欄會跟著放大。
+ */
+export function togglePanelPreservingSize(
+  api: DockApiLike,
+  id: string,
+  add: () => void,
+  preservedId: string,
+): boolean {
+  const preserved = api.getPanel(preservedId);
+  const size =
+    preserved && safeIsVisible(preserved)
+      ? { width: preserved.api.width, height: preserved.api.height }
+      : null;
+  const visible = togglePanel(api, id, add);
+  if (size && preserved && api.getPanel(preservedId) === preserved) {
+    try {
+      preserved.api.setSize(size);
+    } catch {
+      /* 尺寸還原失敗不致命；顯隱結果仍有效 */
+    }
+  }
+  return visible;
 }
 
 /** A1：僅在不存在時才 add（去重，擋重複提交/雙擊造成的 'duplicate panel id'）。回傳是否真的新增。 */

@@ -41,3 +41,9 @@
 - `TerminalView` 一律依目前 xterm buffer 的非空邏輯行建立通用內容導覽節點，wrapped continuation 不重複建立；點擊或 `Alt+↑`／`Alt+↓` 只在目前終端機 scrollback 內移動。
 - Claude transcript reader、Codex rollout 對話 reader、session 配對、背景對話輪詢與專用訊息節點樣式均已刪除；終端機導覽不再讀取 AI 對話檔。
 - `POLYDESK_TERM_ID` 仍供 Claude hook 精確清理同 terminal 的殘留狀態；AI 快捷啟動、PTY 尺寸同步及工作區狀態徽章不受影響。
+
+## Dock 版面顯隱現況
+
+- `DockLayout.tsx` 以自訂 `PolydeskDockTab` 接管側欄、編輯器與終端機標頭的 `×`；三者都走 group `setVisible` 原地顯隱，不移除 panel 或 dispose component。
+- 編輯器／終端機切換顯隱時，`layoutPersist.togglePanelPreservingSize` 會記住可見側欄的實際寬高，待 dockview 重分配空間後設回；上方按鈕、檢視選單與面板內關閉入口共用同一路徑。
+- 顯隱狀態仍由 dockview panel／group 推導並寫入 layout envelope；重啟還原與一鍵重設契約不變。

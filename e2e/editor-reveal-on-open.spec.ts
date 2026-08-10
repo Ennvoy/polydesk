@@ -52,8 +52,8 @@ test('編輯器隱藏時點檔案：自動顯示編輯器並開檔（含已開�
   await expect(tabA).toBeVisible({ timeout: 8000 });
   await expect(page.locator('.monaco-editor').first()).toContainText('AAA_REVEAL', { timeout: 15000 });
 
-  // ③ 使用 dockview 分頁的 × 真正移除 editor panel → 第一次點 c.md 就必須「重建＋開檔」，
-  // 不可只顯示空編輯器、要求使用者再點第二次。
+  // ③ 使用 dockview 分頁的 × 原地隱藏 editor panel → 第一次點 c.md 就必須「叫回＋開檔」，
+  // 不可只顯示原本分頁、要求使用者再點第二次。
   const editorDockTab = page.locator('.dv-tab', {
     has: page.locator('.dv-default-tab-content', { hasText: '編輯器' }),
   });

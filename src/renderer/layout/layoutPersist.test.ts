@@ -13,6 +13,7 @@ import {
   serializedSize,
   withinSizeLimit,
   togglePanel,
+  togglePanelPreservingSize,
   ensurePanel,
   panelVisibleById,
   toggleTerminalMaximize,
@@ -25,14 +26,23 @@ import {
 
 // ── fake-但-真演算法 dockview api ──
 class FakePanel implements PanelLike {
-  readonly api: PanelLike['api'] & { setSize: (o: { width?: number; height?: number }) => void };
+  readonly sizeSetCalls: Array<{ width?: number; height?: number }> = [];
+  readonly api: PanelLike['api'];
   constructor(
     public readonly id: string,
     public readonly component: string,
     host: FakeApi,
   ) {
     let visible = true; // group 可見性（setVisible 切換；隱藏不從 Map 移除＝不 dispose）
+    let width = id === 'sidebar' ? 280 : 640;
+    let height = id === 'sidebar' ? 720 : 480;
     this.api = {
+      get width(): number {
+        return width;
+      },
+      get height(): number {
+        return height;
+      },
       isMaximized: () => host.maximizedId === id,
       maximize: () => {
         host.maximizedId = id;
@@ -40,8 +50,10 @@ class FakePanel implements PanelLike {
       exitMaximized: () => {
         if (host.maximizedId === id) host.maximizedId = null;
       },
-      setSize: () => {
-        /* no-op；尺寸不影響本測 */
+      setSize: (size) => {
+        this.sizeSetCalls.push(size);
+        if (size.width !== undefined) width = size.width;
+        if (size.height !== undefined) height = size.height;
       },
       group: {
         api: {
@@ -256,6 +268,28 @@ describe('A1 — 顯隱單一真相 + 去重防 duplicate id', () => {
       expect(api.getPanel('sidebar')!.api.group.api.isVisible).toBe(true);
     }).not.toThrow();
     expect(api.getPanel('sidebar')).toBeDefined();
+  });
+
+  it('隱藏或叫回編輯器時，會把側欄設回切換前的寬高', () => {
+    const api = new FakeApi([
+      { id: 'editor', component: 'editor' },
+      { id: 'sidebar', component: 'sidebar' },
+      { id: 'terminal', component: 'terminal' },
+    ]);
+    const sidebar = api.getPanel('sidebar')!;
+    const addEditor = (): void => {
+      api.addPanel({ id: 'editor', component: 'editor' });
+    };
+
+    expect(togglePanelPreservingSize(api, 'editor', addEditor, 'sidebar')).toBe(false);
+    expect(api.getPanel('editor')).toBeDefined();
+    expect(sidebar.sizeSetCalls).toEqual([{ width: 280, height: 720 }]);
+
+    expect(togglePanelPreservingSize(api, 'editor', addEditor, 'sidebar')).toBe(true);
+    expect(sidebar.sizeSetCalls).toEqual([
+      { width: 280, height: 720 },
+      { width: 280, height: 720 },
+    ]);
   });
 
   it('ensurePanel 重複呼叫不 throw 且只存在一份（去重）', () => {
