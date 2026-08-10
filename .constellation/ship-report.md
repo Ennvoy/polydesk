@@ -17,7 +17,7 @@
 
 ## 證據在哪
 
-- 功能提交：待回填。
+- 功能提交：`b18241e`。
 - 完整移除：`src/renderer/components/Terminal/TerminalView.tsx`、`src/renderer/components/Terminal/terminal.css`。
 - 被刪除的支援鏈：`src/renderer/components/Terminal/terminalNavigation.ts`、`terminalNavigation.test.ts`、`e2e/terminal-navigation.spec.ts`。
 - 真 Electron 回歸：`e2e/terminal-ai-launch.spec.ts`。
