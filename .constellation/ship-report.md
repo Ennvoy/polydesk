@@ -17,7 +17,7 @@
 
 ## 證據在哪
 
-- 功能提交：待回填。
+- 功能提交：`2c371d0`。
 - 尺寸保留與顯隱契約：`src/renderer/layout/layoutPersist.ts`、`src/renderer/layout/layoutPersist.test.ts`。
 - dockview 標頭接管：`src/renderer/layout/DockLayout.tsx`。
 - 真 Electron 回歸：`e2e/layout-close-size.spec.ts`、`e2e/editor-reveal-on-open.spec.ts`、`e2e/terminal-header.spec.ts`。
