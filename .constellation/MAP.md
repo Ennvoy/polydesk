@@ -58,7 +58,7 @@
 
 ## 冷啟動視窗現況
 
-- `src/main/window/splashWindow.ts` 提供 420×230 的本機 `data:` 開啟畫面；啟動超過 250 ms 才顯示，維持 sandbox、無 Node 整合、禁止外部導航，主視窗快速完成時不閃現。
+- `build/portable-splash.bmp` 由 electron-builder portable 啟動器在自解壓期間顯示；`src/main/window/splashWindow.ts` 接續提供同尺寸 420×230 的本機 `data:` 開啟畫面。Electron 原生視窗建立後立即置中顯示，再載入品牌內容，主初始化等待原生 `show` 事件後才開始。視窗維持 sandbox、無 Node 整合與禁止外部導航，且兩層都不設定最低停留時間。
 - renderer 先載入工作區狀態再 render，`App` commit 後以固定白名單 `app:rendererReady` 握手；main 同時取得正確 webContents 的 `ready-to-show` 與 renderer-ready 才關閉 splash、顯示主窗並記錄 `window:interactive`。
 - 啟動失敗時 splash 顯示具名原因並提供重試或退出；主視窗尚未 interactive 時，第二實例事件不會提前把隱藏主窗顯示出來。
 - `e2e/perf.spec.ts` 的冷啟動 p95 3 秒門檻維持未放寬；既有環境豁免必須在出貨證據中明確記錄，不得把 splash 首次顯示當成可互動時間。

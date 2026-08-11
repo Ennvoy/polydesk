@@ -245,7 +245,7 @@ if (!gotTheLock) {
   // Windows 通知點擊回喚靠 AppUserModelID 路由；不設的話 toast 來源名稱錯誤、點擊回喚不可靠。
   app.setAppUserModelId('com.polydesk.app');
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     splash = createSplashWindow({
       retry: () => {
         const wc = mainWindow?.webContents;
@@ -259,6 +259,7 @@ if (!gotTheLock) {
       },
       exit: () => app.quit(),
     });
+    await splash.whenShown;
     Menu.setApplicationMenu(null); // 無框：移除預設原生 File/Edit 選單列（改由自訂標題列提供）
     store = new StateStore(stateFilePath());
     store.load();

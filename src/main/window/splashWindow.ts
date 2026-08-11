@@ -1,6 +1,5 @@
 import { BrowserWindow } from 'electron';
-
-const SPLASH_DELAY_MS = 250;
+import { mark, measure } from '../../shared/perf';
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char] ?? char);
@@ -25,6 +24,7 @@ function asDataUrl(html: string): string {
 }
 
 export interface SplashController {
+  whenShown: Promise<void>;
   complete(): void;
   fail(reason: string): void;
   retrying(): void;
@@ -49,17 +49,26 @@ export function createSplashWindow(actions: { retry: () => void; exit: () => voi
       webSecurity: true,
     },
   });
+  mark('splash:create');
 
   let closingProgrammatically = false;
   let done = false;
-  const showTimer = setTimeout(() => {
-    if (!done && !win.isDestroyed()) {
-      win.center();
-      win.show();
+  let firstShowMeasured = false;
+  const showSplash = (): void => {
+    if (done || win.isDestroyed()) return;
+    win.center();
+    win.show();
+    if (!firstShowMeasured) {
+      firstShowMeasured = true;
+      mark('splash:visible');
+      measure('splashVisible', 'splash:create', 'splash:visible');
     }
-  }, SPLASH_DELAY_MS);
-
-  void win.loadURL(asDataUrl(loadingHtml()));
+  };
+  const whenShown = new Promise<void>((resolve) => {
+    win.once('show', resolve);
+  });
+  showSplash();
+  void win.loadURL(asDataUrl(loadingHtml())).catch(() => undefined);
   win.webContents.on('will-navigate', (event, url) => {
     if (url === 'polydesk-splash://retry') {
       event.preventDefault();
@@ -81,20 +90,18 @@ export function createSplashWindow(actions: { retry: () => void; exit: () => voi
   });
 
   return {
+    whenShown,
     complete(): void {
       if (done) return;
       done = true;
-      clearTimeout(showTimer);
       closingProgrammatically = true;
       if (!win.isDestroyed()) win.close();
     },
     fail(reason: string): void {
       if (done || win.isDestroyed()) return;
-      clearTimeout(showTimer);
       void win.loadURL(asDataUrl(failureHtml(reason))).finally(() => {
         if (!done && !win.isDestroyed()) {
-          win.center();
-          win.show();
+          showSplash();
           win.focus();
         }
       });
@@ -102,7 +109,7 @@ export function createSplashWindow(actions: { retry: () => void; exit: () => voi
     retrying(): void {
       if (done || win.isDestroyed()) return;
       void win.loadURL(asDataUrl(loadingHtml())).finally(() => {
-        if (!done && !win.isDestroyed()) win.show();
+        showSplash();
       });
     },
   };

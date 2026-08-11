@@ -1,6 +1,6 @@
 {
   "name": "polydesk",
-  "version": "0.27.0",
+  "version": "0.28.0",
   "description": "Polydesk — 多工作區開發終端機（Electron skeleton）",
   "author": "Polydesk",
   "license": "MIT",
@@ -81,8 +81,9 @@
       ],
       "icon": "build/icon.ico"
     },
-    "portable": {
-      "artifactName": "Polydesk-${version}-portable.exe"
-    }
+  "portable": {
+    "artifactName": "Polydesk-${version}-portable.exe",
+    "splashImage": "build/portable-splash.bmp"
   }
+}
 }

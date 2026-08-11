@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.28.0',
+    date: '2026-08-11',
+    highlights: [
+      '雙擊 portable EXE 後，自解壓階段就顯示 Polydesk 開啟畫面，不再先經過無畫面等待',
+      'Electron 啟動後以同尺寸開啟畫面接手，主畫面仍等工作區與 renderer 真正可操作才交接',
+      '開啟畫面不強制停留，既有安全限制、啟動失敗重試與退出流程維持不變',
+    ],
+  },
+  {
     version: '0.27.0',
     date: '2026-08-10',
     highlights: [

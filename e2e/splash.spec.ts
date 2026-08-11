@@ -29,7 +29,7 @@ async function waitForWindow(app: ElectronApplication, predicate: (url: string) 
 const isSplash = (url: string): boolean => url.startsWith('data:text/html');
 const isMain = (url: string): boolean => url.includes('/renderer/index.html') || url.includes('localhost');
 
-test('等待超過門檻才顯示安全 splash，主視窗就緒後立即收尾', async () => {
+test('splash 視窗建立後立即顯示，主視窗就緒後立即收尾', async () => {
   const { app } = await launchSplashApp({ POLYDESK_E2E_RENDERER_READY_DELAY_MS: '900' });
   const splash = await waitForWindow(app, isSplash);
   await expect(splash.getByText('正在準備工作區…')).toBeVisible();
@@ -53,6 +53,12 @@ test('等待超過門檻才顯示安全 splash，主視窗就緒後立即收尾'
     nodeIntegration: false,
     sandbox: true,
   });
+  const splashVisible = await app.evaluate(() => {
+    const perf = (globalThis as unknown as { __pdPerf?: { getMeasures(name: string): number[] } }).__pdPerf;
+    return perf?.getMeasures('splashVisible') ?? [];
+  });
+  expect(splashVisible).toHaveLength(1);
+  expect(splashVisible[0]).toBeLessThan(200);
 
   const main = await waitForWindow(app, isMain);
   await expect(main.locator('.pd-shell')).toBeVisible();

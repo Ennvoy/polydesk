@@ -7,6 +7,25 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.28.0（2026-08-11）
+
+雙擊 portable EXE 後從自解壓階段就顯示 Polydesk 開啟畫面，Electron 啟動後無縫接手，同時不為展示 splash 延長主程式啟動。
+
+- 對應功能 commit：待本節功能提交後回填
+
+### 2026-08-11｜啟動畫面立即顯示
+
+- portable 封裝新增 420×230、24-bit RGB 的 Polydesk BMP，自解壓期間由 NSIS 原生顯示；Electron 啟動後以同尺寸既有 splash 接手，覆蓋程式碼尚未執行的等待期。
+- Electron splash 原生視窗建立後立即置中顯示，再載入既有品牌內容；主初始化等待原生 `show` 事件後才開始，讓使用者先取得可見回饋。
+- 移除固定 250 ms 顯示 timer，不設定最低停留時間；主視窗仍須同時通過 `ready-to-show` 與 renderer-ready 握手才會交接。
+- 新增 portable BMP 格式／尺寸封裝契約、splash 建立到首次顯示的主程序埋點與真 Electron 回歸，保留 sandbox、無 Node 整合、外部開窗封鎖、失敗重試與退出驗證。
+- 首次導覽與完整使用指南經檢查不受影響：入口、步驟、畫面狀態、錯誤處理與高風險提示均未變更，因此不調升導覽版本，也不修改程式內指南內容。
+- 影響 Windows portable 封裝、Electron 主程序冷啟動時序、開啟畫面 E2E、版本資訊與發布文件；不影響工作區資料、renderer UI、IPC 白名單或終端程序。
+
+### 驗證
+
+- 票級 typecheck、正式 build、版本／BMP 契約單測 4/4 與 splash 真 Electron 3/3 全綠；實際啟動 `Polydesk-0.28.0-portable.exe`，從原生 HWND 擷取到 420×230 完整品牌 splash，暖啟動約 825 ms 顯示。完整出貨結果於 ship 後回填。
+
 ## v0.27.0（2026-08-10）
 
 將檔案總管、搜尋、SCM 與設定移到工作區標頭，並以首次導覽、可搜尋的完整使用指南與冷啟動開啟畫面降低第一次使用成本。
