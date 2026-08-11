@@ -352,3 +352,72 @@ zone: src/main/window/splashWindow.ts, src/main/window/portableSplash.test.ts, s
     ```
   - 耗時：合計 101s｜cmd /c npm run typecheck -- --pretty false 9s｜cmd /c npx vitest run src/shared/releaseNotes.test.ts --maxWorkers=1 --fileParallelism=false 5s｜cmd /c npx vitest run src/main/window/portableSplash.test.ts --maxWorkers=1 --fileParallelism=false 4s｜cmd /c npm run build 54s｜cmd /c npx playwright test e2e/splash.spec.ts --workers=1 30s
   - sig: 184c9db84b644c7ebc03010b12d1a84750b4f71403d416c35317b8605c68742b
+- **2026-08-11T01:54:36.465Z**
+  - `cmd /c npm run typecheck -- --pretty false`（exit 0）
+    ```
+
+    > polydesk@0.28.0 typecheck
+    > tsc --noEmit --pretty false
+
+
+    ```
+  - `cmd /c npx vitest run src/shared/releaseNotes.test.ts --maxWorkers=1 --fileParallelism=false`（exit 0）
+    ```
+
+    [1m[46m RUN [49m[22m [36mv3.2.6 [39m[90mC:/Users/ennvoy.lin/Documents/我的終端機[39m
+
+     [32m✓[39m src/shared/releaseNotes.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+
+    [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+    [2m      Tests [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+    [2m   Start at [22m 09:53:16
+    [2m   Duration [22m 800ms[2m (transform 48ms, setup 0ms, collect 91ms, tests 4ms, environment 0ms, prepare 324ms)[22m
+
+
+    ```
+  - `cmd /c npx vitest run src/main/window/portableSplash.test.ts --maxWorkers=1 --fileParallelism=false`（exit 0）
+    ```
+
+    [1m[46m RUN [49m[22m [36mv3.2.6 [39m[90mC:/Users/ennvoy.lin/Documents/我的終端機[39m
+
+     [32m✓[39m src/main/window/portableSplash.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 6[2mms[22m[39m
+
+    [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+    [2m      Tests [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+    [2m   Start at [22m 09:53:22
+    [2m   Duration [22m 573ms[2m (transform 31ms, setup 0ms, collect 77ms, tests 6ms, environment 0ms, prepare 155ms)[22m
+
+
+    ```
+  - `cmd /c npm run build`（exit 0）
+    ```
+    [2m../../out/renderer/[22m[36massets/redshift-CvYMMYZY.js                                    [39m[1m[2m    16.33 kB[22m[1m[22m
+    [2m../../out/renderer/[22m[36massets/pgsql-DaSGFTLp.js                                       [39m[1m[2m    18.25 kB[22m[1m[22m
+    [2m../../out/renderer/[22m[36massets/elixir-eLfY1jWH.js                                      [39m[1m[2m    18.74 kB[22m[1m[22m
+    [2m../../out/renderer/[22m[36massets/postiats-CVVurEnu.js                                    [39m[1m[2m    19.30 kB[22m[1m[22m
+    [2m../../out/renderer/[22m[36massets/powerquery-BQ_t1ZiQ.js                                  [39m[1m[2m    21.65 kB[22m[1m[22m
+    [2m../../out/renderer/[22m[36massets/abap-D5KwWAsZ.js                                        [39m[1m[2m    22.97 kB[22m[1m[22m
+    [2m../../out/renderer/[22m[36massets/solidity-yHOxYChb.js                                    [39m[1m[2m    26.03 kB[22m[1m[22m
+    [2m../../out/renderer/[22m[36massets/jsonMode-pKA8q6B2.js                                    [39m[1m[2m    29.12 kB[22m[1m[22m
+    [2m../../out/renderer/[22m[36massets/tsMode-DRGpoC1d.js                                      [39m[1m[2m    40.32 kB[22m[1m[22m
+    [2m../../out/renderer/[22m[36massets/freemarker2-CAmX8vbf.js                                 [39m[1m[2m    42.10 kB[22m[1m[22m
+    [2m../../out/renderer/[22m[36massets/lspLanguageFeatures-DY_CyN3J.js                         [39m[1m[2m    61.69 kB[22m[1m[22m
+    [2m../../out/renderer/[22m[36massets/addon-webgl-BEDhrLCz.js                                 [39m[1m[2m   139.86 kB[22m[1m[22m
+    [2m../../out/renderer/[22m[36massets/index-DkKulmO2.js                                       [39m[1m[33m 9,446.93 kB[39m[22m
+    [32m✓ built in 38.62s[39m
+
+    ```
+  - `cmd /c npx playwright test e2e/splash.spec.ts --workers=1`（exit 0）
+    ```
+
+    Running 3 tests using 1 worker
+
+      ok 1 e2e\splash.spec.ts:32:5 › splash 原生 show 事件在視窗建立後立即發生，主視窗就緒後立即收尾 (10.9s)
+      ok 2 e2e\splash.spec.ts:86:5 › 主畫面首次載入失敗時顯示安全原因，重試後可進入主程式 (7.0s)
+      ok 3 e2e\splash.spec.ts:102:5 › 主畫面載入失敗時可從 splash 確實退出 (7.2s)
+
+      3 passed (25.9s)
+
+    ```
+  - 耗時：合計 94s｜cmd /c npm run typecheck -- --pretty false 9s｜cmd /c npx vitest run src/shared/releaseNotes.test.ts --maxWorkers=1 --fileParallelism=false 6s｜cmd /c npx vitest run src/main/window/portableSplash.test.ts --maxWorkers=1 --fileParallelism=false 6s｜cmd /c npm run build 44s｜cmd /c npx playwright test e2e/splash.spec.ts --workers=1 29s
+  - sig: 01f04b97b1fdf1aeb9232c1a8123e1722399fc3925f5a8ad8dc7a9d290cec344

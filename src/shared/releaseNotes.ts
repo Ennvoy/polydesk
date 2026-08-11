@@ -18,8 +18,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     version: '0.28.0',
     date: '2026-08-11',
     highlights: [
-      '雙擊 portable EXE 後，自解壓階段就顯示 Polydesk 開啟畫面，不再先經過無畫面等待',
-      'Electron 啟動後以同尺寸開啟畫面接手，主畫面仍等工作區與 renderer 真正可操作才交接',
+      '雙擊 portable EXE 後，啟動器在自解壓期間顯示 Polydesk 開啟畫面，更早提供可見回饋',
+      'Electron 能建立視窗時以同尺寸開啟畫面盡快接手，主畫面仍等工作區與 renderer 真正可操作才交接',
       '開啟畫面不強制停留，既有安全限制、啟動失敗重試與退出流程維持不變',
     ],
   },

@@ -1,5 +1,7 @@
 # UI 設計定稿：本機可執行 Electron 版本
 
+> 2026-08-11 時序變更：本決議的 splash 外觀與尺寸繼續沿用；「250 ms 後才顯示」已被 `decisions/039-splash-shows-immediately.md` 取代。
+
 - **Claude Design**：本次執行環境沒有可用的 DesignSync／Claude Design 工具；已先向使用者說明，自行撰寫的版本不等同設計服務探索過的多方向。使用者選擇留在目前環境，由執行端直接撰寫真實畫面 code。
 - **設計基底**：沿用 Polydesk 既有 React 元件、theme tokens、按鈕／dialog／標題列與深色介面語言。
 - **需求描述**：移除最左固定活動列，把檔案總管、搜尋、原始碼控制及設定整合到工作區標頭；新增首次短導覽、可搜尋完整使用說明與冷啟動等待畫面。

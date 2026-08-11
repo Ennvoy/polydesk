@@ -53,19 +53,17 @@ export function createSplashWindow(actions: { retry: () => void; exit: () => voi
 
   let closingProgrammatically = false;
   let done = false;
-  let firstShowMeasured = false;
   const showSplash = (): void => {
     if (done || win.isDestroyed()) return;
     win.center();
     win.show();
-    if (!firstShowMeasured) {
-      firstShowMeasured = true;
-      mark('splash:visible');
-      measure('splashVisible', 'splash:create', 'splash:visible');
-    }
   };
   const whenShown = new Promise<void>((resolve) => {
-    win.once('show', resolve);
+    win.once('show', () => {
+      mark('splash:visible');
+      measure('splashVisible', 'splash:create', 'splash:visible');
+      resolve();
+    });
   });
   showSplash();
   void win.loadURL(asDataUrl(loadingHtml())).catch(() => undefined);

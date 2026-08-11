@@ -29,7 +29,7 @@ async function waitForWindow(app: ElectronApplication, predicate: (url: string) 
 const isSplash = (url: string): boolean => url.startsWith('data:text/html');
 const isMain = (url: string): boolean => url.includes('/renderer/index.html') || url.includes('localhost');
 
-test('splash 視窗建立後立即顯示，主視窗就緒後立即收尾', async () => {
+test('splash 原生 show 事件在視窗建立後立即發生，主視窗就緒後立即收尾', async () => {
   const { app } = await launchSplashApp({ POLYDESK_E2E_RENDERER_READY_DELAY_MS: '900' });
   const splash = await waitForWindow(app, isSplash);
   await expect(splash.getByText('正在準備工作區…')).toBeVisible();

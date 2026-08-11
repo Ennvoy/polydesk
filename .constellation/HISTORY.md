@@ -1,3 +1,9 @@
+## 2026-08-11 portable 自解壓啟動畫面
+- 完成 1 張票：portable 自解壓期間先顯示 420×230 原生 splash，Electron 能建立視窗時以同尺寸畫面盡快接手。
+- 移除 250 ms 顯示門檻；主初始化等原生 `show` 事件，`ready-to-show` 與 renderer-ready 交接、安全與失敗處理不變。
+- 關鍵決策為 `decisions/039`–`040`；如實揭露 Windows 驗簽／防毒與兩程序交界不保證零延遲。
+- 功能提交 `b8eb542`；完整 ship runner：Vitest 572/572、112 個非豁免 Electron E2E 全綠、3 個真 AI dogfood 跳過；Spec／Standards 複核皆 0 blocker、0 suggestion。
+
 ## 2026-08-10 工作區標頭、首次導覽與啟動畫面
 - 完成 3 張票：移除最左側活動列並把四個入口放進工作區標頭；新增首次 7 步導覽、可搜尋完整指南與冷啟動 splash。
 - 導覽狀態以 schema v3 安全持久化，手動重開不覆寫首次狀態；功能文件涵蓋總覽用量與 AI commit 草稿等既有入口。
