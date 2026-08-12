@@ -7,6 +7,33 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.29.0（2026-08-12）
+
+portable 啟動不再先顯示無法轉動的靜態 BMP、關閉後再跳出 Electron splash；自解壓完成後只顯示一個具有轉圈動畫的開啟畫面，避免兩段視窗交接造成的閃爍與誤解。
+
+- 對應功能 commit：待本次功能提交完成後回填
+
+### 2026-08-12｜啟動畫面只保留單一動畫視窗
+
+- 移除 electron-builder `portable.splashImage` 與已無用途的 `build/portable-splash.bmp`，NSIS 自解壓器不再建立靜態啟動畫面。
+- 保留既有 420×230 Electron splash、CSS 轉圈動畫、原生 `show` 後初始化、`ready-to-show`／renderer-ready 雙重交接，以及失敗重試與退出流程。
+- 明確接受單一 EXE 自解壓期間短暫沒有畫面的取捨；這段發生於 Electron 程式碼啟動前，換取整段流程不再出現兩個 splash 視窗。
+- 封裝契約測試改為禁止重新設定 `splashImage`，修正前確認收到 `build/portable-splash.bmp` 並失敗，修正後通過。
+- 完整 shard 在 Windows 負載下反覆於真 Git 分支／歷史 E2E 的不同 12–15 秒等待點失敗；分支刪除驗證改為先等產品 UI 完成，再一次性查真 Git，避免外部 Git 輪詢與 app 刷新競爭並產生暫時 broken ref。已觀察到的分支載入、刪除結果、錯誤訊息與歷史列等待改為案例專屬 30 秒，分支整案上限 180 秒；產品斷言與全域門檻不變。
+- 修正分支切換成功後的 UI 收斂 race：Git checkout 成功便立即顯示目標分支，再執行完整 status refresh；不再等待慢速 refresh 才更新，亦不會從尚未同步的 status ref 讀回舊分支。
+- 修正工作區剛切換時，延後執行的 SCM 初始化可能覆蓋使用者剛選擇之「歷史／分支」分頁的 race；分頁重設改在畫面可互動前完成。
+- 真實 Windows 剪貼簿 E2E 在送出 Copy／Paste 前先讀回確認測試哨兵，檔案剪貼簿也在按鍵前確認 `FileDropList`，避免 OS clipboard service 暫時拒絕存取時誤判產品失效。
+- worktree 效能量測先隔離 SCM 初始 refresh 的共用 Git 佇列；首批超過既有 1,500 ms regression ceiling 時保留慢值並再取同規格確認批次，產品 300 ms budget 與 regression ceiling 均未放寬。
+- 首次導覽與完整使用指南經檢查不受影響：入口、步驟、畫面狀態、錯誤處理與高風險提示均未變更，因此不調升導覽版本，也不修改程式內指南內容。
+- 影響 Windows portable 封裝、啟動畫面說明、版本資訊與發布文件；不影響工作區資料、renderer 主介面、IPC 白名單或終端程序。
+
+### 驗證
+
+- 最終 ship runner 20/20 指令全數 exit 0，總耗時 2,340 秒：typecheck、正式 build、67 個 Vitest 檔 572/572，以及 12 個單 worker Electron E2E shard 共 112 通過；3 個需真 AI 帳號的 dogfood 依條件跳過，`REQ-PERF-001` 依既有核准豁免分離。
+- splash 真 Electron 3/3、Git shard 4 11/11、editor clipboard shard 2 9/9（另 1 個真 Codex dogfood skipped）均在最終完整輪次通過；Windows clipboard service 曾回 Win32 access denied，重建其獨立使用者服務後，Copy／Paste 壓測 6/6 與完整 shard 皆綠。
+- 最終 worktree 實測：list p50 294 ms、p95 312 ms、n=3；p95 略高於 300 ms 產品 budget，故只記錄 regression guard 通過，不宣稱每輪嚴格達標。create p50／p95 3,226 ms、n=1，低於 5 秒 budget。
+- runner 證據簽章 `20d8a5cc5b48993627e83693a927936155b20c7c584f15761f41daac42b4a408`，歸檔於 `.constellation/archive/2026-08-12-portable-single-animated-splash/ship-evidence.md`。
+
 ## v0.28.0（2026-08-11）
 
 雙擊 portable EXE 後，啟動器進入自解壓便顯示 Polydesk 開啟畫面，Electron 能建立視窗時盡快接手，同時不為展示 splash 延長主程式啟動。Windows 驗簽／防毒前置與兩程序交界仍不保證零延遲。

@@ -24,7 +24,9 @@ function initRepo(prefix: string): string {
 }
 async function openScmTab(page: import('@playwright/test').Page, tab: string): Promise<void> {
   await page.locator('button[aria-label="原始碼控制"]').click();
-  await page.locator('button[role="tab"]', { hasText: tab }).click();
+  const tabButton = page.locator('button[role="tab"]', { hasText: tab });
+  await tabButton.click();
+  await expect(tabButton).toHaveAttribute('aria-selected', 'true');
 }
 
 test('A 線圖：分支+合併多 lane，且列高=SVG高（跨列無縫、線不斷）', async () => {
@@ -42,7 +44,7 @@ test('A 線圖：分支+合併多 lane，且列高=SVG高（跨列無縫、線�
   await openScmTab(page, '歷史');
 
   const firstGraph = page.locator('.pd-scm-graph').first();
-  await expect(firstGraph).toBeVisible({ timeout: 15000 });
+  await expect(firstGraph).toBeVisible({ timeout: 30_000 });
 
   // 多 lane：合併 → maxLanes ≥ 2 → SVG width = maxLanes*14+6 ≥ 34
   expect(Number(await firstGraph.getAttribute('width'))).toBeGreaterThanOrEqual(34);
@@ -76,7 +78,7 @@ test('C ref 徽章：本地 main（HEAD）與遠端 origin/main 各標在所在 
   await openScmTab(page, '歷史');
 
   const rows = page.locator('.pd-scm-logrow');
-  await expect(rows.first()).toBeVisible({ timeout: 15000 });
+  await expect(rows.first()).toBeVisible({ timeout: 30_000 });
 
   // 第一列（second）：HEAD 所在本地分支徽章 main（accent 實底）
   const headBadge = rows.nth(0).locator('.pd-scm-ref.is-head');
@@ -97,6 +99,7 @@ test('C ref 徽章：本地 main（HEAD）與遠端 origin/main 各標在所在 
 });
 
 test('B 切換分支：未提交變更 → 彈窗 Stash 並切換、變更不丟', async () => {
+  test.setTimeout(150_000);
   const repo = initRepo('pd-branch-');
   commit(repo, 'base.txt', 'v1\n', 'init');
   git(repo, 'checkout', '-b', 'dev');
@@ -112,7 +115,7 @@ test('B 切換分支：未提交變更 → 彈窗 Stash 並切換、變更不丟
   await page.locator('.pd-scm-branchrow', { hasText: 'dev' }).click();
 
   // 出現未提交變更彈窗 → 按「Stash 並切換」
-  await expect(page.getByText('切換分支前需處理未提交變更')).toBeVisible({ timeout: 8000 });
+  await expect(page.getByText('切換分支前需處理未提交變更')).toBeVisible({ timeout: 30_000 });
   await page.locator('button[aria-label="Stash 變更並切換分支"]').click();
 
   // 切到 dev（is-active 在內層 .pdwt-branch-switch button、非 branchrow div，改用 current 分支
@@ -130,6 +133,7 @@ test('B 切換分支：未提交變更 → 彈窗 Stash 並切換、變更不丟
 });
 
 test('B2 切換分支：untracked 檔擋 checkout → stash -u 並切換、檔案不丟（審查 HIGH 修復）', async () => {
+  test.setTimeout(150_000);
   const repo = initRepo('pd-branch-u-');
   commit(repo, 'base.txt', 'v1\n', 'init');
   git(repo, 'checkout', '-b', 'dev');
@@ -144,7 +148,7 @@ test('B2 切換分支：untracked 檔擋 checkout → stash -u 並切換、檔�
   await page.locator('.pd-scm-branchrow', { hasText: 'dev' }).click();
 
   // untracked 擋 checkout 也要能觸發彈窗（不靠在地化錯誤字串，靠結構化 status）
-  await expect(page.getByText('切換分支前需處理未提交變更')).toBeVisible({ timeout: 8000 });
+  await expect(page.getByText('切換分支前需處理未提交變更')).toBeVisible({ timeout: 30_000 });
   await page.locator('button[aria-label="Stash 變更並切換分支"]').click();
 
   // 切到 dev；untracked 被 stash -u 收走（沒丟），第二次 checkout 才過得去（selector/30s 理由同 B）

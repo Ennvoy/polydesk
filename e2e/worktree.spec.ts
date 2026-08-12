@@ -183,6 +183,7 @@ test('worktree 移除相容舊資料：一般工作區加入時兩種移除都�
 });
 
 test('F-13：分支分頁「在新 worktree 開啟」建立；checkout 衝突→跳到該 worktree', async () => {
+  test.setTimeout(120_000);
   const { root, repo } = seedRepo();
   const { app, page, userData } = await launchApp();
   await stubFolderPicker(app, [repo]);
@@ -204,7 +205,7 @@ test('F-13：分支分頁「在新 worktree 開啟」建立；checkout 衝突→
   await page.getByRole('tab', { name: '分支' }).click();
   await page.getByRole('button', { name: '切換到分支 dev' }).click();
   const jumpBtn = page.locator('button[aria-label="跳到該 worktree"]');
-  await expect(jumpBtn).toBeVisible({ timeout: 8000 });
+  await expect(jumpBtn).toBeVisible({ timeout: 30000 });
   await jumpBtn.click();
   // 作用工作區切到 dev worktree（rail 上該 worktree 項為 active）
   await expect(page.locator('.pdws-item.is-active [aria-label="worktree 工作區"]')).toBeVisible({ timeout: 8000 });

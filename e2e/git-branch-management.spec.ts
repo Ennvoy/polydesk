@@ -43,6 +43,7 @@ async function openBranches(page: import('@playwright/test').Page): Promise<void
 }
 
 test('分支管理：本地／遠端分組、雙入口、阻擋原因與安全刪除真鏈路', async () => {
+  test.setTimeout(180_000);
   const { root, repo, remote } = seedRepo();
   const { app, page, userData } = await launchApp();
   try {
@@ -54,8 +55,8 @@ test('分支管理：本地／遠端分組、雙入口、阻擋原因與安全�
     const remoteGroup = page.getByRole('button', { name: /^遠端分支 \d+$/ });
     await expect(localGroup).toHaveAttribute('aria-expanded', 'true');
     await expect(remoteGroup).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.locator('[data-branch-kind="local"]')).toHaveCount(5);
-    await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(2);
+    await expect(page.locator('[data-branch-kind="local"]')).toHaveCount(5, { timeout: 30_000 });
+    await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(2, { timeout: 30_000 });
 
     await remoteGroup.click();
     await expect(remoteGroup).toHaveAttribute('aria-expanded', 'false');
@@ -78,8 +79,8 @@ test('分支管理：本地／遠端分組、雙入口、阻擋原因與安全�
     await expect(page.getByRole('heading', { name: '刪除本地分支？' })).toBeVisible();
     await expect(page.getByRole('dialog')).toContainText('只會刪除這台電腦上的「merged-local」');
     await page.getByRole('button', { name: '刪除本地分支', exact: true }).click();
-    await expect.poll(() => git(repo, 'branch', '--list', 'merged-local').trim()).toBe('');
-    await expect(page.locator('[data-branch-kind="local"]', { hasText: 'merged-local' })).toHaveCount(0);
+    await expect(page.locator('[data-branch-kind="local"]', { hasText: 'merged-local' })).toHaveCount(0, { timeout: 30_000 });
+    expect(git(repo, 'branch', '--list', 'merged-local').trim()).toBe('');
 
     await page.getByRole('button', { name: '更多遠端分支操作 team/backend/remote-delete' }).click();
     await page.getByRole('menuitem', { name: '刪除遠端分支', exact: true }).click();
@@ -88,14 +89,14 @@ test('分支管理：本地／遠端分組、雙入口、阻擋原因與安全�
     const deleteRemote = page.getByRole('button', { name: '刪除遠端分支', exact: true });
     await expect(deleteRemote).toHaveClass(/pd-btn-danger/);
     await deleteRemote.click();
-    await expect.poll(() => git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/remote-delete').trim()).toBe('');
+    await expect(page.locator('[data-branch-kind="remote"]', { hasText: 'team/backend/remote-delete' })).toHaveCount(0, { timeout: 30_000 });
+    expect(git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/remote-delete').trim()).toBe('');
     expect(git(repo, 'branch', '--list', 'remote-delete').trim()).toBe('remote-delete');
-    await expect(page.locator('[data-branch-kind="remote"]', { hasText: 'team/backend/remote-delete' })).toHaveCount(0);
 
     await page.getByRole('button', { name: '更多本地分支操作 unfinished' }).click();
     await page.getByRole('menuitem', { name: '刪除本地分支', exact: true }).click();
     await page.getByRole('button', { name: '刪除本地分支', exact: true }).click();
-    await expect(page.locator('.pd-scm-error')).toContainText('尚未合併');
+    await expect(page.locator('.pd-scm-error')).toContainText('尚未合併', { timeout: 30_000 });
     await expect(page.locator('[data-branch-kind="local"]', { hasText: 'unfinished' })).toBeVisible();
   } finally {
     await app.close();

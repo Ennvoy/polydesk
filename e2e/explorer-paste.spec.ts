@@ -5,13 +5,39 @@
 import { test, expect } from '@playwright/test';
 import { rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { launchApp, makeTempDir, makeSubDir, stubFolderPicker, addWorkspaceViaUI } from './electronApp';
 
 const PNG_1PX = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
   'base64',
 );
+
+function setFileClipboardAndVerify(source: string): void {
+  const command = [
+    "$ErrorActionPreference = 'Stop'",
+    'Set-Clipboard -LiteralPath $env:POLYDESK_CLIPBOARD_TEST_PATH',
+    'Start-Sleep -Milliseconds 100',
+    '$files = @(Get-Clipboard -Format FileDropList)',
+    "if ($files.Count -ne 1) { throw '剪貼簿檔案數量不符' }",
+    '$files[0].FullName',
+  ].join('; ');
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      const actual = execFileSync('powershell.exe', ['-NoProfile', '-Command', command], {
+        encoding: 'utf8',
+        env: { ...process.env, POLYDESK_CLIPBOARD_TEST_PATH: source },
+      }).trim();
+      if (actual.localeCompare(source, undefined, { sensitivity: 'accent' }) === 0) return;
+      lastError = new Error(`剪貼簿路徑不符：${actual}`);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('無法設定並確認系統剪貼簿');
+}
 
 test('貼上外部檔案：fileUtils 已暴露 + importFiles 複製進工作區並自動顯示', async () => {
   const wsRoot = makeTempDir();
@@ -60,9 +86,6 @@ test('真實 Ctrl+V：非可編輯焦點下也能貼入外部檔案（paste catc
   const src = join(extDir, 'paste-me.txt');
   writeFileSync(src, 'VIA-CTRL-V', 'utf8');
 
-  // 放進系統剪貼簿（模擬在 Windows 檔案總管複製了這個檔）
-  execSync(`Set-Clipboard -Path "${src}"`, { shell: 'powershell.exe' });
-
   const { app, page, userData } = await launchApp();
   await stubFolderPicker(app, [wsDir]);
   await addWorkspaceViaUI(page);
@@ -71,6 +94,8 @@ test('真實 Ctrl+V：非可編輯焦點下也能貼入外部檔案（paste catc
   await expect(tree).toBeVisible();
   await tree.click(); // 焦點落在檔案樹（非可編輯 div）— 正是先前貼不進去的情境
 
+  // Windows 剪貼簿是全域共享資源；在按鍵前一刻寫入並讀回 FileDropList，避免 Electron 啟動期間被其他程序覆寫。
+  setFileClipboardAndVerify(src);
   await page.keyboard.press('Control+V'); // 真實 Ctrl+V → catcher → paste → 匯入
 
   await expect(tree.locator('[role="treeitem"][aria-label="paste-me.txt"]')).toBeVisible({ timeout: 10000 });

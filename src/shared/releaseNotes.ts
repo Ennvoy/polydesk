@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.29.0',
+    date: '2026-08-12',
+    highlights: [
+      'portable 啟動不再先顯示靜態圖片後關閉，整段只保留一個 Electron 動畫開啟畫面',
+      '自解壓完成且 Electron 啟動後立即顯示轉圈回饋，主畫面仍等工作區與 renderer 真正可操作才交接',
+      '啟動失敗重試、退出流程與既有安全限制維持不變',
+    ],
+  },
+  {
     version: '0.28.0',
     date: '2026-08-11',
     highlights: [

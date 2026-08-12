@@ -44,7 +44,7 @@ test('dogfood：自訂標題列 + 編輯器切換鈕 + git 線圖', async () => 
   await addWorkspaceViaUI(page);
   await page.locator('button[aria-label="原始碼控制"]').click(); // 切 SCM 視圖
   await page.locator('button[role="tab"]', { hasText: '歷史' }).click();
-  await expect(page.locator('.pd-scm-graph').first()).toBeVisible({ timeout: 15000 }); // 線圖 SVG 真的畫出
+  await expect(page.locator('.pd-scm-graph').first()).toBeVisible({ timeout: 30_000 }); // 線圖 SVG 真的畫出
   await page.screenshot({ path: shot('ui-gitgraph.png') });
 
   await app.close();

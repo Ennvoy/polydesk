@@ -3,7 +3,7 @@
 // 分支切換/建立；歷史；stash。點檔開 monaco diff。操作進行中顯示「進行中」、失敗顯示明確錯誤。
 // 全用既有 pd-* class + var(--*) token + scm.css；每互動元素具 aria-label 與微狀態。
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ipc } from '../../ipc/client';
 import { useAppState } from '../../state/appStore';
 import { dialog } from '../Dialogs/host';
@@ -278,7 +278,7 @@ export function SourceControlPanel(): React.JSX.Element {
   // 工作區切換 → 回變更分頁並刷新。防抖 120ms：快速連切只載入「最終停留」的工作區，中間掠過的
   // 不發 git 載入 → 不堆積 serial queue（實測連切 5 個大 repo 的 git status 會累積到 ~10s）。
   // 刷新後順帶自動 fetch（PE-4；同 wsId 60s 冷卻，連切不狂觸網）。
-  useEffect(() => {
+  useLayoutEffect(() => {
     setTab('changes');
     const t = setTimeout(() => void refresh(false).then(() => fetchRemote(false)), 120);
     return () => clearTimeout(t);
@@ -577,8 +577,10 @@ export function SourceControlPanel(): React.JSX.Element {
           return;
         }
       }
+      // checkout IPC 成功即代表 Git HEAD 已切到目標分支；不要讓分支 UI 再被完整 status refresh
+      // 的磁碟／程序耗時綁住，也不要從可能尚未更新的 statusRef 讀回舊分支。
+      setBranches((prev) => ({ ...prev, current: name }));
       await refresh();
-      setBranches((prev) => ({ ...prev, current: statusRef.current?.branch ?? name }));
     });
 
   /**

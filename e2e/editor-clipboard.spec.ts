@@ -16,10 +16,18 @@ import { launchApp, makeTempDir, makeSubDir, stubFolderPicker, addWorkspaceViaUI
 const readClipboard = (app: ElectronApplication): Promise<string> =>
   app.evaluate(({ clipboard }) => clipboard.readText());
 
+/** Windows 剪貼簿是全域共享資源；寫入後須讀回確認，避免外部程序鎖定／覆寫造成假產品失敗。 */
+async function writeClipboardAndVerify(app: ElectronApplication, text: string): Promise<void> {
+  await expect(async () => {
+    await app.evaluate(({ clipboard }, value) => clipboard.writeText(value), text);
+    expect(await readClipboard(app)).toBe(text);
+  }).toPass({ timeout: 10000, intervals: [100, 250, 500, 1000] });
+}
+
 /** 快照現有系統剪貼簿 → 放入測試文字；回傳還原函式（finally 呼叫，不污染使用者剪貼簿）。 */
 async function seedClipboard(app: ElectronApplication, text: string): Promise<() => Promise<void>> {
   const prev = await readClipboard(app);
-  await app.evaluate(({ clipboard }, t) => clipboard.writeText(t), text);
+  await writeClipboardAndVerify(app, text);
   return async () => {
     await app.evaluate(({ clipboard }, t) => clipboard.writeText(t), prev).catch(() => undefined);
   };
@@ -68,7 +76,7 @@ test('複製：鍵盤 Ctrl+C 與右鍵選單 Copy 都寫進系統剪貼簿', asy
     await expect.poll(() => readClipboard(app), { timeout: 8000, message: 'Ctrl+C 未寫入系統剪貼簿' }).toContain('COPYME_ALPHA');
 
     // 右鍵選單 Copy（先清成哨兵值再驗）
-    await app.evaluate(({ clipboard }) => clipboard.writeText('SENTINEL_BEFORE_MENU_COPY'));
+    await writeClipboardAndVerify(app, 'SENTINEL_BEFORE_MENU_COPY');
     await editor.click();
     await page.keyboard.press('Control+a');
     await clickContextMenuItem(page, editor, /^(Copy|複製)$/);
@@ -98,7 +106,7 @@ test('貼上：右鍵選單 Paste 與 Ctrl+V 都貼進編輯器', async () => {
     await expect.poll(() => modelContent(page), { timeout: 8000, message: '右鍵選單 Paste 未貼進編輯器' }).toContain('PASTED_CONTEXTMENU_QQQ');
 
     // 觸發實體 Ctrl+V 會進入的 Electron 事件；不可用 webContents.paste() 直接跳到結果。
-    await app.evaluate(({ clipboard }) => clipboard.writeText('PASTED_CTRL_V'));
+    await writeClipboardAndVerify(app, 'PASTED_CTRL_V');
     const editorInput = editor.getByRole('textbox', { name: 'Editor content' });
     await editor.locator('.view-lines').click();
     await expect(editorInput).toBeFocused();
