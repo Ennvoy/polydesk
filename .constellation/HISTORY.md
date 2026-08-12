@@ -2,7 +2,7 @@
 - 修正自解壓靜態 BMP 無法轉動、關閉後又跳出 Electron splash 的雙重啟動畫面。
 - 移除 `portable.splashImage` 與 BMP 資產；自解壓完成後只保留既有 Electron 動畫 splash，接受自解壓期間短暫無畫面的取捨。
 - 主視窗 ready 握手、安全設定、失敗重試／退出與首次導覽／完整使用指南均不受影響。
-- 關鍵決策為 `decisions/041`；版本升至 v0.29.0。完整 ship runner 20/20 指令通過：Vitest 572/572、112 個非豁免 Electron E2E 全綠、3 個真 AI dogfood 跳過；功能提交待完成後回填。
+- 關鍵決策為 `decisions/041`；功能提交 `b0523ff`，版本升至 v0.29.0。完整 ship runner 20/20 指令通過：Vitest 572/572、112 個非豁免 Electron E2E 全綠、3 個真 AI dogfood 跳過。
 
 ## 2026-08-11 portable 自解壓啟動畫面
 - 完成 1 張票：portable 自解壓期間先顯示 420×230 原生 splash，Electron 能建立視窗時以同尺寸畫面盡快接手。

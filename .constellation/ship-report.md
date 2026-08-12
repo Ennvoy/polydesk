@@ -16,7 +16,7 @@
 
 ## 證據在哪
 
-- 功能提交：待本次功能提交完成後回填。
+- 功能提交：`b0523ff`。
 - 最終 runner 證據：`.constellation/archive/2026-08-12-portable-single-animated-splash/ship-evidence.md`，簽章 `20d8a5cc5b48993627e83693a927936155b20c7c584f15761f41daac42b4a408`。
 - 關鍵決策：`.constellation/decisions/041-single-animated-splash.md`，取代 `040-portable-extraction-splash.md` 的雙層 splash 決策。
 - 核心實作：`package.json`、刪除的 `build/portable-splash.bmp`、`src/main/window/portableSplash.test.ts` 與既有 `src/main/window/splashWindow.ts`；SCM race 修正位於 `SourceControlPanel.tsx`。
