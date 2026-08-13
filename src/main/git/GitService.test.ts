@@ -198,6 +198,8 @@ describe('GitService（真 git）', () => {
     execFileSync('git', ['branch', 'feature'], { cwd: ctx.repo, stdio: 'pipe' });
     execFileSync('git', ['remote', 'add', 'origin', join(ctx.root, 'origin.git')], { cwd: ctx.repo, stdio: 'pipe' });
     execFileSync('git', ['update-ref', 'refs/remotes/origin/main', 'HEAD'], { cwd: ctx.repo, stdio: 'pipe' });
+    execFileSync('git', ['config', 'branch.feature.remote', 'origin'], { cwd: ctx.repo, stdio: 'pipe' });
+    execFileSync('git', ['config', 'branch.feature.merge', 'refs/heads/deployed-feature'], { cwd: ctx.repo, stdio: 'pipe' });
 
     const calls: string[][] = [];
     const exec: GitExecFn = (file, args, options, cb) => {
@@ -210,6 +212,7 @@ describe('GitService（真 git）', () => {
     expect(result.branches).toEqual(expect.arrayContaining(['main', 'feature']));
     expect(result.remotes).toContain('origin/main');
     expect(result.remoteBranches).toContainEqual({ remote: 'origin', name: 'main', ref: 'origin/main' });
+    expect(result.localUpstreams).toMatchObject({ feature: { remote: 'origin', name: 'deployed-feature' } });
     expect(result.current).toBe('main');
     expect(calls).toHaveLength(2);
     expect(calls[0]).toContain('for-each-ref');

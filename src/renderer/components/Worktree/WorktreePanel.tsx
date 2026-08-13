@@ -188,7 +188,7 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
         setError(plannedPreview.error);
         return;
       }
-      let acceptExternalWriteRisk = scopeDeletesFolder(choice);
+      let acceptExternalWriteRisk = false;
       if (choice === 'full-cleanup') {
         const decision = (await dialog.open(
           (close) => <BranchCleanupRiskDialog
@@ -204,6 +204,15 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
         force = decision.forceLocal;
         unlock = decision.unlockWorktreeIds.includes(target.id);
         acceptExternalWriteRisk = decision.acceptExternalWriteRisk;
+      } else if (scopeDeletesFolder(choice)) {
+        acceptExternalWriteRisk = await dialog.confirm({
+          title: '確認外部寫入風險',
+          body: '確認後到清理完成前，外部 editor、build 或其他程序仍可能新增或改寫資料夾內容；這些新內容也可能被刪除。',
+          confirmText: '了解風險並刪除',
+          cancelText: '取消',
+          danger: true,
+        });
+        if (!acceptExternalWriteRisk) return;
       }
       const cleaned = await ipc.git.cleanupExecute({
         wsId: repositoryWsId,

@@ -35,6 +35,7 @@ import type {
   GitPushErrorCode,
   GitRemoteBranch,
   GitBranchDeleteResult,
+  GitBranchUpstream,
 } from './types';
 import type {
   GitCleanupExecuteRequest,
@@ -42,6 +43,7 @@ import type {
   GitCleanupPreviewRequest,
   GitCleanupPreviewResult,
   GitCleanupResumeRequest,
+  GitCleanupImportEvidenceRequest,
   GitCleanupStatusResult,
 } from './gitCleanup';
 
@@ -143,7 +145,7 @@ export interface InvokeChannels {
       remote?: string;
     };
     res:
-      | { branches: string[]; current: string; remotes?: string[]; remoteBranches?: GitRemoteBranch[] }
+      | { branches: string[]; current: string; remotes?: string[]; remoteBranches?: GitRemoteBranch[]; localUpstreams?: Record<string, GitBranchUpstream> }
       | { ok: true }
       | GitBranchDeleteResult;
   };
@@ -152,7 +154,7 @@ export interface InvokeChannels {
   /** 完整清理第二階段：main 重驗 lease 後先建立 prepared journal；後續票才接破壞性步驟。 */
   'git:cleanupExecute': { req: GitCleanupExecuteRequest; res: GitCleanupExecuteResult };
   /** 啟動恢復與 SCM 待辦使用；只回去密 repository claim 與 quarantine 狀態。 */
-  'git:cleanupStatus': { req: void; res: GitCleanupStatusResult };
+  'git:cleanupStatus': { req: { wsId?: string } | void; res: GitCleanupStatusResult };
   /** 只有仍能完整證明零副作用的 prepared journal 可取消。 */
   'git:cleanupCancel': {
     req: { wsId: string; journalId: string };
@@ -160,6 +162,11 @@ export interface InvokeChannels {
   };
   /** mutating/reconciling journal 只能沿原 checkpoint 繼續，不重新建立破壞性計畫。 */
   'git:cleanupResume': { req: GitCleanupResumeRequest; res: GitCleanupExecuteResult };
+  /** quarantine 只能匯入與原 envelope checksum 完全相符的原始 payload，不能用確認文字解鎖。 */
+  'git:cleanupImportEvidence': {
+    req: GitCleanupImportEvidenceRequest;
+    res: { ok: true } | { ok: false; error: string };
+  };
   'git:log': { req: { wsId: string; limit: number }; res: GitLogEntry[] };
   /** commit diff（git show <ref>；給 path 則限定單檔）；PE-1 右鍵/展開檔案用。 */
   'git:show': { req: { wsId: string; ref: string; path?: string }; res: { patch: string } };

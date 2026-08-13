@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -50,6 +50,23 @@ describe('CleanupJournalStore', () => {
     expect(store.rebuildClaims().claims).toContainEqual(expect.objectContaining({ repositoryFingerprint: 'repo-fingerprint' }));
   });
 
+  it('active payload 必須通過 envelope checksum，quarantine 只接受原始 payload 證據恢復', () => {
+    const original = { schemaVersion: 1, leaseToken: 'lease-1', checkpoints: [] };
+    const created = store.createPrepared({
+      repositoryFingerprint: 'repo-fingerprint',
+      repositoryGeneration: 'repo-generation',
+      payload: original,
+    });
+    store.markMutating(created.journalId);
+    writeFileSync(join(root, 'branch-cleanup', 'active', `${created.journalId}.payload.json`), '{"tampered":true}', 'utf8');
+    expect(() => store.readVerifiedActive(created.journalId)).toThrowError(expect.objectContaining({ code: 'invalid-payload' }));
+
+    store.rebuildClaims();
+    expect(() => store.restoreQuarantinedPayload(created.journalId, { wrong: true })).toThrowError(expect.objectContaining({ code: 'evidence-mismatch' }));
+    store.restoreQuarantinedPayload(created.journalId, original);
+    expect(store.readVerifiedActive(created.journalId)).toMatchObject({ payload: original, envelope: { phase: 'reconciling' } });
+  });
+
   it('mutating checkpoint 會先更新 payload checksum 再推進 envelope generation', () => {
     const created = store.createPrepared({
       repositoryFingerprint: 'repo-fingerprint',
@@ -63,6 +80,29 @@ describe('CleanupJournalStore', () => {
     expect(checkpointed.payloadChecksum).not.toBe(mutating.payloadChecksum);
     expect(store.readPayload(created.journalId)).toMatchObject({ checkpoints: ['local-ref-deleted'] });
     expect(store.rebuildClaims()).toMatchObject({ globalBlocked: false });
+  });
+
+  it('SCM status peek 不重寫 claim bytes、mtime 或 journal phase', () => {
+    const created = store.createPrepared({
+      repositoryFingerprint: 'repo-fingerprint',
+      repositoryGeneration: 'repo-generation',
+      payload: { leaseToken: 'lease-1', checkpoints: [] },
+    });
+    store.markMutating(created.journalId);
+    const claimsPath = join(root, 'branch-cleanup', 'claims.json');
+    const envelopePath = join(root, 'branch-cleanup', 'active', `${created.journalId}.envelope.json`);
+    const beforeClaims = readFileSync(claimsPath);
+    const beforeEnvelope = readFileSync(envelopePath);
+    const beforeClaimsMtime = statSync(claimsPath).mtimeMs;
+    const beforeEnvelopeMtime = statSync(envelopePath).mtimeMs;
+
+    expect(store.peek().claims).toContainEqual(expect.objectContaining({ journalId: created.journalId, phase: 'mutating' }));
+    expect(store.peek().claims).toContainEqual(expect.objectContaining({ journalId: created.journalId, phase: 'mutating' }));
+
+    expect(readFileSync(claimsPath)).toEqual(beforeClaims);
+    expect(readFileSync(envelopePath)).toEqual(beforeEnvelope);
+    expect(statSync(claimsPath).mtimeMs).toBe(beforeClaimsMtime);
+    expect(statSync(envelopePath).mtimeMs).toBe(beforeEnvelopeMtime);
   });
 
   it('無法驗證 envelope 歸屬時全域 fail-closed', () => {

@@ -177,6 +177,7 @@ test('worktree 移除相容舊資料：一般工作區加入時兩種移除都�
   await expect(discard).toBeVisible({ timeout: 8000 });
   await page.locator('input[aria-label="確定丟棄未提交變更"]').check();
   await discard.click();
+  await page.getByRole('button', { name: '了解風險並刪除' }).click();
   await expect.poll(() => existsSync(legacyPath), { timeout: 30_000 }).toBe(false);
   await expect(page.locator('.pd-scm-error')).toHaveCount(0);
   expect(git(repo, 'worktree', 'list', '--porcelain')).not.toContain(legacyPath.replace(/\\/g, '/'));

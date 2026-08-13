@@ -57,9 +57,9 @@ AI 執行狀態監控使用 `SystemRoot` 下的 Windows PowerShell／WMIC 絕對
 
 原始碼控制的「分支」頁會把本地與遠端分支分成兩組，顯示各自數量，並可獨立收合。每個分支列的 `⋯` 與右鍵會開啟同一套操作選單；目前簽出的本地分支或由其他 worktree 使用中的分支不再停用刪除，而是進入同一套完整清理流程。
 
-第一階段只選擇範圍：本地分支、目前分支先切換的目標、linked worktree，以及逐個 opt-in 的遠端分支。按「檢查清理風險」前不建立 journal，也不修改 Git、磁碟或遠端。第二階段會即時顯示可能失去的 commit（歷史不完整時標示本機下限／unknown）、worktree 路徑與 dirty／locked／prunable、local ref／metadata，以及每個 effective push endpoint 與 expected OID；需要 force、解鎖或接受外部寫入殘餘風險時必須明確勾選。
+第一階段只選擇範圍：本地分支、目前分支先切換的目標、linked worktree，以及逐個 opt-in 的遠端分支；本地分支若追蹤不同名稱的 upstream，也會在開啟遠端清理後預先勾選。按「檢查清理風險」前不建立 journal，也不修改 Git、磁碟或遠端。第二階段會即時顯示可能失去的 commit（歷史不完整時標示本機下限／unknown）、worktree 路徑與 dirty／locked／prunable、local ref／metadata，以及每個 effective push endpoint 與 expected OID；需要 force、解鎖或接受外部寫入殘餘風險時必須明確勾選。
 
-執行時會先重驗整份 lease，再以 repository 級 write-ahead journal 逐步完成遠端 compare-and-delete、tracking ref 收斂、worktree 移除、本地 ref CAS、branch config 與 reflog 清理。認證、網路、受保護分支、遠端 tip 變動或 receive-pack 無法證明 ref 缺席時，結果會標示 stale／unknown，不會偽裝成功；SCM 會保留「完整清理待辦」，prepared 零副作用計畫可取消，mutating／reconciling 只能沿 checkpoint 繼續收斂。
+執行時會先重驗整份 lease，再以 repository 級 write-ahead journal 依序完成 worktree 移除、本地 ref CAS、branch config／reflog，最後才做遠端 compare-and-delete 與 tracking ref 收斂。認證、網路、受保護分支、遠端 tip 變動或 receive-pack 無法證明 ref 缺席時，結果會標示 stale／unknown，不會偽裝成功；SCM 會顯示逐步 checkpoint 並保留「完整清理待辦」。prepared 零副作用計畫可取消，mutating／reconciling 只能沿 checkpoint 繼續；payload 損壞進入 quarantine 時，只能匯入 checksum 完全相符的原始 journal 證據，不能靠確認文字解鎖。
 
 在截圖工具、瀏覽器或通訊軟體複製圖片後，先點一下檔案總管中的目標資料夾，再按 `Ctrl+V`，圖片會存成 `貼上圖片.png`；若檔名已存在會自動建立 `貼上圖片 copy.png`，不會覆蓋舊檔。此流程同時支援某些軟體用「無磁碟路徑、通用 MIME 虛擬檔案」提供的圖片，且不依賴系統 `PATH`。從 Windows 檔案總管複製既有圖片檔時，仍會保留原始檔名與格式。
 

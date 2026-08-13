@@ -135,14 +135,33 @@ function matchLine(path: string, line: number, col: number, text: string): Buffe
   return Buffer.concat([Buffer.from(path), Buffer.from([0]), Buffer.from(`${line}:${col}:${text}\n`)]);
 }
 
+async function removeTempTree(path: string): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    try {
+      rmSync(path, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      lastError = error;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'EPERM' && code !== 'EBUSY') throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  throw lastError;
+}
+
 describe('SearchService', () => {
   let ctx: ReturnType<typeof setup>;
   beforeEach(() => {
     __resetFileServiceState();
     ctx = setup();
   });
-  afterEach(() => {
-    rmSync(ctx.root, { recursive: true, force: true });
+  afterEach(async () => {
+    // Windows may release the real rg process handle a few milliseconds after
+    // the final truncated event. Retry teardown instead of turning that OS race
+    // into a product failure in the full serialized shard.
+    await removeTempTree(ctx.root);
   });
 
   // ── REQ-SEARCH-001/002：串流命中 path/line 正確（真 rg）──────────────

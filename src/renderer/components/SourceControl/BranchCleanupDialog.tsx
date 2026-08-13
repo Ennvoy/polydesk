@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { neutralizeBidi } from '../Dialogs/TrustConfirm';
-import type { GitRemoteBranch } from '../../../shared/types';
+import type { GitBranchUpstream, GitRemoteBranch } from '../../../shared/types';
 
 export interface BranchCleanupDraft {
   branch: string;
@@ -15,6 +15,7 @@ interface BranchCleanupDialogProps {
   worktreePaths: string[];
   localBranches: string[];
   remoteCandidates: GitRemoteBranch[];
+  upstream?: GitBranchUpstream;
   onResult: (result?: BranchCleanupDraft) => void;
 }
 
@@ -24,19 +25,24 @@ export function BranchCleanupDialog({
   worktreePaths,
   localBranches,
   remoteCandidates,
+  upstream,
   onResult,
 }: BranchCleanupDialogProps): React.JSX.Element {
   const switchCandidates = useMemo(
     () => localBranches.filter((candidate) => candidate !== branch),
     [branch, localBranches],
   );
-  const matchingRemotes = useMemo(
-    () => remoteCandidates.filter((candidate) => candidate.name === branch),
-    [branch, remoteCandidates],
-  );
+  const matchingRemotes = useMemo(() => {
+    const candidates = remoteCandidates.filter((candidate) => candidate.name === branch);
+    if (upstream && !candidates.some((candidate) => candidate.remote === upstream.remote && candidate.name === upstream.name)) {
+      candidates.unshift({ remote: upstream.remote, name: upstream.name, ref: `${upstream.remote}/${upstream.name}` });
+    }
+    return candidates;
+  }, [branch, remoteCandidates, upstream]);
   const [switchTo, setSwitchTo] = useState(switchCandidates[0] ?? '');
   const [includeRemote, setIncludeRemote] = useState(false);
-  const [selectedRemoteRefs, setSelectedRemoteRefs] = useState<string[]>([]);
+  const upstreamRef = upstream ? `${upstream.remote}/${upstream.name}` : undefined;
+  const [selectedRemoteRefs, setSelectedRemoteRefs] = useState<string[]>(upstreamRef ? [upstreamRef] : []);
   const hasWorktrees = worktreePaths.length > 0;
   const canContinue = (!isCurrent || switchTo.length > 0) && (!includeRemote || selectedRemoteRefs.length > 0);
 
@@ -134,7 +140,7 @@ export function BranchCleanupDialog({
             checked={includeRemote}
             onChange={(event) => {
               setIncludeRemote(event.target.checked);
-              if (!event.target.checked) setSelectedRemoteRefs([]);
+              if (!event.target.checked) setSelectedRemoteRefs(upstreamRef ? [upstreamRef] : []);
             }}
           />
           <span>
@@ -154,7 +160,7 @@ export function BranchCleanupDialog({
                     checked={selectedRemoteRefs.includes(candidate.ref)}
                     onChange={(event) => toggleRemote(candidate, event.target.checked)}
                   />
-                  <span><code>{neutralizeBidi(candidate.ref)}</code><small>執行前會重新確認 tip 與 endpoint</small></span>
+                  <span><code>{neutralizeBidi(candidate.ref)}</code><small>{upstreamRef === candidate.ref ? '目前 upstream；執行前會重新確認 tip 與 endpoint' : '執行前會重新確認 tip 與 endpoint'}</small></span>
                 </label>
               ))
             )}

@@ -311,6 +311,6 @@ polydesk/
 
 ## 8. 完整清理資料流（2026-08-13）
 
-Renderer `SourceControlPanel`／`WorktreePanel` → preload 固定 `git:cleanupPreview/Execute/Status/Cancel/Resume` → `CleanupService` → repository 共用序列佇列 → `CleanupPreviewService`、`RemoteCleanupService`、`LocalCleanupExecutor` → system Git。`CleanupJournalStore` 存在 userData 的版本化 envelope/payload/claim/identity，專案資料夾不寫入 Polydesk journal。
+Renderer `SourceControlPanel`／`WorktreePanel` → preload 固定 `git:cleanupPreview/Execute/Status/Cancel/Resume/ImportEvidence` → `CleanupService` → repository 共用序列佇列 → `CleanupPreviewService`、`RemoteCleanupService`、`LocalCleanupExecutor` → system Git。`CleanupJournalStore` 存在 userData 的版本化 envelope/payload/claim/identity，專案資料夾不寫入 Polydesk journal。
 
-安全順序為：只讀 preview → 使用者確認風險 → 全租約重驗 → prepared journal → mutating checkpoint → remote endpoint expected-OID delete → tracking ref CAS → worktree 收斂 → local ref transaction → metadata/reflog → closed。中途失敗保留 claim，renderer 顯示 repository 待辦；重啟只沿原 payload/checkpoint 恢復，不重新猜測計畫。
+安全順序為：只讀 preview → 使用者確認風險 → 全租約重驗 → prepared journal → mutating checkpoint → worktree 收斂 → local ref transaction → metadata/reflog → remote endpoint expected-OID delete → tracking ref CAS → closed。中途失敗保留 claim，renderer 顯示 repository 待辦與最近 checkpoint；重啟先驗 checksum/repository generation，再沿原 payload/checkpoint 恢復，不重新猜測計畫。

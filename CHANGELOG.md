@@ -11,7 +11,7 @@
 
 Git 分支與 worktree 現在共用同一套可恢復完整清理流程；側欄切換入口也移到受控內容正上方，減少工作區管理與側欄檢視混在一起的認知負擔。
 
-- 對應功能 commits：`c871d8a`、`ec33f61`、`70d3d74`、`01339c9`、`f64aa9a`；T-008 統一接線提交將於出貨追溯補回。
+- 對應功能 commits：`c871d8a`、`ec33f61`、`70d3d74`、`01339c9`、`f64aa9a`、`1619f45`；出貨複核修正提交將於完成後補回。
 
 ### 2026-08-13｜可恢復的分支／worktree 完整清理與側欄頂部入口
 
@@ -19,6 +19,8 @@ Git 分支與 worktree 現在共用同一套可恢復完整清理流程；側欄
 - 目前分支可先切換到使用者選定的保留分支；linked worktree 會先關閉 Polydesk 資源，再清理資料夾、Git 登記、本地 ref、branch config 與 reflog。執行錨點固定採用仍會存活的主工作樹，避免刪除中的工作目錄讓 Git 子程序失去 cwd。
 - 遠端清理逐 endpoint 明確 opt-in，使用 expected-OID compare-and-delete；tip 變動、receive-pack 無法證明、認證／網路／保護規則失敗均保留為 stale／unknown，不會冒充成功。
 - write-ahead journal 在第一個不可逆步驟前落盤，逐步 checkpoint；多 endpoint 部分完成時不會把仍可重試的 remote-tracking ref 誤記成永久保留，重啟後只重試未完成項目並在全部 producer 收斂後以 CAS 清理本機 ref。
+- 出貨複核補強 journal payload checksum 與 repository generation 驗證；quarantine 待辦提供嚴格 checksum 證據匯入，並在 SCM 顯示最近 checkpoint。完整清理固定先完成本機 worktree/ref/metadata，再處理使用者勾選的遠端 endpoint。
+- 不同名稱的實際 upstream 會在使用者開啟遠端清理後預先勾選；單獨刪除 worktree 資料夾也必須再確認外部程序可能於確認後寫入的殘餘風險。
 - 舊名稱式 `git branch -d/-D` 與直接 `git push --delete` 破壞性產品旁路停用；worktree 不使用全域 prune，所有入口共用 repository queue、lease 與 journal。
 - 檔案總管、搜尋、原始碼控制與設定入口從工作區欄移到側欄頂部；工作區欄只管理專案，SCM 角標、active、tooltip、鍵盤與無障礙狀態維持不變。
 - 首次 7 步導覽因 selector 與主要資訊架構維持相容而不調升版本；完整使用指南已同步兩階段操作、unknown／部分結果／恢復待辦與高風險提示。

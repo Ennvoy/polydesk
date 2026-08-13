@@ -26,6 +26,7 @@ import type {
 const CONFIG_INPUT_PATTERN = '^(remote\\..*\\.(url|pushurl)|url\\..*\\.(insteadOf|pushInsteadOf))$';
 const FETCH_PATTERN = '^remote\\..*\\.fetch$';
 const OBJECT_GRAPH_CONFIG_PATTERN = '^(extensions\\.partialClone|remote\\..*\\.(promisor|partialclonefilter))$';
+const MAX_CACHED_PLANS = 64;
 
 interface InternalEndpoint extends RemoteEndpointLease {
   rawEndpoint: string;
@@ -66,6 +67,14 @@ function outputDigest(output: RemoteGitOutput): string {
   return digest({ code: output.code, stdout: output.stdout });
 }
 
+function localIdentityDigest(output: RemoteGitOutput, excludeRef?: string): string {
+  const refs = output.stdout.split(/\r?\n/)
+    .filter(Boolean)
+    .filter((line) => !excludeRef || !line.startsWith(`${excludeRef}\0`))
+    .sort((a, b) => a.localeCompare(b));
+  return digest({ code: output.code, refs });
+}
+
 function requireRead(output: RemoteGitOutput, message: string): string {
   if (output.code !== 0) throw new Error(message);
   return output.stdout;
@@ -91,10 +100,18 @@ export class RemoteCleanupService {
     private readonly git = new RemoteGitRunner(),
   ) {}
 
+  private rememberPlan(token: string, plan: InternalPlan): void {
+    if (!this.plans.has(token) && this.plans.size >= MAX_CACHED_PLANS) {
+      const oldest = this.plans.keys().next().value as string | undefined;
+      if (oldest) this.plans.delete(oldest);
+    }
+    this.plans.set(token, plan);
+  }
+
   /** 只有 renderer 已明確 opt-in 遠端清理時才呼叫；本方法會連線所有 effective push endpoints。 */
-  async discover(cwd: string, branch: string): Promise<RemoteCleanupPlan> {
-    if (!validateRef(branch)) throw new Error('無效的本地分支名稱。');
-    const targetRef = `refs/heads/${branch}`;
+  async discover(cwd: string, branch: string, localBranch = branch): Promise<RemoteCleanupPlan> {
+    if (!validateRef(branch) || !validateRef(localBranch)) throw new Error('無效的本地或遠端分支名稱。');
+    const localTargetRef = `refs/heads/${localBranch}`;
     const [
       remotesOutput,
       upstreamOutput,
@@ -107,7 +124,7 @@ export class RemoteCleanupService {
       fetchConfig,
     ] = await Promise.all([
       this.git.run(cwd, ['remote']),
-      this.git.run(cwd, ['for-each-ref', '--format=%(upstream:remotename)%00%(upstream:remoteref)', targetRef]),
+      this.git.run(cwd, ['for-each-ref', '--format=%(upstream:remotename)%00%(upstream:remoteref)', localTargetRef]),
       this.git.run(cwd, ['for-each-ref', '--format=%(refname)%00%(objectname)%00%(upstream:remotename)%00%(upstream:remoteref)', 'refs/heads']),
       this.git.run(cwd, ['for-each-ref', '--format=%(refname)%00%(objectname)%00%(objecttype)%00%(symref)']),
       this.git.run(cwd, ['rev-parse', '--is-shallow-repository']),
@@ -208,16 +225,18 @@ export class RemoteCleanupService {
     const publicPlan: RemoteCleanupPlan = {
       token,
       branch,
+      localTargetRef,
       objectGraphComplete: objectGraphReason === undefined,
       ...(objectGraphReason ? { objectGraphReason } : {}),
-      localIdentityDigest: outputDigest(localIdentity),
+      localIdentityDigest: localIdentityDigest(localIdentity),
+      localIdentityAfterTargetDeleteDigest: localIdentityDigest(localIdentity, localTargetRef),
       endpointConfigDigest: outputDigest(endpointConfig),
       refspecDigest: canonicalRefspecDigest(fetchRecords),
       conflictDigest: await this.guard.snapshot(cwd),
       endpoints: internalEndpoints.map(({ rawEndpoint: _rawEndpoint, ...endpoint }) => endpoint),
       trackingRefs,
     };
-    this.plans.set(token, { publicPlan, endpoints: internalEndpoints });
+    this.rememberPlan(token, { publicPlan, endpoints: internalEndpoints });
     return publicPlan;
   }
 
@@ -226,7 +245,8 @@ export class RemoteCleanupService {
    * raw endpoint 以 effective URL 重新解析並必須唯一對回原 fingerprint。
    */
   async resume(cwd: string, plan: RemoteCleanupPlan): Promise<void> {
-    if (!validateRef(plan.branch) || !plan.token || plan.endpoints.length === 0) {
+    if (!validateRef(plan.branch) || !plan.localTargetRef.startsWith('refs/heads/')
+      || !validateRef(plan.localTargetRef.slice('refs/heads/'.length)) || !plan.token || plan.endpoints.length === 0) {
       throw new Error('遠端清理 receipt 不完整，無法恢復。');
     }
     const byRemote = new Map<string, string[]>();
@@ -245,7 +265,7 @@ export class RemoteCleanupService {
       }
       return { ...endpoint, rawEndpoint: matches[0] as string };
     });
-    this.plans.set(plan.token, { publicPlan: plan, endpoints });
+    this.rememberPlan(plan.token, { publicPlan: plan, endpoints });
   }
 
   async execute(
@@ -347,12 +367,14 @@ export class RemoteCleanupService {
     const remoteOk = results.every((result) =>
       result.status === 'deleted' || result.status === 'already-completed' || result.status === 'skipped',
     );
-    return {
+    const result = {
       ok: remoteOk && tracking.ok,
       endpoints: results,
       trackingRefsDeleted: tracking.deleted,
       trackingRefsRetained: tracking.retained,
     };
+    if (result.ok) this.plans.delete(request.token);
+    return result;
   }
 
   private async verifyLocalLease(
@@ -373,8 +395,10 @@ export class RemoteCleanupService {
     const currentIds = urls.stdout.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)
       .map((raw) => endpointLeaseId(endpoint.remote, endpoint.branch, endpointFingerprint(raw)));
     const records = parseFetchRefspecConfig(fetchConfig.stdout);
+    const currentLocalIdentityDigest = localIdentityDigest(localIdentity);
     if (!currentIds.includes(endpoint.id)
-      || outputDigest(localIdentity) !== plan.localIdentityDigest
+      || (currentLocalIdentityDigest !== plan.localIdentityDigest
+        && currentLocalIdentityDigest !== plan.localIdentityAfterTargetDeleteDigest)
       || outputDigest(endpointConfig) !== plan.endpointConfigDigest
       || canonicalRefspecDigest(records) !== plan.refspecDigest
       || conflictDigest !== plan.conflictDigest) {
@@ -397,6 +421,10 @@ export class RemoteCleanupService {
     const retained: { localRef: string; reason: string }[] = [];
     let ok = true;
     for (const lease of internal.publicPlan.trackingRefs) {
+      const belongsToSelectedTarget = lease.producers.some((producer) =>
+        producer.endpointIds.some((endpointId) => selected.has(endpointId)),
+      );
+      if (!belongsToSelectedTarget) continue;
       if (permanentlyRetainedTracking.has(lease.localRef)) {
         retained.push({ localRef: lease.localRef, reason: 'remote-only receipt 已永久標示保留此本機 ref。' });
         continue;

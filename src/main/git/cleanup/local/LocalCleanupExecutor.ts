@@ -114,7 +114,7 @@ export class LocalCleanupExecutor {
     journalId: string,
     request: GitCleanupExecuteRequest,
     snapshot: GitCleanupSnapshot,
-    options: { alreadyMutating?: boolean; checkpoints?: string[]; remoteTrackingRefsDeleted?: string[] } = {},
+    options: { alreadyMutating?: boolean; checkpoints?: string[]; remoteTrackingRefsDeleted?: string[]; keepOpen?: boolean } = {},
   ): Promise<GitCleanupExecuteResult> {
     const plan = request.localPlan;
     if (!plan) return { ok: true, journalId, phase: 'prepared' };
@@ -258,6 +258,7 @@ export class LocalCleanupExecutor {
         }
 
       }
+      if (options.keepOpen) return { ok: true, journalId, phase: 'mutating' };
       this.journals.close(journalId);
       return { ok: true, journalId, phase: 'closed' };
     } catch (error) {

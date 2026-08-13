@@ -99,9 +99,11 @@ export interface GitCleanupRemoteTrackingLease {
 export interface GitCleanupRemotePlan {
   token: string;
   branch: string;
+  localTargetRef: string;
   objectGraphComplete: boolean;
   objectGraphReason?: string;
   localIdentityDigest: string;
+  localIdentityAfterTargetDeleteDigest: string;
   endpointConfigDigest: string;
   refspecDigest: string;
   conflictDigest: string;
@@ -142,6 +144,7 @@ export interface GitCleanupSnapshot {
     safeDelete: boolean;
     lostCommitCount: number;
     exact: boolean;
+    plannedRemoteTrackingRefs?: string[];
   };
   capabilities: {
     reflogDrop: boolean;
@@ -216,6 +219,8 @@ export interface GitCleanupJournalSummary {
   canCancel: boolean;
   canResume: boolean;
   checkpoints: string[];
+  requiresEvidence?: boolean;
+  issue?: string;
 }
 
 export interface GitCleanupStatusResult {
@@ -227,4 +232,11 @@ export interface GitCleanupStatusResult {
 export interface GitCleanupResumeRequest {
   wsId: string;
   journalId: string;
+}
+
+export interface GitCleanupImportEvidenceRequest {
+  wsId: string;
+  journalId: string;
+  /** 先前備份、且必須與 envelope checksum 完全相符的原始 journal payload JSON。 */
+  payloadJson: string;
 }

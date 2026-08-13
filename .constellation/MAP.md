@@ -14,7 +14,7 @@
 ## 主要資料流與邊界
 
 - Git／SCM：`SourceControlPanel` → preload 固定 `git:*` channel → `GitService` handler → repository 共用序列佇列 → `execFile` 系統 Git → 結構化結果回 renderer。
-- 完整清理：renderer → `git:cleanupPreview/Execute/Status/Cancel/Resume` 固定 IPC → repository queue → Git/磁碟/endpoint lease 重驗 → userData 版本化 journal/claim；preview 零副作用，execute 依序執行遠端 expected-OID、tracking ref、本機 worktree/ref/metadata，部分結果沿 checkpoint 恢復。
+- 完整清理：renderer → `git:cleanupPreview/Execute/Status/Cancel/Resume/ImportEvidence` 固定 IPC → repository queue → Git/磁碟/endpoint lease 重驗 → userData 版本化 journal/claim；preview 零副作用，execute 依序執行本機 worktree/ref/metadata，再處理遠端 expected-OID 與 tracking ref，部分結果沿 checkpoint 恢復。
 - 工作區：renderer store／workspace rail → `workspace:*` → `WorkspaceManager` → `StateStore` userData 狀態檔。
 - Worktree：SCM／建立對話框 → `git:worktree*` → `GitService` → `WorkspaceManager` 納管；分支互斥以 `git worktree list` 的即時結果為準。
 - Terminal：xterm → `pty:*` → `PtyManager` → ConPTY；main 主動推播輸出。
@@ -30,7 +30,7 @@
 
 ## 已知缺口與地雷
 
-- 完整清理的本機與遠端引擎已由共用 IPC/journal/UI 串接；仍須以完整出貨 runner 與 portable artifact 驗證本輪版本。
+- 完整清理的本機與遠端引擎已由共用 IPC/journal/UI 串接；恢復會驗 payload checksum 與 repository generation，quarantine 只接受 checksum 相符的證據匯入；仍須以完整出貨 runner 與 portable artifact 驗證本輪版本。
 - remote 名本身可含 `/`，不可用第一個斜線拆 remote-tracking 顯示字串；應沿用結構化 `remoteBranches`。
 - 遠端刪除可能因認證、網路、逾時、預設分支或保護規則被拒絕；失敗需結構化分類並顯示可行下一步，不得偽裝成功。
 - `remotes` 是本機 remote-tracking snapshot；未 fetch／prune 時可能過期。現有 fetch 未帶 `--prune`。

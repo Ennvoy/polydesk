@@ -17,7 +17,7 @@ import {
 } from 'node:child_process';
 import { shell, type IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
-import type { GitStatus, GitChange, GitSnapshot, GitLogEntry, GitLogRef, GitWorktree, GitCloneInput, GitCloneResult, GitCloneErrorCode, GitHubLoginResult, GitPublishInput, GitPublishResult, GitPushErrorCode, GitRemoteBranch, GitBranchDeleteResult } from '../../shared/types';
+import type { GitStatus, GitChange, GitSnapshot, GitLogEntry, GitLogRef, GitWorktree, GitCloneInput, GitCloneResult, GitCloneErrorCode, GitHubLoginResult, GitPublishInput, GitPublishResult, GitPushErrorCode, GitRemoteBranch, GitBranchDeleteResult, GitBranchUpstream } from '../../shared/types';
 import type { InvokeReq } from '../../shared/ipc';
 import { GIT_CLONE_TIMEOUT_MS, GIT_LOCAL_TIMEOUT_MS, GIT_NETWORK_TIMEOUT_MS } from '../../shared/constants';
 import {
@@ -637,7 +637,7 @@ export class GitService {
     startPoint?: string,
     _remote?: string,
   ): Promise<
-    | { branches: string[]; current: string; remotes?: string[]; remoteBranches?: GitRemoteBranch[] }
+    | { branches: string[]; current: string; remotes?: string[]; remoteBranches?: GitRemoteBranch[]; localUpstreams?: Record<string, GitBranchUpstream> }
     | { ok: true }
     | GitBranchDeleteResult
   > {
@@ -649,15 +649,15 @@ export class GitService {
         [
           ...readHardeningArgs(),
           'for-each-ref',
-          '--format=%(refname)%09%(refname:short)%09%(HEAD)',
+          '--format=%(refname)%09%(refname:short)%09%(HEAD)%09%(upstream:remotename)%09%(upstream:remoteref)',
           'refs/heads',
           'refs/remotes',
         ],
         { cwd, env: readEnv() },
       );
       const refs = stdout.split(/\r?\n/).filter((line) => line.length > 0).map((line) => {
-        const [full = '', short = '', head = ''] = line.split('\t');
-        return { full, short, current: head.trim() === '*' };
+        const [full = '', short = '', head = '', upstreamRemote = '', upstreamRef = ''] = line.split('\t');
+        return { full, short, current: head.trim() === '*', upstreamRemote, upstreamRef };
       });
       const branches = refs.filter((ref) => ref.full.startsWith('refs/heads/')).map((ref) => ref.short);
       // 遠端分支（REQ-WT-002 來源③；排除 origin/HEAD 符號指標）——與本地分支共用一次 for-each-ref。
@@ -677,9 +677,13 @@ export class GitService {
         if (!remoteName) return [];
         return [{ remote: remoteName, name: ref.slice(remoteName.length + 1), ref }];
       });
+      const localUpstreams = Object.fromEntries(refs.flatMap((ref): Array<[string, GitBranchUpstream]> => {
+        if (!ref.full.startsWith('refs/heads/') || !remoteNames.includes(ref.upstreamRemote) || !ref.upstreamRef.startsWith('refs/heads/')) return [];
+        return [[ref.short, { remote: ref.upstreamRemote, name: ref.upstreamRef.slice('refs/heads/'.length) }]];
+      }));
       let current = '';
       current = refs.find((ref) => ref.full.startsWith('refs/heads/') && ref.current)?.short ?? '';
-      return { branches, current, remotes, remoteBranches };
+      return { branches, current, remotes, remoteBranches, localUpstreams };
     }
 
     if (op === 'delete-local' || op === 'delete-remote') {
@@ -1125,12 +1129,18 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, 
   ipc.handle('git:cleanupExecute', (_e, req: InvokeReq<'git:cleanupExecute'>) =>
     enqueue(qkey(req.wsId), () => cleanup.execute(req)),
   );
-  ipc.handle('git:cleanupStatus', () => enqueue('cleanup:claims', () => cleanup.recoverLocal()));
+  void enqueue('cleanup:claims', () => cleanup.recoverLocal()).catch(() => undefined);
+  ipc.handle('git:cleanupStatus', (_e, req: InvokeReq<'git:cleanupStatus'>) =>
+    enqueue('cleanup:claims', () => cleanup.statusForWorkspace(req?.wsId)),
+  );
   ipc.handle('git:cleanupCancel', (_e, req: InvokeReq<'git:cleanupCancel'>) =>
     enqueue(qkey(req.wsId), () => cleanup.cancelPrepared(req.wsId, req.journalId)),
   );
   ipc.handle('git:cleanupResume', (_e, req: InvokeReq<'git:cleanupResume'>) =>
     enqueue(qkey(req.wsId), () => cleanup.resume(req)),
+  );
+  ipc.handle('git:cleanupImportEvidence', (_e, req: InvokeReq<'git:cleanupImportEvidence'>) =>
+    enqueue(qkey(req.wsId), () => cleanup.importEvidence(req)),
   );
 
   ipc.handle('git:worktreeList', (_e, req: InvokeReq<'git:worktreeList'>) =>

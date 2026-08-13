@@ -232,6 +232,38 @@ export class CleanupJournalStore {
     return this.rebuildClaims();
   }
 
+  /** SCM 輪詢專用唯讀 snapshot；repair/quarantine 只允許由啟動或明確寫入流程觸發。 */
+  peek(): { globalBlocked: boolean; claims: Claim[]; issues: CleanupStoreIssue[] } {
+    if (!existsSync(this.claimsPath)) {
+      return {
+        globalBlocked: true,
+        claims: [],
+        issues: [{ code: 'claim-index-uninitialized', message: 'cleanup claim index 尚未完成啟動重建。' }],
+      };
+    }
+    try {
+      const current = JSON.parse(readFileSync(this.claimsPath, 'utf8')) as ClaimIndex;
+      if (current.schemaVersion !== SCHEMA_VERSION || !verifyChecksum(current as unknown as Record<string, unknown>, 'checksum')) {
+        return {
+          globalBlocked: true,
+          claims: [],
+          issues: [{ code: 'claim-index-invalid', message: 'claim index checksum 或 schema 無效。', file: basename(this.claimsPath) }],
+        };
+      }
+      return {
+        globalBlocked: current.globalBlocked,
+        claims: current.claims.map((claim) => ({ ...claim })),
+        issues: current.issues.map((issue) => ({ ...issue })),
+      };
+    } catch {
+      return {
+        globalBlocked: true,
+        claims: [],
+        issues: [{ code: 'claim-index-invalid', message: 'claim index 無法解析。', file: basename(this.claimsPath) }],
+      };
+    }
+  }
+
   readPayload(journalId: string): unknown {
     for (const dir of [this.activeDir, this.quarantineDir, this.archiveDir]) {
       const path = this.payloadPath(dir, journalId);
@@ -240,8 +272,43 @@ export class CleanupJournalStore {
     throw new CleanupStoreError('journal-not-found', '找不到清理 journal。');
   }
 
+  readVerifiedActive(journalId: string): { envelope: JournalEnvelopeBase; payload: unknown } {
+    const envelope = this.readEnvelope(this.envelopePath(this.activeDir, journalId));
+    let payload: unknown;
+    try {
+      payload = JSON.parse(readFileSync(this.payloadPath(this.activeDir, journalId), 'utf8')) as unknown;
+    } catch {
+      throw new CleanupStoreError('invalid-payload', 'journal payload 無法解析。');
+    }
+    if (digest(payload) !== envelope.payloadChecksum) {
+      throw new CleanupStoreError('invalid-payload', 'journal payload checksum 已變更。');
+    }
+    return { envelope, payload };
+  }
+
   readActiveEnvelope(journalId: string): JournalEnvelopeBase {
     return this.readEnvelope(this.envelopePath(this.activeDir, journalId));
+  }
+
+  readQuarantineEnvelope(journalId: string): JournalEnvelopeBase {
+    return this.readEnvelope(this.envelopePath(this.quarantineDir, journalId));
+  }
+
+  restoreQuarantinedPayload(journalId: string, payload: unknown): void {
+    this.withLock(() => {
+      const quarantineEnvelopePath = this.envelopePath(this.quarantineDir, journalId);
+      const envelope = this.readEnvelope(quarantineEnvelopePath);
+      if (digest(payload) !== envelope.payloadChecksum) {
+        throw new CleanupStoreError('evidence-mismatch', '匯入證據與原 journal checksum 不符。');
+      }
+      const restored = this.nextEnvelope(envelope, { phase: 'reconciling', zeroSideEffect: false, archived: false });
+      mkdirSync(this.activeDir, { recursive: true });
+      this.atomicWriteJson(this.payloadPath(this.activeDir, journalId), payload);
+      this.atomicWriteJson(this.envelopePath(this.activeDir, journalId), restored);
+      rmSync(this.payloadPath(this.quarantineDir, journalId), { force: true });
+      rmSync(quarantineEnvelopePath, { force: true });
+      this.writeClaims(this.scanCanonicalClaims().claims);
+    });
   }
 
   resolveRepositoryIdentity(commonDir: string, evidenceDigest: string): { fingerprint: string; generation: string } {
@@ -277,6 +344,11 @@ export class CleanupJournalStore {
       this.writeIdentityRegistry([...registry.entries, entry]);
       return { fingerprint, generation: entry.generation };
     });
+  }
+
+  repositoryFingerprint(commonDir: string): string {
+    const canonical = resolve(commonDir);
+    return sha256(process.platform === 'win32' ? canonical.toLowerCase() : canonical);
   }
 
   private updateEnvelope(journalId: string, update: (current: JournalEnvelope) => JournalEnvelopeBase): JournalEnvelope {
@@ -337,6 +409,7 @@ export class CleanupJournalStore {
   private scanCanonicalClaims(): { globalBlocked: boolean; claims: Claim[]; issues: CleanupStoreIssue[] } {
     const claims: Claim[] = [];
     const issues: CleanupStoreIssue[] = [];
+    const migratedToQuarantine = new Set<string>();
     let globalBlocked = false;
     for (const [dir, quarantine] of [[this.activeDir, false], [this.quarantineDir, true]] as const) {
       if (!existsSync(dir)) continue;
@@ -347,6 +420,7 @@ export class CleanupJournalStore {
         const journalId = file.slice(0, -'.envelope.json'.length);
         known.add(file);
         known.add(`${journalId}.payload.json`);
+        if (quarantine && migratedToQuarantine.has(journalId)) continue;
         const envelopePath = join(dir, file);
         let envelope: JournalEnvelope;
         try {
@@ -371,6 +445,7 @@ export class CleanupJournalStore {
           if (existsSync(payloadPath)) renameSync(payloadPath, this.payloadPath(this.quarantineDir, journalId));
           unlinkSync(envelopePath);
           envelope = quarantined;
+          migratedToQuarantine.add(journalId);
           issues.push({ code: 'payload-quarantined', message: 'journal payload checksum 無效，已移入 quarantine。', file });
         } else if (!payloadValid) {
           issues.push({ code: 'payload-quarantined', message: 'quarantine payload 仍無法驗證。', file });

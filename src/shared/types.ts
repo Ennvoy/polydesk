@@ -121,6 +121,12 @@ export interface GitRemoteBranch {
   ref: string;
 }
 
+/** 本地分支實際設定的 upstream；名稱可與本地分支不同。 */
+export interface GitBranchUpstream {
+  remote: string;
+  name: string;
+}
+
 /** 分支安全刪除失敗分類；renderer 依 code 顯示可行處理方式，不解析 Git 在地化 stderr。 */
 export type GitBranchDeleteErrorCode =
   | 'invalid'

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchApp, stubFolderPicker, addWorkspaceViaUI } from './electronApp';
@@ -22,6 +22,7 @@ function seedRepo(): { root: string; repo: string; remote: string } {
 
   git(repo, 'branch', 'merged-local');
   git(repo, 'branch', 'remote-delete');
+  git(repo, 'branch', 'profile');
   git(repo, 'branch', 'busy-worktree');
   git(repo, 'checkout', '-b', 'unfinished');
   writeFileSync(join(repo, 'unfinished.txt'), 'not merged\n');
@@ -34,6 +35,9 @@ function seedRepo(): { root: string; repo: string; remote: string } {
   git(repo, 'remote', 'add', 'team/backend', remote);
   git(repo, 'push', '-u', 'team/backend', 'main');
   git(repo, 'push', 'team/backend', 'remote-delete');
+  git(repo, 'push', 'team/backend', 'profile:deployed-profile');
+  git(repo, 'branch', '--set-upstream-to=team/backend/deployed-profile', 'profile');
+  git(repo, 'config', 'branch.unfinished.description', 'must be removed with branch metadata');
   return { root, repo, remote };
 }
 
@@ -55,14 +59,25 @@ test('分支管理：本地／遠端分組與兩階段完整清理真鏈路', as
     const remoteGroup = page.getByRole('button', { name: /^遠端分支 \d+$/ });
     await expect(localGroup).toHaveAttribute('aria-expanded', 'true');
     await expect(remoteGroup).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.locator('[data-branch-kind="local"]')).toHaveCount(5, { timeout: 30_000 });
-    await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(2, { timeout: 30_000 });
+    await expect(page.locator('[data-branch-kind="local"]')).toHaveCount(6, { timeout: 30_000 });
+    await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(3, { timeout: 30_000 });
 
     await remoteGroup.click();
     await expect(remoteGroup).toHaveAttribute('aria-expanded', 'false');
     await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(0);
     await remoteGroup.click();
-    await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(2);
+    await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(3);
+
+    await page.getByRole('button', { name: '更多本地分支操作 profile' }).click();
+    await page.getByRole('menuitem', { name: '刪除本地分支', exact: true }).click();
+    await page.getByLabel('連同檢查遠端同名／upstream 分支').check();
+    await expect(page.getByRole('checkbox', { name: 'team/backend/deployed-profile' })).toBeChecked();
+    await page.getByRole('button', { name: '檢查清理風險' }).click();
+    await expect(page.getByRole('dialog')).toContainText('team/backend/deployed-profile', { timeout: 60_000 });
+    await page.getByRole('button', { name: '開始完整清理' }).click();
+    await expect(page.locator('[data-branch-kind="local"]', { hasText: 'profile' })).toHaveCount(0, { timeout: 30_000 });
+    expect(git(repo, 'branch', '--list', 'profile').trim()).toBe('');
+    expect(git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/deployed-profile').trim()).toBe('');
 
     await page.getByRole('button', { name: '更多本地分支操作 main' }).click();
     await expect(page.getByRole('menuitem', { name: '刪除本地分支（目前分支）' })).toBeEnabled();
@@ -93,6 +108,8 @@ test('分支管理：本地／遠端分組與兩階段完整清理真鏈路', as
     const deleteRemote = page.getByRole('button', { name: '開始完整清理' });
     await expect(deleteRemote).toHaveClass(/pd-btn-danger/);
     await deleteRemote.click();
+    await expect.poll(() => git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/remote-delete').trim(), { timeout: 30_000 }).toBe('');
+    await page.getByRole('button', { name: '重新整理' }).click();
     await expect(page.locator('[data-branch-kind="remote"]', { hasText: 'team/backend/remote-delete' })).toHaveCount(0, { timeout: 30_000 });
     expect(git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/remote-delete').trim()).toBe('');
     expect(git(repo, 'branch', '--list', 'remote-delete').trim()).toBe('remote-delete');
@@ -104,8 +121,13 @@ test('分支管理：本地／遠端分組與兩階段完整清理真鏈路', as
     await expect(page.getByRole('button', { name: '開始完整清理' })).toBeDisabled();
     await page.getByLabel('我確認強制清理本機未知／未合併內容').check();
     await expect(page.getByRole('button', { name: '開始完整清理' })).toBeEnabled();
-    await page.getByRole('button', { name: '返回' }).click();
-    await expect(page.locator('[data-branch-kind="local"]', { hasText: 'unfinished' })).toBeVisible();
+    await page.getByRole('button', { name: '開始完整清理' }).click();
+    await expect.poll(() => git(repo, 'branch', '--list', 'unfinished').trim(), { timeout: 30_000 }).toBe('');
+    await page.getByRole('button', { name: '重新整理' }).click();
+    await expect(page.locator('[data-branch-kind="local"]', { hasText: 'unfinished' })).toHaveCount(0, { timeout: 30_000 });
+    expect(git(repo, 'branch', '--list', 'unfinished').trim()).toBe('');
+    expect(() => git(repo, 'config', '--get-regexp', '^branch\\.unfinished\\.')).toThrow();
+    expect(() => git(repo, 'reflog', 'exists', 'refs/heads/unfinished')).toThrow();
   } finally {
     await app.close();
     rmSync(userData, { recursive: true, force: true });
@@ -147,13 +169,40 @@ test('遠端多 endpoint 部分失敗後，重啟仍顯示待辦並可繼續收�
     );
 
     await app.close();
+    const activeDir = join(userData, 'branch-cleanup', 'active');
+    const payloadFile = readdirSync(activeDir).find((file) => file.endsWith('.payload.json'));
+    if (!payloadFile) throw new Error('expected active cleanup payload');
+    const evidenceJson = readFileSync(join(activeDir, payloadFile), 'utf8');
+    writeFileSync(join(activeDir, payloadFile), '{"tampered":true}', 'utf8');
     git(rejectingRemote, 'config', 'receive.denyDeletes', 'false');
+
+    const otherRepo = join(root, 'other');
+    mkdirSync(otherRepo, { recursive: true });
+    git(otherRepo, 'init', '-b', 'main');
+    git(otherRepo, 'config', 'user.email', 'other@test');
+    git(otherRepo, 'config', 'user.name', 'Other E2E');
+    writeFileSync(join(otherRepo, 'other.txt'), 'other\n');
+    git(otherRepo, 'add', '.');
+    git(otherRepo, 'commit', '-m', 'other');
+
     const resumed = await launchApp({ userData });
     app = resumed.app;
     page = resumed.page;
     await openBranches(page);
 
     const todo = page.getByTestId('cleanup-recovery-todo');
+    await expect(todo).toContainText('checksum 相符的原始證據', { timeout: 30_000 });
+    await stubFolderPicker(app, [otherRepo]);
+    await addWorkspaceViaUI(page);
+    await openBranches(page);
+    await expect(page.getByTestId('cleanup-recovery-todo')).toHaveCount(0);
+    await page.locator('button[aria-label="開啟工作區 work"]').click();
+    await expect(page.getByRole('contentinfo', { name: '狀態列' })).toContainText('work');
+    await openBranches(page);
+    await expect(todo).toContainText('checksum 相符的原始證據');
+    await todo.getByRole('button', { name: '匯入驗證證據' }).click();
+    await page.getByLabel('journal payload JSON').fill(evidenceJson);
+    await page.getByRole('button', { name: '驗證並匯入' }).click();
     await expect(todo).toContainText('只能沿 journal checkpoint 繼續收斂', { timeout: 30_000 });
     await todo.getByRole('button', { name: '繼續收斂' }).click();
     await expect(todo).toHaveCount(0, { timeout: 60_000 });
