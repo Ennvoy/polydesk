@@ -7,10 +7,12 @@ test('外殼渲染 + 主題即時切換 + 重啟沿用 (REQ-E2E-007)', async () 
   const first = await launchApp();
   const { page, userData } = first;
 
-  // 外殼真實渲染（非白屏）：舊活動列已完整移除，入口整合到工作區標頭。
+  // 外殼真實渲染（非白屏）：舊活動列已完整移除，入口貼近其控制的側欄內容。
   await expect(page.locator('.pd-shell')).toBeVisible();
   await expect(page.locator('.pd-activitybar')).toHaveCount(0);
   await expect(page.locator('.pd-workspace-toolbar')).toBeVisible();
+  await expect(page.locator('aside[aria-label="工作區列表"] .pd-workspace-toolbar')).toHaveCount(0);
+  await expect(page.locator('.pd-sidebar-host > .pd-workspace-toolbar')).toBeVisible();
   await expect(page.getByRole('button', { name: '檔案總管', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '搜尋', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '原始碼控制', exact: true })).toBeVisible();

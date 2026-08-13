@@ -4,6 +4,7 @@
 import React, { useSyncExternalStore } from 'react';
 import type { IDockviewPanelProps } from 'dockview';
 import { useAppState } from '../state/appStore';
+import { WorkspaceToolbar } from '../components/ActivityBar';
 
 export type SlotComponent = React.FC;
 
@@ -70,12 +71,17 @@ function Slot({ slot }: { slot: string }): React.JSX.Element {
   return Comp ? React.createElement(Comp) : React.createElement(Placeholder, { slot });
 }
 
-/** 側欄 host：依活動列選中的視圖渲染對應槽位。 */
+/** 側欄 host：工具列貼近其控制的內容，並依選中視圖渲染對應槽位。 */
 function SidebarHost(_props: IDockviewPanelProps): React.JSX.Element {
   const { activeView } = useAppState();
   const slot =
     activeView === 'search' ? SLOT.viewSearch : activeView === 'scm' ? SLOT.viewScm : SLOT.viewExplorer;
-  return React.createElement(Slot, { slot });
+  return React.createElement(
+    'div',
+    { className: 'pd-sidebar-host' },
+    React.createElement(WorkspaceToolbar),
+    React.createElement('div', { className: 'pd-sidebar-view' }, React.createElement(Slot, { slot })),
+  );
 }
 
 function EditorHost(_props: IDockviewPanelProps): React.JSX.Element {

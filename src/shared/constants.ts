@@ -3,7 +3,7 @@
 export const APP_NAME = 'Polydesk';
 export const STATE_FILE_NAME = 'state.json';
 /** 首次導覽內容版本；重大介面改版才遞增，小幅文案更新不動。 */
-export const ONBOARDING_VERSION = 1;
+export const ONBOARDING_VERSION = 2;
 
 /** watcher / 搜尋預設忽略目錄（REQ-SEARCH-003、REQ-MON-005）。 */
 export const IGNORED_DIRS = ['node_modules', '.git', 'dist', 'out', '.vite', 'release', 'coverage'] as const;

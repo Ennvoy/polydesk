@@ -1,4 +1,4 @@
-// 工作區標頭工具列：切換側欄視圖（檔案/搜尋/原始碼控制）+ 開設定。
+// 側欄頂部工具列：切換側欄視圖（檔案/搜尋/原始碼控制）+ 開設定。
 // 取代原本固定佔 48px 的最左活動列；保留 SCM badge、active 與無障礙狀態。
 
 import React from 'react';
@@ -117,7 +117,7 @@ export function WorkspaceToolbar(): React.JSX.Element {
   }, [activeWorkspaceId]);
 
   return (
-    <nav className="pd-workspace-toolbar" aria-label="工作區功能" data-tour="workspace-tools">
+    <nav className="pd-workspace-toolbar" aria-label="側欄功能" data-tour="workspace-tools">
       {ITEMS.map((it) => (
         <IconButton
           key={it.view}

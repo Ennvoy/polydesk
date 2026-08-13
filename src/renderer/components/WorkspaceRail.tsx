@@ -24,7 +24,6 @@ import { CreateWorktreeDialog } from './Worktree/CreateWorktreeDialog';
 import { CloneRepositoryDialog } from './CloneRepositoryDialog';
 import { worktreeBranchDisplay } from './Worktree/worktreeModel';
 import type { Workspace } from '../../shared/types';
-import { WorkspaceToolbar } from './ActivityBar';
 
 // ── 一次性注入本 feature 的 rail 樣式（不改 P-2 的 components.css；全用 var(--*) token）──
 const STYLE_ID = 'pdws-rail-style';
@@ -410,7 +409,6 @@ export function WorkspaceRail(): React.JSX.Element {
             </div>
           </>
         )}
-        <WorkspaceToolbar />
       </div>
 
       {ordered.length === 0 ? (

@@ -1,7 +1,10 @@
 {
   "frozen": [
-    "src/renderer/components/SourceControl/BranchCleanupDialog.tsx",
-    "src/renderer/components/SourceControl/scm.css"
+    "src/renderer/components/SourceControl/scm.css",
+    "src/renderer/components/ActivityBar.tsx",
+    "src/renderer/components/WorkspaceRail.tsx",
+    "src/renderer/layout/panelRegistry.ts",
+    "src/renderer/theme/components.css"
   ],
   "log": [
     {
@@ -15,6 +18,42 @@
       "action": "freeze",
       "at": "2026-08-13T08:40:04.5137401+08:00",
       "reason": "design 定稿"
+    },
+    {
+      "path": "src/renderer/components/SourceControl/BranchCleanupDialog.tsx",
+      "action": "unfreeze",
+      "at": "2026-08-13T17:18:33.2885766+08:00",
+      "reason": "使用者選擇 1，授權補齊 T-008 遠端 opt-in 行為契約"
+    },
+    {
+      "path": "src/renderer/components/ActivityBar.tsx",
+      "action": "freeze",
+      "at": "2026-08-13T17:18:33.2885766+08:00",
+      "reason": "使用者在隔離本地 Electron 開發版核准側欄頂部功能列定稿"
+    },
+    {
+      "path": "src/renderer/components/WorkspaceRail.tsx",
+      "action": "freeze",
+      "at": "2026-08-13T17:18:33.2885766+08:00",
+      "reason": "使用者在隔離本地 Electron 開發版核准工作區欄移除功能列"
+    },
+    {
+      "path": "src/renderer/layout/panelRegistry.ts",
+      "action": "freeze",
+      "at": "2026-08-13T17:18:33.2885766+08:00",
+      "reason": "使用者在隔離本地 Electron 開發版核准側欄 host 版位"
+    },
+    {
+      "path": "src/renderer/theme/components.css",
+      "action": "freeze",
+      "at": "2026-08-13T17:18:33.2885766+08:00",
+      "reason": "使用者在隔離本地 Electron 開發版核准側欄功能列版面"
     }
-  ]
+  ],
+  "source": {
+    "projectId": null,
+    "files": [],
+    "at": "2026-08-13T17:18:33.2885766+08:00",
+    "note": "小工程直接修改正式 renderer；使用者在隔離本地 Electron 開發版親自檢視後拍板"
+  }
 }

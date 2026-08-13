@@ -6,7 +6,7 @@
 - `src/main/`：Electron 特權層。`ipc/router.ts` 註冊服務；`git/GitService.ts` 執行系統 Git；`git/gitSafeArgs.ts` 驗證 ref 與參數；`git/gitSerialQueue.ts` 序列化同 repository 操作；`git/cleanup/core/`、`git/cleanup/local/`、`git/cleanup/remote/` 與 `store/cleanup/` 提供零副作用 preview、完整 retained-ref/worktree/endpoint lease、本機 CAS、遠端 compare-and-delete、refspec producer 清理、repository instance identity、write-ahead journal、claim 重建及 quarantine。其餘模組負責 workspace、PTY、檔案、搜尋、LSP、AI 監控、狀態儲存與更新。
 - `src/preload/`：固定白名單 IPC bridge，只暴露 namespaced API，不暴露 raw `ipcRenderer` 或 Node API。
 - `src/shared/`：跨程序契約單一來源。`channels.ts` 定義 channel 白名單，`ipc.ts` 定義 request/response，`types.ts` 定義 Workspace、GitStatus、GitLogRef、GitWorktree 等模型。
-- `src/renderer/`：React UI。`components/ActivityBar.tsx` 現匯出水平 `WorkspaceToolbar`，由 `WorkspaceRail.tsx` 放在工作區標頭提供檔案總管／搜尋／SCM／設定入口；`components/Help/` 提供 7 步首次導覽與可搜尋完整指南，`TitleBar.tsx` 與設定共用重開入口。`components/SourceControl/SourceControlPanel.tsx` 負責 SCM 的變更、歷史、分支與 stash；`components/Worktree/` 已有本地／遠端分支來源分流；`state/` 管理工作區、Git snapshot 與導覽匯流排；`theme/compactButtons.css` 提供無框小圖示按鈕樣式。
+- `src/renderer/`：React UI。`components/ActivityBar.tsx` 匯出水平 `WorkspaceToolbar`，由側欄 host 放在內容頂部提供檔案總管／搜尋／SCM／設定入口；`WorkspaceRail.tsx` 只管理工作區。`components/Help/` 提供 7 步首次導覽與可搜尋完整指南，`TitleBar.tsx` 與設定共用重開入口。`components/SourceControl/SourceControlPanel.tsx` 負責 SCM 的變更、歷史、分支與 stash；`components/Worktree/` 已有本地／遠端分支來源分流；`state/` 管理工作區、Git snapshot 與導覽匯流排；`theme/compactButtons.css` 提供無框小圖示按鈕樣式。
 - `tests/` 與並置 `*.test.ts`：單元、整合與安全邊界測試；`e2e/` 以真 Electron、真 Git／bare remote、真檔案系統驗證完整鏈路。
 - `specs/`：`requirements.md`、`design.md`、`architecture.md`、`tasks.md` 分別保存需求、安全／IPC 設計、架構與迭代歷程。部分舊架構路徑已漂移，使用前須對照實際程式。
 - `build/`：圖示與 electron-builder 後處理；portable 產物輸出至 repository 外的 `../polydesk-dist/`。
@@ -52,7 +52,7 @@
 
 ## 工作區導航與雙層式教學現況
 
-- 原 48 px 垂直活動列 DOM 已移除；`WorkspaceToolbar` 將檔案總管、搜尋、原始碼控制與設定整合到工作區標頭，保留 SCM 即時角標、active、tooltip 與 `aria-pressed` 契約。
+- 原 48 px 垂直活動列 DOM 已移除；`WorkspaceToolbar` 將檔案總管、搜尋、原始碼控制與設定整合到側欄頂部，貼近受控內容並保留 SCM 即時角標、active、tooltip 與 `aria-pressed` 契約；工作區欄標頭只保留工作區管理入口。
 - `GuidedTour` 有 7 步，第一次啟動自動出現並以 schema v3 的 `onboarding` 欄位保存完成、略過或中斷進度；手動重開不改寫首次狀態，導覽只還原自己暫時顯示且未被使用者覆寫的版面。
 - `HelpCenter` 是可搜尋的完整使用指南，涵蓋一般使用者可操作功能、畫面狀態、處理方式與安全導航；「說明」選單與設定都可重開導覽或指南。
 - 專案根目錄 `AGENTS.md` 與 `CLAUDE.md` 已記錄同步規則：使用者可見功能新增、變更或移除時，必須檢查並更新導覽與使用指南。

@@ -15,9 +15,9 @@ interface TourStep {
 
 const STEPS: TourStep[] = [
   { title: '歡迎來到 Polydesk', body: '這裡集中管理所有專案。用＋加入資料夾、Clone repository，或從分支建立獨立 worktree。', target: '[data-tour="workspace-rail"]', reveal: 'rail' },
-  { title: '常用功能就在工作區上方', body: '依序切換檔案總管、全域搜尋與原始碼控制；齒輪開啟設定。最左側不再占用一整條活動列。', target: '[data-tour="workspace-tools"]', reveal: 'rail' },
+  { title: '常用功能就在側欄上方', body: '依序切換檔案總管、全域搜尋與原始碼控制；齒輪開啟設定。按鈕會貼近它所切換的側欄內容。', target: '[data-tour="workspace-tools"]', reveal: 'sidebar' },
   { title: '快速控制工作台版面', body: '工作區、側欄、編輯器與終端機都能原地顯示或隱藏；重設版面會盡量保留開啟中的工作。', target: '[data-tour="layout-toolbar"]' },
-  { title: '側欄跟著目前功能切換', body: '檔案、搜尋與 Git 共享同一個側欄位置。選擇上方圖示，內容會在這裡切換。', target: '.dv-content-container', reveal: 'sidebar' },
+  { title: '側欄跟著目前功能切換', body: '檔案、搜尋與 Git 共享同一個側欄位置。選擇側欄頂部圖示，下面的內容會立即切換。', target: '.pd-sidebar-view', reveal: 'sidebar' },
   { title: '編輯器與終端機可以自由停靠', body: '開啟檔案、檢查差異、執行 shell 或 AI CLI。按分頁×只會原地隱藏，重新顯示時保留尺寸與狀態。', target: '[data-tour="dock-workbench"]', reveal: 'editor' },
   { title: '終端機也能啟動 AI 工具', body: 'Claude bypass、Codex 與 Agy 會各自建立獨立終端機；bypass 只適用於完全信任的工作區。', target: '[data-tour="dock-workbench"]', reveal: 'terminal' },
   { title: '隨時回來查說明', body: '從「說明」重新執行導覽、搜尋完整使用指南，或查看 Polydesk 版本資訊。', target: '[data-tour="help-menu"]' },
