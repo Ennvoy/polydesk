@@ -3,7 +3,7 @@
 
 ## 模組索引
 
-- `src/main/`：Electron 特權層。`ipc/router.ts` 註冊服務；`git/GitService.ts` 執行系統 Git；`git/gitSafeArgs.ts` 驗證 ref 與參數；`git/gitSerialQueue.ts` 序列化同 repository 操作。其餘模組負責 workspace、PTY、檔案、搜尋、LSP、AI 監控、狀態儲存與更新。
+- `src/main/`：Electron 特權層。`ipc/router.ts` 註冊服務；`git/GitService.ts` 執行系統 Git；`git/gitSafeArgs.ts` 驗證 ref 與參數；`git/gitSerialQueue.ts` 序列化同 repository 操作；`git/cleanup/core/` 與 `store/cleanup/` 提供零副作用 preview、lease、repository instance identity、write-ahead journal、claim 重建及 quarantine 基礎。其餘模組負責 workspace、PTY、檔案、搜尋、LSP、AI 監控、狀態儲存與更新。
 - `src/preload/`：固定白名單 IPC bridge，只暴露 namespaced API，不暴露 raw `ipcRenderer` 或 Node API。
 - `src/shared/`：跨程序契約單一來源。`channels.ts` 定義 channel 白名單，`ipc.ts` 定義 request/response，`types.ts` 定義 Workspace、GitStatus、GitLogRef、GitWorktree 等模型。
 - `src/renderer/`：React UI。`components/ActivityBar.tsx` 現匯出水平 `WorkspaceToolbar`，由 `WorkspaceRail.tsx` 放在工作區標頭提供檔案總管／搜尋／SCM／設定入口；`components/Help/` 提供 7 步首次導覽與可搜尋完整指南，`TitleBar.tsx` 與設定共用重開入口。`components/SourceControl/SourceControlPanel.tsx` 負責 SCM 的變更、歷史、分支與 stash；`components/Worktree/` 已有本地／遠端分支來源分流；`state/` 管理工作區、Git snapshot 與導覽匯流排；`theme/compactButtons.css` 提供無框小圖示按鈕樣式。
@@ -14,6 +14,7 @@
 ## 主要資料流與邊界
 
 - Git／SCM：`SourceControlPanel` → preload 固定 `git:*` channel → `GitService` handler → repository 共用序列佇列 → `execFile` 系統 Git → 結構化結果回 renderer。
+- 完整清理基礎：renderer → `git:cleanupPreview/Execute/Status/Cancel` 固定 IPC → repository queue → Git/磁碟 lease 重驗 → userData 版本化 journal/claim；preview 不建立 journal，execute 先停在 prepared，T-006/T-007 再加入不可逆步驟。
 - 工作區：renderer store／workspace rail → `workspace:*` → `WorkspaceManager` → `StateStore` userData 狀態檔。
 - Worktree：SCM／建立對話框 → `git:worktree*` → `GitService` → `WorkspaceManager` 納管；分支互斥以 `git worktree list` 的即時結果為準。
 - Terminal：xterm → `pty:*` → `PtyManager` → ConPTY；main 主動推播輸出。

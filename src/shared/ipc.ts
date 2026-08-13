@@ -36,6 +36,13 @@ import type {
   GitRemoteBranch,
   GitBranchDeleteResult,
 } from './types';
+import type {
+  GitCleanupExecuteRequest,
+  GitCleanupExecuteResult,
+  GitCleanupPreviewRequest,
+  GitCleanupPreviewResult,
+  GitCleanupStatusResult,
+} from './gitCleanup';
 
 /** invoke 通道：renderer 經 preload 呼叫、main `ipcMain.handle` 回應（一次性 Promise）。 */
 export interface InvokeChannels {
@@ -138,6 +145,17 @@ export interface InvokeChannels {
       | { branches: string[]; current: string; remotes?: string[]; remoteBranches?: GitRemoteBranch[] }
       | { ok: true }
       | GitBranchDeleteResult;
+  };
+  /** 完整清理第一階段：只讀取 Git／磁碟狀態並簽出 lease，保證不建 journal、不改 ref。 */
+  'git:cleanupPreview': { req: GitCleanupPreviewRequest; res: GitCleanupPreviewResult };
+  /** 完整清理第二階段：main 重驗 lease 後先建立 prepared journal；後續票才接破壞性步驟。 */
+  'git:cleanupExecute': { req: GitCleanupExecuteRequest; res: GitCleanupExecuteResult };
+  /** 啟動恢復與 SCM 待辦使用；只回去密 repository claim 與 quarantine 狀態。 */
+  'git:cleanupStatus': { req: void; res: GitCleanupStatusResult };
+  /** 只有仍能完整證明零副作用的 prepared journal 可取消。 */
+  'git:cleanupCancel': {
+    req: { wsId: string; journalId: string };
+    res: { ok: true } | { ok: false; error: string };
   };
   'git:log': { req: { wsId: string; limit: number }; res: GitLogEntry[] };
   /** commit diff（git show <ref>；給 path 則限定單檔）；PE-1 右鍵/展開檔案用。 */

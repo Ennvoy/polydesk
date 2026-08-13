@@ -37,6 +37,7 @@ import { validateWorktreeTarget, resolveTargetPath } from './worktreePath';
 import { cloneDirectoryNameError, cloneUrlError, isGitHubHttpsCloneUrl } from '../../shared/gitClone';
 import { publishRepoNameError } from '../../shared/gitPublish';
 import { classifyBranchDeleteError, classifyPushError, classifyGhError, isNoUpstreamError } from './gitErrorClassify';
+import { CleanupService } from './cleanup/core/CleanupService';
 
 const GIT_BIN = 'git';
 const MAX_BUFFER = 64 * 1024 * 1024;
@@ -1152,8 +1153,9 @@ function errMsg(e: unknown, fallback: string): string {
  * 註冊 git:* handlers（取代 stub）。全部經 gitSerialQueue.enqueue(wsId,...) 每工作區序列化（REQ-SCM-008）。
  * router.ts：registerGitHandlers(ipcMain, services.workspaces)。
  */
-export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager): void {
+export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, userDataDir: string): void {
   const svc = new GitService(workspaces);
+  const cleanup = new CleanupService(workspaces, userDataDir);
 
   ipc.handle('git:snapshot', (_e, req: InvokeReq<'git:snapshot'>) =>
     enqueue(req.wsId, () => svc.snapshot(req.wsId)),
@@ -1217,6 +1219,17 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager):
   // ── Git Worktree（REQ-WT）──
   // 佇列鍵一律用該 repo 的統一鍵（worktree 工作區解回主工作樹），避免 index.lock 交錯（紅軍 A5）。
   const qkey = (wsId: string): string => workspaces.queueKeyForRepo(wsId);
+
+  ipc.handle('git:cleanupPreview', (_e, req: InvokeReq<'git:cleanupPreview'>) =>
+    enqueue(qkey(req.wsId), () => cleanup.preview(req)),
+  );
+  ipc.handle('git:cleanupExecute', (_e, req: InvokeReq<'git:cleanupExecute'>) =>
+    enqueue(qkey(req.wsId), () => cleanup.execute(req)),
+  );
+  ipc.handle('git:cleanupStatus', () => enqueue('cleanup:claims', () => cleanup.recoverLocal()));
+  ipc.handle('git:cleanupCancel', (_e, req: InvokeReq<'git:cleanupCancel'>) =>
+    enqueue(qkey(req.wsId), () => cleanup.cancelPrepared(req.wsId, req.journalId)),
+  );
 
   ipc.handle('git:worktreeList', (_e, req: InvokeReq<'git:worktreeList'>) =>
     enqueue(qkey(req.wsId), async () => {

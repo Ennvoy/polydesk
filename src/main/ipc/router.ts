@@ -48,7 +48,7 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
   registerFileService(ipcMain, workspaces, (wsId) => fileWatcher.ensureWatch(wsId)); // fs:read / fs:write；read 前先保證 watcher 已建立
   const pty = registerPtyHandlers(ipcMain, workspaces, lifecycle); // pty:*
   registerClipboardHandlers(ipcMain); // clipboard:*（終端機貼上/複製，繞過 renderer 剪貼簿權限封鎖）
-  registerGitHandlers(ipcMain, workspaces); // git:*
+  registerGitHandlers(ipcMain, workspaces, userDataDir); // git:*
   registerCommitMessageHandler(ipcMain, workspaces, store); // ai:generateCommitMessage（智慧 commit message）
   registerUsageHandler(ipcMain); // ai:usage（總覽用量）
   registerSearchHandlers(ipcMain, workspaces); // search:*
