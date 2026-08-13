@@ -12,6 +12,7 @@ import { appStore } from '../../state/appStore';
 import { invalidateGitSnapshot, loadGitSnapshot, refreshGitSnapshot } from '../../state/gitSnapshot';
 import { WorktreePanel } from '../Worktree/WorktreePanel';
 import { PublishGitHubDialog } from './PublishGitHubDialog';
+import { BranchCleanupDialog, type BranchCleanupDraft } from './BranchCleanupDialog';
 import { CreateWorktreeDialog } from '../Worktree/CreateWorktreeDialog';
 import { parseWorktreeConflict, resolveJumpTarget } from '../Worktree/worktreeModel';
 import { neutralizeBidi } from '../Dialogs/TrustConfirm';
@@ -785,23 +786,36 @@ export function SourceControlPanel(): React.JSX.Element {
       setError(`遠端分支「${neutralizeBidi(displayName)}」缺少 remote 身分，已停止刪除。`);
       return;
     }
-    const ok = await dialog.confirm(
-      kind === 'local'
-        ? {
-            title: '刪除本地分支？',
-            body: `只會刪除這台電腦上的「${neutralizeBidi(name)}」，不會刪除遠端同名分支。尚未合併的分支會被 Git 拒絕。`,
-            confirmText: '刪除本地分支',
-            cancelText: '取消',
-          }
-        : {
+    if (kind === 'local') {
+      const cleanupDraft = (await dialog.open(
+        (close) => (
+          <BranchCleanupDialog
+            branch={name}
+            isCurrent={name === branches.current}
+            worktreePaths={name !== branches.current && branches.worktreePaths[name] ? [branches.worktreePaths[name]] : []}
+            localBranches={branches.local}
+            remoteCandidates={branches.remote}
+            onResult={(result) => close(result)}
+          />
+        ),
+        { dismissable: false },
+      )) as BranchCleanupDraft | undefined;
+      if (!cleanupDraft) return;
+      // Design 階段先保留既有安全刪除 primitive；weave/build 會以 cleanup preview/execute 取代這一段。
+      if (cleanupDraft.removeWorktrees || cleanupDraft.switchTo || cleanupDraft.remoteTargets.length > 0) {
+        setError('完整清理安全檢查正在建置中，尚未執行任何刪除。');
+        return;
+      }
+    } else {
+      const ok = await dialog.confirm({
             title: '刪除遠端分支？',
             body: `將從遠端「${neutralizeBidi(remote!)}」刪除伺服器分支「${neutralizeBidi(name)}」。本地同名分支會保留。`,
             confirmText: '刪除遠端分支',
             cancelText: '取消',
             danger: true,
-          },
-    );
-    if (!ok) return;
+          });
+      if (!ok) return;
+    }
     await run(async () => {
       const result =
         kind === 'local'
@@ -1376,7 +1390,7 @@ export function SourceControlPanel(): React.JSX.Element {
               className="pd-scm-ctxitem is-danger"
               aria-label={deleteLabel}
               title={usedPath && !isCurrent ? `由 worktree 使用中：${neutralizeBidi(usedPath)}` : undefined}
-              disabled={isCurrent || Boolean(usedPath) || busy}
+              disabled={busy}
               onClick={() => {
                 const branch = branchMenu;
                 setBranchMenu(null);

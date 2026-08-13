@@ -535,6 +535,40 @@
 .pd-scm-ctxitem:disabled { color: var(--meta); cursor: not-allowed; opacity: 0.72; }
 .pd-scm-ctxitem:disabled:hover { background: transparent; color: var(--meta); }
 
+/* 完整清理：沿用既有 dialog/pd-btn/token，先選範圍、後看風險。 */
+.pd-cleanup-dialog { width: min(620px, calc(100vw - 48px)); max-height: calc(100vh - 64px); overflow: auto; }
+.pd-cleanup-header { display: grid; gap: var(--space-3); padding-bottom: var(--space-4); border-bottom: 1px solid var(--border); }
+.pd-cleanup-title-row { display: flex; align-items: flex-start; gap: var(--space-3); }
+.pd-cleanup-title-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: var(--radius-md); background: color-mix(in oklab, var(--accent), transparent 84%); color: var(--accent); font-size: var(--text-lg); }
+.pd-cleanup-title-row h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-lg); }
+.pd-cleanup-title-row p, .pd-cleanup-section-heading p { margin: 4px 0 0; color: var(--meta); font-size: var(--text-xs); line-height: 1.5; }
+.pd-cleanup-branch { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--meta); font-size: var(--text-xs); }
+.pd-cleanup-branch code { max-width: 72%; overflow: hidden; color: var(--fg); text-overflow: ellipsis; white-space: nowrap; }
+.pd-cleanup-section { padding: var(--space-4) 0 0; }
+.pd-cleanup-section-heading { display: flex; align-items: flex-start; gap: var(--space-2); margin-bottom: var(--space-2); }
+.pd-cleanup-section-heading h3 { margin: 0; color: var(--fg); font-size: var(--text-sm); }
+.pd-cleanup-step { display: grid; place-items: center; width: 20px; height: 20px; flex: 0 0 20px; border-radius: 999px; background: var(--accent); color: var(--accent-on); font-size: var(--text-xs); font-weight: 700; }
+.pd-cleanup-card, .pd-cleanup-toggle, .pd-cleanup-switch, .pd-cleanup-remotes { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2, rgba(127,127,127,.06)); }
+.pd-cleanup-card.is-selected { border-color: color-mix(in oklab, var(--accent), var(--border) 45%); }
+.pd-cleanup-card-main { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-3); }
+.pd-cleanup-check { display: grid; place-items: center; width: 18px; height: 18px; flex: 0 0 18px; border-radius: 999px; background: var(--accent); color: var(--accent-on); font-size: 11px; font-weight: 700; }
+.pd-cleanup-card strong, .pd-cleanup-toggle strong { display: block; color: var(--fg); font-size: var(--text-sm); }
+.pd-cleanup-card small, .pd-cleanup-toggle small, .pd-cleanup-switch small, .pd-cleanup-remotes small { display: block; margin-top: 3px; color: var(--meta); font-size: var(--text-xs); line-height: 1.45; }
+.pd-cleanup-nested { display: grid; gap: 5px; margin: 0 var(--space-3) var(--space-3) 46px; padding: var(--space-2) var(--space-3); border-left: 2px solid var(--warn); background: color-mix(in oklab, var(--warn), transparent 92%); font-size: var(--text-xs); }
+.pd-cleanup-nested code { overflow: hidden; color: var(--fg-2); text-overflow: ellipsis; white-space: nowrap; }
+.pd-cleanup-switch { display: grid; gap: var(--space-2); margin-top: var(--space-2); padding: var(--space-3); }
+.pd-cleanup-switch label { color: var(--fg-2); font-size: var(--text-sm); font-weight: 600; }
+.pd-cleanup-toggle { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-3); cursor: pointer; }
+.pd-cleanup-toggle input, .pd-cleanup-remotes input { margin-top: 2px; accent-color: var(--accent); }
+.pd-cleanup-remotes { display: grid; gap: 1px; margin-top: var(--space-2); padding: var(--space-2); }
+.pd-cleanup-remotes > p { margin: 0; padding: var(--space-2); color: var(--meta); font-size: var(--text-xs); }
+.pd-cleanup-remotes label { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-2); border-radius: var(--radius-sm); cursor: pointer; }
+.pd-cleanup-remotes label:hover { background: var(--surface-warm); }
+.pd-cleanup-remotes code { color: var(--fg); }
+.pd-cleanup-warning { display: flex; gap: 5px; margin-top: var(--space-4); padding: var(--space-3); border: 1px solid color-mix(in oklab, var(--warn), transparent 55%); border-radius: var(--radius-md); background: color-mix(in oklab, var(--warn), transparent 92%); color: var(--fg-2); font-size: var(--text-xs); line-height: 1.5; }
+.pd-cleanup-warning strong { flex: 0 0 auto; color: var(--warn); }
+.pd-cleanup-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); padding: var(--space-3) 0 1px; background: linear-gradient(to bottom, transparent, var(--surface) 22%); }
+
 /* diff 全面板 */
 .pd-scm-back { padding: 2px 8px; font-size: var(--text-xs); }
 .pd-scm-difftitle {

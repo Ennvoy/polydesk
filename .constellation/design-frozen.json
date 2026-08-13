@@ -1,0 +1,20 @@
+{
+  "frozen": [
+    "src/renderer/components/SourceControl/BranchCleanupDialog.tsx",
+    "src/renderer/components/SourceControl/scm.css"
+  ],
+  "log": [
+    {
+      "path": "src/renderer/components/SourceControl/BranchCleanupDialog.tsx",
+      "action": "freeze",
+      "at": "2026-08-13T08:40:04.5137401+08:00",
+      "reason": "design 定稿"
+    },
+    {
+      "path": "src/renderer/components/SourceControl/scm.css",
+      "action": "freeze",
+      "at": "2026-08-13T08:40:04.5137401+08:00",
+      "reason": "design 定稿"
+    }
+  ]
+}
