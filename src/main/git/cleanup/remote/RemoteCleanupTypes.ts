@@ -1,24 +1,14 @@
-export type RemoteEndpointStatus = 'exists' | 'unknown';
+import type {
+  GitCleanupRemoteEndpoint,
+  GitCleanupRemoteExecution,
+  GitCleanupRemotePlan,
+  GitCleanupRemoteTrackingLease,
+  GitCleanupRemoteTrackingProducer,
+} from '../../../../shared/gitCleanup';
 
-export interface RemoteEndpointLease {
-  id: string;
-  remote: string;
-  branch: string;
-  ref: string;
-  fingerprint: string;
-  display: string;
-  status: RemoteEndpointStatus;
-  expectedOid?: string;
-  preselected: boolean;
-  reason?: string;
-}
-
-export interface RemoteTrackingProducer {
-  remote: string;
-  sourceRef: string;
-  refspec: string;
-  endpointIds: string[];
-}
+export type RemoteEndpointStatus = GitCleanupRemoteEndpoint['status'];
+export type RemoteEndpointLease = GitCleanupRemoteEndpoint;
+export type RemoteTrackingProducer = GitCleanupRemoteTrackingProducer;
 
 export interface RemoteTrackingSymrefLease {
   ref: string;
@@ -26,29 +16,8 @@ export interface RemoteTrackingSymrefLease {
   typical: boolean;
 }
 
-export interface RemoteTrackingLease {
-  localRef: string;
-  expectedOid?: string;
-  producers: RemoteTrackingProducer[];
-  negativeOrAmbiguous: boolean;
-  namespaceAllowed: boolean;
-  symrefs: RemoteTrackingSymrefLease[];
-  reflogExists: boolean;
-  reflogDigest: string;
-}
-
-export interface RemoteCleanupPlan {
-  token: string;
-  branch: string;
-  objectGraphComplete: boolean;
-  objectGraphReason?: string;
-  localIdentityDigest: string;
-  endpointConfigDigest: string;
-  refspecDigest: string;
-  conflictDigest: string;
-  endpoints: RemoteEndpointLease[];
-  trackingRefs: RemoteTrackingLease[];
-}
+export type RemoteTrackingLease = GitCleanupRemoteTrackingLease;
+export type RemoteCleanupPlan = GitCleanupRemotePlan;
 
 export interface RemoteLeaseGuard {
   /** 回傳 active/quarantine journal 與 receipt 衝突集合的 canonical digest；ownClaimId 必須排除自身。 */
@@ -82,9 +51,4 @@ export interface RemoteEndpointResult {
   message?: string;
 }
 
-export interface RemoteCleanupResult {
-  ok: boolean;
-  endpoints: RemoteEndpointResult[];
-  trackingRefsDeleted: string[];
-  trackingRefsRetained: { localRef: string; reason: string }[];
-}
+export type RemoteCleanupResult = GitCleanupRemoteExecution;

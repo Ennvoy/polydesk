@@ -10,6 +10,7 @@ import { neutralizeBidi } from '../Dialogs/TrustConfirm';
 import { CreateWorktreeDialog } from './CreateWorktreeDialog';
 import { worktreeBranchDisplay, worktreePathDisplay, canSwitchWorktree } from './worktreeModel';
 import { planRemoval, confirmedDirtyRemoval, scopeDeletesBranch, scopeDeletesFolder, type WorktreeCleanupScope } from './worktreeRemoveModel';
+import { BranchCleanupRiskDialog, type BranchCleanupRiskDecision } from '../SourceControl/BranchCleanupRiskDialog';
 import { mark, measure } from '../../../shared/perf';
 import type { GitWorktree } from '../../../shared/types';
 
@@ -80,6 +81,9 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
   };
 
   const onRemove = async (wt: GitWorktree): Promise<void> => {
+    // Destructive cleanup must run from a surviving worktree. The active workspace may
+    // be the linked worktree that is about to be removed, so prefer the main worktree.
+    const repositoryWsId = list?.find((entry) => entry.isMain && entry.managedWsId)?.managedWsId ?? wsId;
     if (wt.prunable && wt.branch) {
       const ok = await dialog.confirm({
         title: '移除失效 worktree 登記',
@@ -90,7 +94,7 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
       if (!ok) return;
       setBusy(true);
       try {
-        const preview = await ipc.git.cleanupPreview({ wsId, branch: wt.branch });
+        const preview = await ipc.git.cleanupPreview({ wsId: repositoryWsId, branch: wt.branch });
         if (!preview.ok) {
           setError(preview.error);
           return;
@@ -100,13 +104,17 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
           setError('失效登記狀態已變更，請重新載入後再試。');
           return;
         }
-        const plannedPreview = await ipc.git.cleanupPreview({ wsId, branch: wt.branch, removeWorktreeIds: [target.id] });
+        const plannedPreview = await ipc.git.cleanupPreview({
+          wsId: repositoryWsId,
+          branch: wt.branch,
+          removeWorktreeIds: [target.id],
+        });
         if (!plannedPreview.ok) {
           setError(plannedPreview.error);
           return;
         }
         const result = await ipc.git.cleanupExecute({
-          wsId,
+          wsId: repositoryWsId,
           branch: wt.branch,
           leaseToken: plannedPreview.leaseToken,
           localPlan: { deleteBranch: false, worktrees: [{ id: target.id, mode: 'stale-registration' }] },
@@ -135,10 +143,10 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
     setBusy(true);
     try {
       // 會刪資料夾時先查未提交變更數（dirty 兩段確認在刪除「之前」，避免半殘）。
-      const changes = await ipc.git.changes({ wsId: targetWsId });
+      const changes = choice === 'full-cleanup' ? [] : await ipc.git.changes({ wsId: targetWsId });
       const plan = planRemoval(scopeDeletesFolder(choice), changes.length);
       let force = false;
-      if (plan.action === 'confirm-dirty') {
+      if (choice !== 'full-cleanup' && plan.action === 'confirm-dirty') {
         const ok = (await dialog.open((close) => (
           <DirtyConfirmDialog changedCount={plan.changedCount} onResult={(v) => close(v)} />
         ))) as boolean | undefined;
@@ -146,7 +154,7 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
         force = confirmedDirtyRemoval().force; // 兩段確認通過 → force
       }
       let unlock = false;
-      if (wt.locked && scopeDeletesFolder(choice)) {
+      if (choice !== 'full-cleanup' && wt.locked && scopeDeletesFolder(choice)) {
         unlock = await dialog.confirm({
           title: '解除 worktree 鎖定保護',
           body: `此 worktree${wt.lockReason ? `（${neutralizeBidi(wt.lockReason)}）` : ''}已鎖定。要明確解除保護後繼續嗎？`,
@@ -155,12 +163,12 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
         });
         if (!unlock) return;
       }
-      const anchorBranch = wt.branch ?? (await ipc.git.status({ wsId })).branch;
+      const anchorBranch = wt.branch ?? (await ipc.git.status({ wsId: repositoryWsId })).branch;
       if (!anchorBranch) {
         setError('無法取得具名本地分支作為清理租約基準，請先讓主工作樹切到本地分支。');
         return;
       }
-      const preview = await ipc.git.cleanupPreview({ wsId, branch: anchorBranch });
+      const preview = await ipc.git.cleanupPreview({ wsId: repositoryWsId, branch: anchorBranch });
       if (!preview.ok) {
         setError(preview.error);
         return;
@@ -174,14 +182,31 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
         return;
       }
       const plannedPreview = scopeDeletesFolder(choice)
-        ? await ipc.git.cleanupPreview({ wsId, branch: anchorBranch, removeWorktreeIds: [target.id] })
+        ? await ipc.git.cleanupPreview({ wsId: repositoryWsId, branch: anchorBranch, removeWorktreeIds: [target.id] })
         : preview;
       if (!plannedPreview.ok) {
         setError(plannedPreview.error);
         return;
       }
+      let acceptExternalWriteRisk = scopeDeletesFolder(choice);
+      if (choice === 'full-cleanup') {
+        const decision = (await dialog.open(
+          (close) => <BranchCleanupRiskDialog
+            branch={anchorBranch}
+            snapshot={plannedPreview.snapshot}
+            deleteLocal
+            removeWorktreeIds={[target.id]}
+            onResult={(result) => close(result)}
+          />,
+          { dismissable: false },
+        )) as BranchCleanupRiskDecision | undefined;
+        if (!decision) return;
+        force = decision.forceLocal;
+        unlock = decision.unlockWorktreeIds.includes(target.id);
+        acceptExternalWriteRisk = decision.acceptExternalWriteRisk;
+      }
       const cleaned = await ipc.git.cleanupExecute({
-        wsId,
+        wsId: repositoryWsId,
         branch: anchorBranch,
         leaseToken: plannedPreview.leaseToken,
         localPlan: {
@@ -190,7 +215,7 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
         },
         confirmation: {
           forceLocal: force,
-          acceptExternalWriteRisk: scopeDeletesFolder(choice),
+          acceptExternalWriteRisk,
           remoteTargets: [],
         },
       });

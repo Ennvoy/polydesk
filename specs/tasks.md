@@ -237,3 +237,10 @@
       blockedBy：F-11、F-12、F-13
       conflictZone：e2e/、tests/perf/
       verify：perf 數據落檔達標＋vitest/e2e 回歸全綠。
+
+## 2026-08-13 分支／worktree 完整清理
+
+- [x] 核心 preview、repository identity、journal／claim、local CAS／worktree reconciliation 與 remote expected-OID engine。
+- [x] 本地分支、遠端分支與 worktree 入口統一到兩階段 UI；移除舊直接 `branch -d`／`push --delete` 產品旁路。
+- [x] 加入啟動待辦、prepared 取消、mutating／reconciling resume、部分結果與 unknown/stale 說明。
+- [ ] 完成真 Electron 全旅程與完整出貨 runner 後發布。

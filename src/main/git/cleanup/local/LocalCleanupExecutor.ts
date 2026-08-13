@@ -114,21 +114,26 @@ export class LocalCleanupExecutor {
     journalId: string,
     request: GitCleanupExecuteRequest,
     snapshot: GitCleanupSnapshot,
+    options: { alreadyMutating?: boolean; checkpoints?: string[]; remoteTrackingRefsDeleted?: string[] } = {},
   ): Promise<GitCleanupExecuteResult> {
     const plan = request.localPlan;
     if (!plan) return { ok: true, journalId, phase: 'prepared' };
     const validation = this.validate(snapshot, request);
     if (validation) return validation;
-    this.journals.markMutating(journalId);
+    const checkpoints = new Set(options.checkpoints ?? []);
+    if (!options.alreadyMutating) this.journals.markMutating(journalId);
 
     try {
-      if (plan.switchTo) {
+      if (plan.switchTo && !checkpoints.has(`switched:${plan.switchTo}`)) {
         const switched = await this.git.write(cwd, ['switch', '--no-guess', plan.switchTo], undefined, true);
         if (switched.code !== 0) throw new Error(switched.stderr.trim() || '切換分支失敗');
         this.journals.checkpoint(journalId, `switched:${plan.switchTo}`);
       }
 
       for (const action of plan.worktrees) {
+        if (checkpoints.has(`worktree-delisted:${action.id}`)
+          || checkpoints.has(`worktree-stale-registration-removed:${action.id}`)
+          || checkpoints.has(`worktree-removed:${action.id}`)) continue;
         const worktree = snapshot.worktrees.find((entry) => entry.id === action.id);
         if (!worktree) throw new Error('worktree 清理計畫已失效');
         const managed = this.workspaces.list().find((workspace) => canonical(workspace.path) === canonical(worktree.displayPath));
@@ -157,7 +162,11 @@ export class LocalCleanupExecutor {
         const forceArgs = worktree.locked && action.unlock ? ['--force', '--force'] : ['--force'];
         const removed = await this.git.write(cwd, ['worktree', 'remove', ...forceArgs, '--', worktree.displayPath], undefined, true);
         if (removed.code !== 0) {
-          await this.reconcileWorktree(cwd, journalId, worktree, managed?.id);
+          const reconciled = await this.reconcileWorktree(cwd, journalId, worktree, managed?.id);
+          if (reconciled) {
+            this.journals.checkpoint(journalId, `worktree-removed:${action.id}`);
+            continue;
+          }
           throw new Error(removed.stderr.trim() || '刪除 worktree 失敗，已依實際 path/Git/Polydesk 狀態停止或收斂。');
         }
         const reconciled = await this.reconcileWorktree(cwd, journalId, worktree, managed?.id);
@@ -184,29 +193,40 @@ export class LocalCleanupExecutor {
           retainedNow.push(...parseRefLeases(privateNow.stdout, scopePath));
         }
         sortRefLeases(retainedNow);
-        if (digest({ refs: retainedNow, privateScopes: [...snapshot.retainedRefs.privateScopes].sort((a, b) => a.localeCompare(b)) }) !== snapshot.retainedRefs.digest) {
+        const remotelyDeleted = new Set(options.remoteTrackingRefsDeleted ?? []);
+        const expectedRetained = sortRefLeases(snapshot.retainedRefs.refs.filter((ref) => !remotelyDeleted.has(ref.ref)));
+        const expectedRetainedDigest = digest({
+          refs: expectedRetained,
+          privateScopes: [...snapshot.retainedRefs.privateScopes].sort((a, b) => a.localeCompare(b)),
+        });
+        if (digest({ refs: retainedNow, privateScopes: [...snapshot.retainedRefs.privateScopes].sort((a, b) => a.localeCompare(b)) }) !== expectedRetainedDigest) {
           throw new Error('保留 refs 已變更，必須重新計算風險摘要。');
         }
-        const retained = snapshot.retainedRefs.refs
-          .filter((ref) => !ref.scopePath && ref.ref !== snapshot.target.ref && ref.ref !== snapshot.baseline.ref)
-          .map((ref) => `verify ${ref.ref} ${ref.oid}`);
-        const transaction = [
-          'start',
-          `verify ${snapshot.baseline.ref} ${snapshot.baseline.oid}`,
-          ...retained,
-          `delete ${snapshot.target.ref} ${snapshot.target.oid}`,
-          'prepare',
-          'commit',
-          '',
-        ].join('\n');
-        const deleted = await this.git.write(
-          cwd,
-          ['update-ref', '--stdin', '-m', `polydesk-cleanup:${journalId}`],
-          transaction,
-          true,
-        );
-        if (deleted.code !== 0) throw new Error(deleted.stderr.trim() || '本地 branch lease 已變更');
-        this.journals.checkpoint(journalId, 'local-ref-deleted');
+        if (!checkpoints.has('local-ref-deleted')) {
+          const targetNow = await this.git.run(cwd, ['show-ref', '--verify', snapshot.target.ref], true);
+          if (targetNow.code === 0) {
+            const retained = expectedRetained
+              .filter((ref) => !ref.scopePath && ref.ref !== snapshot.target.ref && ref.ref !== snapshot.baseline.ref)
+              .map((ref) => `verify ${ref.ref} ${ref.oid}`);
+            const transaction = [
+              'start',
+              `verify ${snapshot.baseline.ref} ${snapshot.baseline.oid}`,
+              ...retained,
+              `delete ${snapshot.target.ref} ${snapshot.target.oid}`,
+              'prepare',
+              'commit',
+              '',
+            ].join('\n');
+            const deleted = await this.git.write(
+              cwd,
+              ['update-ref', '--stdin', '-m', `polydesk-cleanup:${journalId}`],
+              transaction,
+              true,
+            );
+            if (deleted.code !== 0) throw new Error(deleted.stderr.trim() || '本地 branch lease 已變更');
+          }
+          this.journals.checkpoint(journalId, 'local-ref-deleted');
+        }
 
         const occupancy = await this.git.run(cwd, ['worktree', 'list', '--porcelain', '-z'], true);
         if (occupancy.code !== 0 || occupancy.stdout.includes(`branch ${snapshot.target.ref}\0`)) {
@@ -221,18 +241,21 @@ export class LocalCleanupExecutor {
         }
 
         const section = `branch.${request.branch}`;
-        if (snapshot.metadata.entries.some((entry) => entry.mutable)) {
+        if (!checkpoints.has('branch-config-cleared') && snapshot.metadata.entries.some((entry) => entry.mutable)) {
           const config = await this.git.write(cwd, ['config', '--local', '--remove-section', section], undefined, true);
-          if (config.code !== 0) throw new Error(config.stderr.trim() || '清除 branch config 失敗');
+          const remains = await this.git.run(cwd, ['config', '--local', '--get-regexp', `^branch\\.${request.branch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.`], true);
+          if (config.code !== 0 && remains.code === 0) throw new Error(config.stderr.trim() || '清除 branch config 失敗');
         }
-        this.journals.checkpoint(journalId, 'branch-config-cleared');
+        if (!checkpoints.has('branch-config-cleared')) this.journals.checkpoint(journalId, 'branch-config-cleared');
 
-        const reflogExists = await this.git.run(cwd, ['reflog', 'exists', snapshot.target.ref], true);
-        if (reflogExists.code === 0) {
-          const dropped = await this.git.write(cwd, ['reflog', 'drop', snapshot.target.ref], undefined, true);
-          if (dropped.code !== 0) throw new Error(dropped.stderr.trim() || '清除 branch reflog 失敗');
+        if (!checkpoints.has('branch-reflog-cleared')) {
+          const reflogExists = await this.git.run(cwd, ['reflog', 'exists', snapshot.target.ref], true);
+          if (reflogExists.code === 0) {
+            const dropped = await this.git.write(cwd, ['reflog', 'drop', snapshot.target.ref], undefined, true);
+            if (dropped.code !== 0) throw new Error(dropped.stderr.trim() || '清除 branch reflog 失敗');
+          }
+          this.journals.checkpoint(journalId, 'branch-reflog-cleared');
         }
-        this.journals.checkpoint(journalId, 'branch-reflog-cleared');
 
       }
       this.journals.close(journalId);

@@ -20,6 +20,10 @@ export type GitCleanupBlockerCode =
   | 'worktree-locked'
   | 'external-write-risk-unconfirmed'
   | 'local-cleanup-failed'
+  | 'remote-target-unavailable'
+  | 'remote-state-unknown'
+  | 'remote-cleanup-failed'
+  | 'recovery-required'
   | 'state-changed';
 
 export interface GitCleanupBlocker {
@@ -61,6 +65,57 @@ export interface GitCleanupWorktreeSnapshot {
   privateRefsDigest: string | null;
 }
 
+export interface GitCleanupRemoteEndpoint {
+  id: string;
+  remote: string;
+  branch: string;
+  ref: string;
+  fingerprint: string;
+  display: string;
+  status: 'exists' | 'unknown';
+  expectedOid?: string;
+  preselected: boolean;
+  reason?: string;
+}
+
+export interface GitCleanupRemoteTrackingProducer {
+  remote: string;
+  sourceRef: string;
+  refspec: string;
+  endpointIds: string[];
+}
+
+export interface GitCleanupRemoteTrackingLease {
+  localRef: string;
+  expectedOid?: string;
+  producers: GitCleanupRemoteTrackingProducer[];
+  negativeOrAmbiguous: boolean;
+  namespaceAllowed: boolean;
+  symrefs: { ref: string; target: string; typical: boolean }[];
+  reflogExists: boolean;
+  reflogDigest: string;
+}
+
+export interface GitCleanupRemotePlan {
+  token: string;
+  branch: string;
+  objectGraphComplete: boolean;
+  objectGraphReason?: string;
+  localIdentityDigest: string;
+  endpointConfigDigest: string;
+  refspecDigest: string;
+  conflictDigest: string;
+  endpoints: GitCleanupRemoteEndpoint[];
+  trackingRefs: GitCleanupRemoteTrackingLease[];
+}
+
+export interface GitCleanupRemotePreview {
+  plan: GitCleanupRemotePlan;
+  selectedEndpointIds: string[];
+  requestedTargets: { remote: string; branch: string }[];
+  unresolvedTargets: { remote: string; branch: string; reason: string }[];
+}
+
 export interface GitCleanupSnapshot {
   repository: {
     fingerprint: string;
@@ -95,6 +150,7 @@ export interface GitCleanupSnapshot {
   };
   switchCandidates: string[];
   blockers: GitCleanupBlocker[];
+  remote?: GitCleanupRemotePreview;
 }
 
 export interface GitCleanupPreviewRequest {
@@ -131,8 +187,22 @@ export interface GitCleanupExecuteRequest {
 }
 
 export type GitCleanupExecuteResult =
-  | { ok: true; journalId: string; phase: 'prepared' | 'mutating' | 'reconciling' | 'closed' }
-  | { ok: false; error: string; code: GitCleanupBlockerCode; journalId?: string; currentPreview?: GitCleanupPreviewResult };
+  | { ok: true; journalId: string; phase: 'prepared' | 'mutating' | 'reconciling' | 'closed'; remote?: GitCleanupRemoteExecution }
+  | { ok: false; error: string; code: GitCleanupBlockerCode; journalId?: string; currentPreview?: GitCleanupPreviewResult; remote?: GitCleanupRemoteExecution };
+
+export interface GitCleanupRemoteExecution {
+  ok: boolean;
+  endpoints: {
+    id: string;
+    fingerprint: string;
+    remote: string;
+    branch: string;
+    status: 'deleted' | 'already-completed' | 'stale' | 'unknown' | 'skipped';
+    message?: string;
+  }[];
+  trackingRefsDeleted: string[];
+  trackingRefsRetained: { localRef: string; reason: string }[];
+}
 
 export interface GitCleanupJournalSummary {
   journalId: string;
@@ -141,10 +211,20 @@ export interface GitCleanupJournalSummary {
   createdAt: string;
   updatedAt: string;
   archived: boolean;
+  wsId?: string;
+  branch?: string;
+  canCancel: boolean;
+  canResume: boolean;
+  checkpoints: string[];
 }
 
 export interface GitCleanupStatusResult {
   globalBlocked: boolean;
   journals: GitCleanupJournalSummary[];
   issues: { code: string; message: string; file?: string }[];
+}
+
+export interface GitCleanupResumeRequest {
+  wsId: string;
+  journalId: string;
 }

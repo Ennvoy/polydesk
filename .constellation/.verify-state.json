@@ -2,6 +2,7 @@
   "targets": {
     "ship": 0,
     ".constellation/tickets/T-002-workspace-header-navigation.md": 0,
-    ".constellation/tickets/T-007-leased-remote-branch-cleanup.md": 0
+    ".constellation/tickets/T-007-leased-remote-branch-cleanup.md": 0,
+    ".constellation/tickets/T-008-unified-cleanup-user-flow.md": 0
   }
 }

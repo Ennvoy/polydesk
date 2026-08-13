@@ -1,6 +1,6 @@
 # Polydesk
 
-![version](https://img.shields.io/badge/version-v0.29.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+![version](https://img.shields.io/badge/version-v0.30.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
 
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
@@ -21,7 +21,7 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 | **終端機多開** | 同一工作區可並排/上下多開終端機、可拖曳調整，支援 PowerShell 等 shell；Windows 內建 shell 以絕對路徑啟動，不受其他軟體重排 PATH 影響，啟動失敗會顯示原因；工具列可一鍵建立並啟動 Claude bypass、Codex 或 Agy，且會核對 xterm 與 ConPTY 的實際欄列一致後才啟動 TUI；所有終端機都直接使用完整 xterm 畫面，不再顯示左側內容／對話導覽軸；背景終端以較低成本持續接收資料；選取文字後可用 `Ctrl+C` 在終端機間複製貼上，未選取時仍送出中斷訊號；按住 `Ctrl` 點擊輸出的檔案路徑可直接開檔並跳到指定行欄，點擊 HTTP／HTTPS 網址則交由系統瀏覽器開啟。 |
 | **Monaco 編輯器** | 多分頁、分割並排、依視窗寬度自動換行；AI／外部工具改檔後，乾淨分頁與唯讀預覽會自動更新，大批改檔也會對帳；未存檔內容不會被覆蓋。分頁右鍵可關閉、關閉其他或關閉目前工作區的全部分頁。 |
 | **可停靠版面** | 側欄、編輯器與終端機可拖曳停靠及調整大小；按編輯器／終端機標頭的 `×` 只會原地隱藏 panel，從上方按鈕叫回時側欄會維持操作前的寬度與高度。 |
-| **Git 原始碼控制** | status / stage / commit / push / pull / stash / branch / log / diff；分支頁分開顯示本地與遠端分支，支援安全刪除本地分支或精確刪除指定 remote 的遠端分支；可建立、切換、移出或連同資料夾刪除 worktree，並相容舊版以一般工作區加入的既有 worktree；SCM 面板、側欄頂部角標與狀態列共用短時 Git 快照，錯峰讀取不重複掃描工作樹；歷史／分支不因一般檔案變動重讀，大量變更每批渲染 200 項；fetch 後線圖會顯示尚未 pull 的遠端分支與同事提交；整合終端機或外部工具完成 commit / push 後會自動同步分支與未推送狀態；**AI 產生 commit message**（可切換 claude / codex / agy 引擎）。 |
+| **Git 原始碼控制** | status / stage / commit / push / pull / stash / branch / log / diff；分支與 worktree 共用兩階段完整清理，先以零副作用 preview 顯示 commit、dirty／locked、metadata 與遠端 expected OID，再由 journal 化 CAS 執行；遠端必須逐 endpoint opt-in，unknown 不冒充成功，部分完成可從 SCM 待辦繼續收斂。SCM 面板、側欄頂部角標與狀態列共用短時 Git 快照；歷史／分支不因一般檔案變動重讀，大量變更每批渲染 200 項；fetch 後線圖會顯示尚未 pull 的遠端分支與同事提交；**AI 產生 commit message**（可切換 claude / codex / agy 引擎）。 |
 | **檔案總管** | VSCode 風右鍵編輯（新增/改名/刪除/剪貼）；可用 `Ctrl+V` 貼入外部檔案，也能把截圖工具、瀏覽器或通訊軟體複製的圖片直接存成 PNG，包含無路徑且使用通用 MIME 的虛擬圖片檔；刪除**移到資源回收桶**（可救回）。 |
 | **試算表預覽** | `.xlsx / .xls` 直接渲染成表格（Excel 風欄標＋列號、多工作表切換），不再是二進位亂碼。 |
 | **AI 狀態監控** | 以真實 process 與工具事件偵測各工作區狀態；Windows 系統程序掃描使用絕對路徑，不受第三方軟體重排 PATH 影響；Claude / Codex 支援細分狀態，Agy 第一版提供「執行中 / 未啟動」徽章；主工作樹與每個 worktree 皆依自身路徑獨立顯示 Claude／Codex／Agy 標籤。 |
@@ -55,9 +55,11 @@ AI 執行狀態監控使用 `SystemRoot` 下的 Windows PowerShell／WMIC 絕對
 
 ### Git 分支管理
 
-原始碼控制的「分支」頁會把本地與遠端分支分成兩組，顯示各自數量，並可獨立收合。每個分支列的 `⋯` 與右鍵會開啟同一套操作選單；目前簽出的本地分支或由其他 worktree 使用中的分支仍會顯示刪除選項，但會停用並具名說明原因。
+原始碼控制的「分支」頁會把本地與遠端分支分成兩組，顯示各自數量，並可獨立收合。每個分支列的 `⋯` 與右鍵會開啟同一套操作選單；目前簽出的本地分支或由其他 worktree 使用中的分支不再停用刪除，而是進入同一套完整清理流程。
 
-刪除本地分支只使用 Git 的安全刪除模式，因此尚未合併的 commit 不會被強制丟棄。刪除遠端分支則會在確認視窗中分開顯示 remote 與 branch，實際執行伺服器端刪除並保留本地同名分支；多 remote 與名稱含 `/` 的 remote 也會依結構化身分精確處理。認證、網路、逾時、保護規則或遠端不存在等失敗都會保留分支並顯示可理解的原因。
+第一階段只選擇範圍：本地分支、目前分支先切換的目標、linked worktree，以及逐個 opt-in 的遠端分支。按「檢查清理風險」前不建立 journal，也不修改 Git、磁碟或遠端。第二階段會即時顯示可能失去的 commit（歷史不完整時標示本機下限／unknown）、worktree 路徑與 dirty／locked／prunable、local ref／metadata，以及每個 effective push endpoint 與 expected OID；需要 force、解鎖或接受外部寫入殘餘風險時必須明確勾選。
+
+執行時會先重驗整份 lease，再以 repository 級 write-ahead journal 逐步完成遠端 compare-and-delete、tracking ref 收斂、worktree 移除、本地 ref CAS、branch config 與 reflog 清理。認證、網路、受保護分支、遠端 tip 變動或 receive-pack 無法證明 ref 缺席時，結果會標示 stale／unknown，不會偽裝成功；SCM 會保留「完整清理待辦」，prepared 零副作用計畫可取消，mutating／reconciling 只能沿 checkpoint 繼續收斂。
 
 在截圖工具、瀏覽器或通訊軟體複製圖片後，先點一下檔案總管中的目標資料夾，再按 `Ctrl+V`，圖片會存成 `貼上圖片.png`；若檔名已存在會自動建立 `貼上圖片 copy.png`，不會覆蓋舊檔。此流程同時支援某些軟體用「無磁碟路徑、通用 MIME 虛擬檔案」提供的圖片，且不依賴系統 `PATH`。從 Windows 檔案總管複製既有圖片檔時，仍會保留原始檔名與格式。
 

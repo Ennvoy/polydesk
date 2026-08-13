@@ -47,6 +47,7 @@ export const INVOKE_CHANNELS = [
   'git:cleanupExecute',
   'git:cleanupStatus',
   'git:cleanupCancel',
+  'git:cleanupResume',
   'git:log',
   'git:show',
   'git:commitFiles',

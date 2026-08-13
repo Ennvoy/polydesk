@@ -15,6 +15,16 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.30.0',
+    date: '2026-08-13',
+    highlights: [
+      '刪除本地或遠端分支改用兩階段完整清理，先顯示 commit、worktree、metadata 與每個遠端 endpoint 風險再執行',
+      '完整清理可同時移除 linked worktree 資料夾、本地分支與明確選取的遠端分支，部分失敗會保留待辦並可在重啟後繼續',
+      '檔案總管、搜尋、原始碼控制與設定入口移到側欄頂部，工作區欄專心管理專案',
+      '遠端 tip 變動、狀態 unknown、外部寫入與未合併內容都會停止或要求明確確認，不把未完成項目回報成功',
+    ],
+  },
+  {
     version: '0.29.0',
     date: '2026-08-12',
     highlights: [

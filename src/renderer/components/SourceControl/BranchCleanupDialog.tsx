@@ -38,7 +38,7 @@ export function BranchCleanupDialog({
   const [includeRemote, setIncludeRemote] = useState(false);
   const [selectedRemoteRefs, setSelectedRemoteRefs] = useState<string[]>([]);
   const hasWorktrees = worktreePaths.length > 0;
-  const canContinue = !isCurrent || switchTo.length > 0;
+  const canContinue = (!isCurrent || switchTo.length > 0) && (!includeRemote || selectedRemoteRefs.length > 0);
 
   const toggleRemote = (candidate: GitRemoteBranch, checked: boolean): void => {
     setSelectedRemoteRefs((current) =>
@@ -160,6 +160,7 @@ export function BranchCleanupDialog({
             )}
           </div>
         )}
+        {includeRemote && selectedRemoteRefs.length === 0 && <small role="alert">至少勾選一個遠端分支，或關閉遠端清理。</small>}
       </section>
 
       <div className="pd-cleanup-warning" role="note">

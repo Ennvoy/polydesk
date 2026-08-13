@@ -422,7 +422,9 @@ export class RemoteCleanupService {
       else if (!lease.expectedOid) reason = '本機沒有可用 CAS 驗證的 tracking ref。';
       else if (lease.producers.some((producer) => producer.endpointIds.length === 0)) reason = 'producer 沒有可證明缺席的 effective push endpoint。';
       else if (lease.producers.some((producer) => producer.endpointIds.some((id) => !selected.has(id) || !success.has(id)))) {
-        reason = '並非所有 producer endpoint 都已明確選取並完成。';
+        retained.push({ localRef: lease.localRef, reason: '並非所有 producer endpoint 都已明確選取並完成。' });
+        ok = false;
+        continue;
       } else if (lease.symrefs.some((symref) => !symref.typical)) {
         reason = '存在非典型 symref 指向此 tracking ref。';
       }

@@ -1,6 +1,8 @@
 {
   "frozen": [
     "src/renderer/components/SourceControl/scm.css",
+    "src/renderer/components/SourceControl/BranchCleanupDialog.tsx",
+    "src/renderer/components/SourceControl/BranchCleanupRiskDialog.tsx",
     "src/renderer/components/ActivityBar.tsx",
     "src/renderer/components/WorkspaceRail.tsx",
     "src/renderer/layout/panelRegistry.ts",
@@ -48,6 +50,18 @@
       "action": "freeze",
       "at": "2026-08-13T17:18:33.2885766+08:00",
       "reason": "使用者在隔離本地 Electron 開發版核准側欄功能列版面"
+    },
+    {
+      "path": "src/renderer/components/SourceControl/BranchCleanupDialog.tsx",
+      "action": "freeze",
+      "at": "2026-08-13T18:51:58.0388978+08:00",
+      "reason": "使用者核准完整清理兩階段流程定稿，遠端 opt-in 契約完成並通過真 Electron 回歸"
+    },
+    {
+      "path": "src/renderer/components/SourceControl/BranchCleanupRiskDialog.tsx",
+      "action": "freeze",
+      "at": "2026-08-13T18:51:58.0388978+08:00",
+      "reason": "使用者核准完整清理 UI 定稿，風險摘要完成並通過本地、worktree、遠端與恢復真 Electron 回歸"
     }
   ],
   "source": {

@@ -13,6 +13,7 @@ import { invalidateGitSnapshot, loadGitSnapshot, refreshGitSnapshot } from '../.
 import { WorktreePanel } from '../Worktree/WorktreePanel';
 import { PublishGitHubDialog } from './PublishGitHubDialog';
 import { BranchCleanupDialog, type BranchCleanupDraft } from './BranchCleanupDialog';
+import { BranchCleanupRiskDialog, type BranchCleanupRiskDecision } from './BranchCleanupRiskDialog';
 import { CreateWorktreeDialog } from '../Worktree/CreateWorktreeDialog';
 import { parseWorktreeConflict, resolveJumpTarget } from '../Worktree/worktreeModel';
 import { neutralizeBidi } from '../Dialogs/TrustConfirm';
@@ -24,8 +25,8 @@ import type {
   AiEngine,
   GitPushErrorCode,
   GitRemoteBranch,
-  GitBranchDeleteErrorCode,
 } from '../../../shared/types';
+import type { GitCleanupJournalSummary, GitCleanupPreviewResult } from '../../../shared/gitCleanup';
 import { DEFAULT_BACKGROUND_POLL_MS, FETCH_COOLDOWN_MS } from '../../../shared/constants';
 import { shouldAutoFetch } from './fetchCooldown';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
@@ -206,6 +207,7 @@ export function SourceControlPanel(): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('changes');
   const [log, setLog] = useState<GitLogEntry[]>([]);
   const [branches, setBranches] = useState<BranchState>(EMPTY_BRANCH_STATE);
+  const [cleanupJournals, setCleanupJournals] = useState<GitCleanupJournalSummary[]>([]);
   const [branchGroupsOpen, setBranchGroupsOpen] = useState<Record<BranchKind, boolean>>({ local: true, remote: true });
   const [branchMenu, setBranchMenu] = useState<BranchMenuState | null>(null);
   const [hover, setHover] = useState<{ c: GitLogEntry; top: number; left: number } | null>(null); // PE-1 hover 卡
@@ -494,6 +496,24 @@ export function SourceControlPanel(): React.JSX.Element {
     void ipc.store.setAiCommit({ cfg: { engine: next } }).catch(() => undefined);
   }, []);
 
+  const loadCleanupStatus = useCallback(async (): Promise<void> => {
+    try {
+      const result = await ipc.git.cleanupStatus();
+      setCleanupJournals(result.journals.filter((journal) => journal.wsId === wsId));
+      if (result.globalBlocked) setError('清理儲存區有無法歸屬的狀態；新的破壞性清理已暫停。');
+    } catch (cleanupError) {
+      setError(`無法讀取清理待辦：${errText(cleanupError)}`);
+    }
+  }, [wsId]);
+
+  useEffect(() => {
+    if (!wsId) {
+      setCleanupJournals([]);
+      return;
+    }
+    void loadCleanupStatus();
+  }, [wsId, loadCleanupStatus]);
+
   // push 錯誤碼 → 人話前綴（DF-12；比照 CloneRepositoryDialog 的 code 分流慣例）。
   const pushErrorText = (r: { error: string; code: GitPushErrorCode }): string => {
     const prefix =
@@ -739,31 +759,6 @@ export function SourceControlPanel(): React.JSX.Element {
     }
   };
 
-  const branchDeleteErrorText = (
-    code: GitBranchDeleteErrorCode,
-    raw: string,
-    kind: BranchKind,
-    name: string,
-    detail?: string,
-  ): string => {
-    const safeName = neutralizeBidi(name);
-    const safeDetail = detail ? neutralizeBidi(detail) : '';
-    const safeRaw = neutralizeBidi(raw).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '�');
-    if (code === 'current') return `無法刪除「${safeName}」：這是目前分支，請先切換到其他分支。`;
-    if (code === 'worktree') {
-      return `無法刪除「${safeName}」：正由另一個 worktree 使用中${safeDetail ? `（${safeDetail}）` : ''}。`;
-    }
-    if (code === 'unmerged') return `無法安全刪除「${safeName}」：分支尚未合併，請先合併或改用 Git 手動處理。`;
-    if (code === 'not-found') return `找不到${kind === 'local' ? '本地' : '遠端'}分支「${safeName}」，分支清單可能已過期，請重新整理。`;
-    if (code === 'auth') return `刪除遠端分支失敗：認證未通過，請檢查 Git Credential Manager 或 SSH 金鑰。\n${safeRaw}`;
-    if (code === 'network') return `刪除遠端分支失敗：目前無法連上遠端，請檢查網路、VPN 或代理設定。\n${safeRaw}`;
-    if (code === 'timeout') return `刪除遠端分支逾時，伺服器狀態可能尚未同步，請重新整理後再確認。\n${safeRaw}`;
-    if (code === 'no-remote' || code === 'remote-not-found') return `找不到指定的 Git remote，請檢查遠端設定後再試。\n${safeRaw}`;
-    if (code === 'rejected') return `遠端伺服器拒絕刪除「${safeName}」，可能是預設分支或受保護分支。\n${safeRaw}`;
-    if (code === 'invalid') return `分支或 remote 名稱無效，已停止刪除。\n${safeRaw}`;
-    return `刪除${kind === 'local' ? '本地' : '遠端'}分支失敗：${safeRaw}`;
-  };
-
   const openBranchMenu = (
     event: React.MouseEvent<HTMLElement>,
     kind: BranchKind,
@@ -786,8 +781,9 @@ export function SourceControlPanel(): React.JSX.Element {
       setError(`遠端分支「${neutralizeBidi(displayName)}」缺少 remote 身分，已停止刪除。`);
       return;
     }
+    let cleanupDraft: BranchCleanupDraft | undefined;
     if (kind === 'local') {
-      const cleanupDraft = (await dialog.open(
+      cleanupDraft = (await dialog.open(
         (close) => (
           <BranchCleanupDialog
             branch={name}
@@ -801,34 +797,103 @@ export function SourceControlPanel(): React.JSX.Element {
         { dismissable: false },
       )) as BranchCleanupDraft | undefined;
       if (!cleanupDraft) return;
-      // Design 階段先保留既有安全刪除 primitive；weave/build 會以 cleanup preview/execute 取代這一段。
-      if (cleanupDraft.removeWorktrees || cleanupDraft.switchTo || cleanupDraft.remoteTargets.length > 0) {
-        setError('完整清理安全檢查正在建置中，尚未執行任何刪除。');
-        return;
-      }
-    } else {
-      const ok = await dialog.confirm({
-            title: '刪除遠端分支？',
-            body: `將從遠端「${neutralizeBidi(remote!)}」刪除伺服器分支「${neutralizeBidi(name)}」。本地同名分支會保留。`,
-            confirmText: '刪除遠端分支',
-            cancelText: '取消',
-            danger: true,
-          });
-      if (!ok) return;
     }
     await run(async () => {
-      const result =
-        kind === 'local'
-          ? await ipc.git.branch({ wsId, op: 'delete-local', name })
-          : await ipc.git.branch({ wsId, op: 'delete-remote', remote: remote!, name });
-      if ('error' in result) {
-        setError(branchDeleteErrorText(result.code, result.error, kind, displayName, result.detail));
+      const deleteLocal = kind === 'local';
+      const anchorBranch = deleteLocal ? name : branches.current || branches.local[0];
+      if (!anchorBranch) {
+        setError('找不到可建立本機 repository lease 的分支，已停止遠端清理。');
+        return;
+      }
+      const remoteTargets = deleteLocal
+        ? (cleanupDraft?.remoteTargets ?? []).map((target) => ({ remote: target.remote, branch: target.name }))
+        : [{ remote: remote as string, branch: name }];
+      const baseRequest = {
+        wsId,
+        branch: anchorBranch,
+        ...(cleanupDraft?.switchTo ? { switchTo: cleanupDraft.switchTo } : {}),
+        ...(remoteTargets.length > 0 ? { remoteTargets } : {}),
+      };
+      let preview: GitCleanupPreviewResult = await ipc.git.cleanupPreview(baseRequest);
+      if (!preview.ok) {
+        setError(preview.error);
+        return;
+      }
+      const removeWorktreeIds = deleteLocal && cleanupDraft?.removeWorktrees
+        ? preview.snapshot.worktrees
+            .filter((worktree) => !worktree.isMain && worktree.branch === name)
+            .map((worktree) => worktree.id)
+        : [];
+      if (removeWorktreeIds.length > 0) {
+        preview = await ipc.git.cleanupPreview({ ...baseRequest, removeWorktreeIds });
+        if (!preview.ok) {
+          setError(preview.error);
+          return;
+        }
+      }
+      const decision = (await dialog.open(
+        (close) => <BranchCleanupRiskDialog
+          branch={deleteLocal ? name : `${remote}/${name}`}
+          snapshot={preview.snapshot}
+          deleteLocal={deleteLocal}
+          removeWorktreeIds={removeWorktreeIds}
+          onResult={(result) => close(result)}
+        />,
+        { dismissable: false },
+      )) as BranchCleanupRiskDecision | undefined;
+      if (!decision) return;
+      const result = await ipc.git.cleanupExecute({
+        wsId,
+        branch: anchorBranch,
+        leaseToken: preview.leaseToken,
+        ...(deleteLocal ? {
+          localPlan: {
+            switchTo: cleanupDraft?.switchTo,
+            worktrees: removeWorktreeIds.map((id) => ({
+              id,
+              mode: 'full-cleanup' as const,
+              ...(decision.unlockWorktreeIds.includes(id) ? { unlock: true } : {}),
+            })),
+          },
+        } : {}),
+        confirmation: {
+          forceLocal: decision.forceLocal,
+          acceptExternalWriteRisk: decision.acceptExternalWriteRisk,
+          remoteTargets,
+        },
+      });
+      if (!result.ok) {
+        const endpointDetails = result.remote?.endpoints
+          .filter((endpoint) => endpoint.status !== 'deleted' && endpoint.status !== 'already-completed' && endpoint.status !== 'skipped')
+          .map((endpoint) => `${endpoint.remote}/${endpoint.branch}：${endpoint.message ?? endpoint.status}`)
+          .join('\n');
+        setError(`${result.error}${endpointDetails ? `\n${endpointDetails}` : ''}`);
+        await loadCleanupStatus();
         return;
       }
       await refresh();
       await loadBranches();
+      await loadCleanupStatus();
     });
   };
+
+  const resumeCleanup = (journalId: string): Promise<void> => run(async () => {
+    if (!wsId) return;
+    const result = await ipc.git.cleanupResume({ wsId, journalId });
+    if (!result.ok) setError(result.error);
+    else {
+      await refresh();
+      await loadBranches();
+    }
+    await loadCleanupStatus();
+  });
+
+  const cancelCleanup = (journalId: string): Promise<void> => run(async () => {
+    if (!wsId) return;
+    const result = await ipc.git.cleanupCancel({ wsId, journalId });
+    if (!result.ok) setError(result.error);
+    await loadCleanupStatus();
+  });
 
   // ── 渲染分支 ──
   if (!wsId) {
@@ -1005,6 +1070,18 @@ export function SourceControlPanel(): React.JSX.Element {
           </button>
         ))}
       </div>
+
+      {cleanupJournals.map((journal) => (
+        <div key={journal.journalId} className="pd-cleanup-warning" role="status" data-testid="cleanup-recovery-todo">
+          <strong>完整清理待辦：{neutralizeBidi(journal.branch ?? '未知分支')}</strong>
+          <span>{journal.phase === 'prepared' ? '計畫仍為零副作用，可取消或繼續。' : `已進入 ${journal.phase}，只能沿 journal checkpoint 繼續收斂。`}</span>
+          <span>{journal.checkpoints.length > 0 ? `已完成 ${journal.checkpoints.length} 個步驟。` : '尚無可證明完成的 checkpoint。'}</span>
+          <span className="pd-scm-hdr-actions">
+            {journal.canResume && <button className="pd-btn" type="button" disabled={busy} onClick={() => void resumeCleanup(journal.journalId)}>繼續收斂</button>}
+            {journal.canCancel && <button className="pd-btn" type="button" disabled={busy} onClick={() => void cancelCleanup(journal.journalId)}>取消零副作用計畫</button>}
+          </span>
+        </div>
+      ))}
 
       {error && (
         <div className="pd-scm-error" role="alert">

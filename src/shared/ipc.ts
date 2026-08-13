@@ -41,6 +41,7 @@ import type {
   GitCleanupExecuteResult,
   GitCleanupPreviewRequest,
   GitCleanupPreviewResult,
+  GitCleanupResumeRequest,
   GitCleanupStatusResult,
 } from './gitCleanup';
 
@@ -157,6 +158,8 @@ export interface InvokeChannels {
     req: { wsId: string; journalId: string };
     res: { ok: true } | { ok: false; error: string };
   };
+  /** mutating/reconciling journal 只能沿原 checkpoint 繼續，不重新建立破壞性計畫。 */
+  'git:cleanupResume': { req: GitCleanupResumeRequest; res: GitCleanupExecuteResult };
   'git:log': { req: { wsId: string; limit: number }; res: GitLogEntry[] };
   /** commit diff（git show <ref>；給 path 則限定單檔）；PE-1 右鍵/展開檔案用。 */
   'git:show': { req: { wsId: string; ref: string; path?: string }; res: { patch: string } };

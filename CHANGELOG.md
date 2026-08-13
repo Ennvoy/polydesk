@@ -7,6 +7,29 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.30.0（2026-08-13）
+
+Git 分支與 worktree 現在共用同一套可恢復完整清理流程；側欄切換入口也移到受控內容正上方，減少工作區管理與側欄檢視混在一起的認知負擔。
+
+- 對應功能 commits：`c871d8a`、`ec33f61`、`70d3d74`、`01339c9`、`f64aa9a`；T-008 統一接線提交將於出貨追溯補回。
+
+### 2026-08-13｜可恢復的分支／worktree 完整清理與側欄頂部入口
+
+- 本地分支、遠端分支與 worktree 完整清理統一為兩階段：第一階段只選範圍且零副作用；第二階段重新掃描並顯示可能失去的 commit、dirty／locked／prunable worktree、local metadata、遠端 endpoint 與 expected OID。
+- 目前分支可先切換到使用者選定的保留分支；linked worktree 會先關閉 Polydesk 資源，再清理資料夾、Git 登記、本地 ref、branch config 與 reflog。執行錨點固定採用仍會存活的主工作樹，避免刪除中的工作目錄讓 Git 子程序失去 cwd。
+- 遠端清理逐 endpoint 明確 opt-in，使用 expected-OID compare-and-delete；tip 變動、receive-pack 無法證明、認證／網路／保護規則失敗均保留為 stale／unknown，不會冒充成功。
+- write-ahead journal 在第一個不可逆步驟前落盤，逐步 checkpoint；多 endpoint 部分完成時不會把仍可重試的 remote-tracking ref 誤記成永久保留，重啟後只重試未完成項目並在全部 producer 收斂後以 CAS 清理本機 ref。
+- 舊名稱式 `git branch -d/-D` 與直接 `git push --delete` 破壞性產品旁路停用；worktree 不使用全域 prune，所有入口共用 repository queue、lease 與 journal。
+- 檔案總管、搜尋、原始碼控制與設定入口從工作區欄移到側欄頂部；工作區欄只管理專案，SCM 角標、active、tooltip、鍵盤與無障礙狀態維持不變。
+- 首次 7 步導覽因 selector 與主要資訊架構維持相容而不調升版本；完整使用指南已同步兩階段操作、unknown／部分結果／恢復待辦與高風險提示。
+- 影響 renderer 側欄與 SCM、shared IPC／清理契約、main Git／journal／worktree／remote 清理服務、真 Git／Electron 回歸與發布文件；不變更使用者 repository schema 或環境變數。
+
+### 驗證
+
+- T-008 票級 runner 4/4 指令通過：typecheck、正式 build、16 個目標 Vitest 檔 89/89，以及 8 個真 Electron 清理 E2E 全綠。
+- 真 Electron 直接驗證已合併／未合併風險、目前分支切換、worktree 三種範圍、遠端 tip 變動、多 endpoint 部分失敗、重啟待辦與繼續收斂，並查驗真實 refs、worktree 登記、資料夾與 bare remote 最終狀態。
+- 完整 ship runner 與兩軸獨立審查結果將於出貨完成後補入。
+
 ## v0.29.0（2026-08-12）
 
 portable 啟動不再先顯示無法轉動的靜態 BMP、關閉後再跳出 Electron splash；自解壓完成後只顯示一個具有轉圈動畫的開啟畫面，避免兩段視窗交接造成的閃爍與誤解。

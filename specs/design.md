@@ -422,6 +422,14 @@ export interface PersistState {
 
 done
 
+## 8. 分支／worktree 完整清理
+
+- UI 固定兩階段：`BranchCleanupDialog` 選本機、切換、worktree 與 opt-in remote；`BranchCleanupRiskDialog` 顯示 live snapshot、必要 force／unlock／外部寫入確認。遠端分支列也走相同流程，不保留名稱式直接 push-delete。
+- `git:cleanupPreview` 保證不建 journal、不改 ref、不刪資料夾；remote opt-in 時才連線 effective push endpoint。lease token 同時涵蓋本地 snapshot 與去密 remote plan。
+- `git:cleanupExecute` 在同 repository queue 內重驗 lease、建立 prepared journal，再依 checkpoint 執行 remote compare-and-delete、tracking ref CAS、worktree、local ref、branch config 與 reflog。計畫內刪除的 tracking ref 以 checkpoint 明確豁免 retained-ref 重驗，其他 ref 仍逐一驗證。
+- `git:cleanupStatus` 只回去密待辦；`git:cleanupCancel` 限 prepared 零副作用；`git:cleanupResume` 只接受原 journal，重新解析 fingerprint 對應 endpoint 並沿 checkpoint 繼續。quarantine 或無法重建的 claim 不因封存解鎖。
+- 視覺沿用已凍結 `scm.css` tokens 與第一階段層級；第二階段新增元件但不建立平行設計系統。
+
 ---
 
 ## 6. 第二迭代：Git Worktree 設計（2026-07-02）

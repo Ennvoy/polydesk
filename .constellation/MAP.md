@@ -14,7 +14,7 @@
 ## 主要資料流與邊界
 
 - Git／SCM：`SourceControlPanel` → preload 固定 `git:*` channel → `GitService` handler → repository 共用序列佇列 → `execFile` 系統 Git → 結構化結果回 renderer。
-- 完整清理基礎：renderer → `git:cleanupPreview/Execute/Status/Cancel` 固定 IPC → repository queue → Git/磁碟 lease 重驗 → userData 版本化 journal/claim；preview 不建立 journal，execute 先停在 prepared，T-006/T-007 再加入不可逆步驟。
+- 完整清理：renderer → `git:cleanupPreview/Execute/Status/Cancel/Resume` 固定 IPC → repository queue → Git/磁碟/endpoint lease 重驗 → userData 版本化 journal/claim；preview 零副作用，execute 依序執行遠端 expected-OID、tracking ref、本機 worktree/ref/metadata，部分結果沿 checkpoint 恢復。
 - 工作區：renderer store／workspace rail → `workspace:*` → `WorkspaceManager` → `StateStore` userData 狀態檔。
 - Worktree：SCM／建立對話框 → `git:worktree*` → `GitService` → `WorkspaceManager` 納管；分支互斥以 `git worktree list` 的即時結果為準。
 - Terminal：xterm → `pty:*` → `PtyManager` → ConPTY；main 主動推播輸出。
@@ -25,12 +25,12 @@
 - `GitService.branch(list)` 以 `for-each-ref` 讀取本地與 remote-tracking refs，再以實際 `git remote` 清單的最長前綴組成結構化 `{ remote, name, ref }`；因此合法的斜線 remote 不會被誤拆，並排除 remote `HEAD`。
 - shared IPC 的 `git:branch` 支援 `list | create | checkout | delete-local | delete-remote`；list 同時保留既有扁平 `remotes` 相容 worktree 對話框，並提供 SCM 使用的 `remoteBranches` 結構化身分。
 - SCM 分支頁分成本地與遠端兩個可獨立收合群組，顯示各自數量；每列 `⋯` 與右鍵共用選單，目前分支或 worktree 使用中的本地分支會顯示具名停用原因。
-- 舊 `git branch -d` 入口正由 journal 化 cleanup 取代：本機執行會先重驗 target/baseline/retained refs 與全部 worktree 狀態，再依確認範圍切換目前分支、逐筆移除 worktree、CAS 刪 local ref 並清 branch config/reflog；checkout 競態會以 expected-absent 恢復 ref。遠端引擎已提供 effective push endpoint 租約、expected OID compare-and-delete、去密恢復與 refspec producer 清理，待 T-008 接入共用 IPC/journal/UI。
+- 舊名稱式 `git branch -d`／`git push --delete` 產品入口已停用：本機先重驗 target/baseline/retained refs 與全部 worktree，遠端先重驗 effective push endpoint/expected OID，再由同一 journal 依序收斂；checkout 競態會恢復 local ref，remote tip／hidden ref 不確定則保留待辦。
 - 刪除錯誤回傳結構化 code；顯示前會中和原始 Git 訊息的 bidi 與 C0 控制字元，不靠在地化 stderr 判斷未合併狀態。
 
 ## 已知缺口與地雷
 
-- 分支 cleanup 的遠端引擎已完成，但共用 IPC/journal/UI 串接與舊 `git push --delete` 旁路移除仍待 T-008；在串接完成前不可從產品入口直接呼叫遠端引擎。
+- 完整清理的本機與遠端引擎已由共用 IPC/journal/UI 串接；仍須以完整出貨 runner 與 portable artifact 驗證本輪版本。
 - remote 名本身可含 `/`，不可用第一個斜線拆 remote-tracking 顯示字串；應沿用結構化 `remoteBranches`。
 - 遠端刪除可能因認證、網路、逾時、預設分支或保護規則被拒絕；失敗需結構化分類並顯示可行下一步，不得偽裝成功。
 - `remotes` 是本機 remote-tracking snapshot；未 fetch／prune 時可能過期。現有 fetch 未帶 `--prune`。

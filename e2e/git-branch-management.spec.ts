@@ -42,8 +42,8 @@ async function openBranches(page: import('@playwright/test').Page): Promise<void
   await page.getByRole('tab', { name: '分支' }).click();
 }
 
-test('分支管理：本地／遠端分組、雙入口、阻擋原因與安全刪除真鏈路', async () => {
-  test.setTimeout(180_000);
+test('分支管理：本地／遠端分組與兩階段完整清理真鏈路', async () => {
+  test.setTimeout(360_000);
   const { root, repo, remote } = seedRepo();
   const { app, page, userData } = await launchApp();
   try {
@@ -65,28 +65,32 @@ test('分支管理：本地／遠端分組、雙入口、阻擋原因與安全�
     await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(2);
 
     await page.getByRole('button', { name: '更多本地分支操作 main' }).click();
-    await expect(page.getByRole('menuitem', { name: '刪除本地分支（目前分支）' })).toBeDisabled();
+    await expect(page.getByRole('menuitem', { name: '刪除本地分支（目前分支）' })).toBeEnabled();
     await page.screenshot({ path: join(shotDir, 'ui-branch-management-groups.png') });
     await page.keyboard.press('Escape');
 
     const busyRow = page.locator('[data-branch-kind="local"]', { hasText: 'busy-worktree' });
     await busyRow.click({ button: 'right' });
-    await expect(page.getByRole('menuitem', { name: '刪除本地分支（由 worktree 使用中）' })).toBeDisabled();
+    await expect(page.getByRole('menuitem', { name: '刪除本地分支（由 worktree 使用中）' })).toBeEnabled();
     await page.keyboard.press('Escape');
 
     await page.getByRole('button', { name: '更多本地分支操作 merged-local' }).click();
     await page.getByRole('menuitem', { name: '刪除本地分支', exact: true }).click();
-    await expect(page.getByRole('heading', { name: '刪除本地分支？' })).toBeVisible();
-    await expect(page.getByRole('dialog')).toContainText('只會刪除這台電腦上的「merged-local」');
-    await page.getByRole('button', { name: '刪除本地分支', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '完整清理分支' })).toBeVisible();
+    await expect(page.getByRole('dialog')).toContainText('此畫面尚未開始刪除');
+    expect(git(repo, 'branch', '--list', 'merged-local').trim()).toBe('merged-local');
+    await page.getByRole('button', { name: '檢查清理風險' }).click();
+    await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible();
+    await expect(page.getByRole('dialog')).toContainText('Git 判定可安全刪除');
+    await page.getByRole('button', { name: '開始完整清理' }).click();
     await expect(page.locator('[data-branch-kind="local"]', { hasText: 'merged-local' })).toHaveCount(0, { timeout: 30_000 });
     expect(git(repo, 'branch', '--list', 'merged-local').trim()).toBe('');
 
     await page.getByRole('button', { name: '更多遠端分支操作 team/backend/remote-delete' }).click();
     await page.getByRole('menuitem', { name: '刪除遠端分支', exact: true }).click();
-    await expect(page.getByRole('heading', { name: '刪除遠端分支？' })).toBeVisible();
-    await expect(page.getByRole('dialog')).toContainText('從遠端「team/backend」刪除伺服器分支「remote-delete」');
-    const deleteRemote = page.getByRole('button', { name: '刪除遠端分支', exact: true });
+    await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole('dialog')).toContainText('team/backend/remote-delete');
+    const deleteRemote = page.getByRole('button', { name: '開始完整清理' });
     await expect(deleteRemote).toHaveClass(/pd-btn-danger/);
     await deleteRemote.click();
     await expect(page.locator('[data-branch-kind="remote"]', { hasText: 'team/backend/remote-delete' })).toHaveCount(0, { timeout: 30_000 });
@@ -95,9 +99,118 @@ test('分支管理：本地／遠端分組、雙入口、阻擋原因與安全�
 
     await page.getByRole('button', { name: '更多本地分支操作 unfinished' }).click();
     await page.getByRole('menuitem', { name: '刪除本地分支', exact: true }).click();
-    await page.getByRole('button', { name: '刪除本地分支', exact: true }).click();
-    await expect(page.locator('.pd-scm-error')).toContainText('尚未合併', { timeout: 30_000 });
+    await page.getByRole('button', { name: '檢查清理風險' }).click();
+    await expect(page.getByRole('dialog')).toContainText('尚未安全合併', { timeout: 60_000 });
+    await expect(page.getByRole('button', { name: '開始完整清理' })).toBeDisabled();
+    await page.getByLabel('我確認強制清理本機未知／未合併內容').check();
+    await expect(page.getByRole('button', { name: '開始完整清理' })).toBeEnabled();
+    await page.getByRole('button', { name: '返回' }).click();
     await expect(page.locator('[data-branch-kind="local"]', { hasText: 'unfinished' })).toBeVisible();
+  } finally {
+    await app.close();
+    rmSync(userData, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('遠端多 endpoint 部分失敗後，重啟仍顯示待辦並可繼續收斂', async () => {
+  test.setTimeout(360_000);
+  const { root, repo, remote } = seedRepo();
+  const rejectingRemote = join(root, 'rejecting.git');
+  mkdirSync(rejectingRemote, { recursive: true });
+  git(rejectingRemote, 'init', '--bare');
+  git(repo, 'push', rejectingRemote, 'remote-delete:refs/heads/remote-delete');
+  git(repo, 'config', '--add', 'remote.team/backend.pushurl', remote);
+  git(repo, 'config', '--add', 'remote.team/backend.pushurl', rejectingRemote);
+  git(rejectingRemote, 'config', 'receive.denyDeletes', 'true');
+
+  const first = await launchApp();
+  let app = first.app;
+  let page = first.page;
+  const { userData } = first;
+  try {
+    await stubFolderPicker(app, [repo]);
+    await addWorkspaceViaUI(page);
+    await openBranches(page);
+
+    await page.getByRole('button', { name: '更多遠端分支操作 team/backend/remote-delete' }).click();
+    await page.getByRole('menuitem', { name: '刪除遠端分支', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole('dialog').locator('.pd-cleanup-remotes .pd-cleanup-card')).toHaveCount(2);
+    await page.getByRole('button', { name: '開始完整清理' }).click();
+
+    await expect(page.locator('.pd-scm-error')).toContainText('遠端清理只有部分完成', { timeout: 60_000 });
+    await expect(page.getByTestId('cleanup-recovery-todo')).toContainText('remote-delete');
+    expect(git(remote, 'for-each-ref', '--format=%(refname)', 'refs/heads/remote-delete').trim()).toBe('');
+    expect(git(rejectingRemote, 'for-each-ref', '--format=%(refname)', 'refs/heads/remote-delete').trim()).toBe(
+      'refs/heads/remote-delete',
+    );
+
+    await app.close();
+    git(rejectingRemote, 'config', 'receive.denyDeletes', 'false');
+    const resumed = await launchApp({ userData });
+    app = resumed.app;
+    page = resumed.page;
+    await openBranches(page);
+
+    const todo = page.getByTestId('cleanup-recovery-todo');
+    await expect(todo).toContainText('只能沿 journal checkpoint 繼續收斂', { timeout: 30_000 });
+    await todo.getByRole('button', { name: '繼續收斂' }).click();
+    await expect(todo).toHaveCount(0, { timeout: 60_000 });
+    expect(git(rejectingRemote, 'for-each-ref', '--format=%(refname)', 'refs/heads/remote-delete').trim()).toBe('');
+    expect(git(repo, 'for-each-ref', '--format=%(refname)', 'refs/remotes/team/backend/remote-delete').trim()).toBe('');
+  } finally {
+    await app.close().catch(() => undefined);
+    rmSync(userData, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('遠端 tip 在風險確認後變動時拒絕舊租約且不刪新 commit', async () => {
+  test.setTimeout(180_000);
+  const { root, repo, remote } = seedRepo();
+  const replacementOid = git(repo, 'rev-parse', 'unfinished').trim();
+  const { app, page, userData } = await launchApp();
+  try {
+    await stubFolderPicker(app, [repo]);
+    await addWorkspaceViaUI(page);
+    await openBranches(page);
+
+    await page.getByRole('button', { name: '更多遠端分支操作 team/backend/remote-delete' }).click();
+    await page.getByRole('menuitem', { name: '刪除遠端分支', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible({ timeout: 60_000 });
+    git(repo, 'push', '--force', remote, 'unfinished:refs/heads/remote-delete');
+    await page.getByRole('button', { name: '開始完整清理' }).click();
+
+    await expect(page.locator('.pd-scm-error')).toContainText('狀態已變更', { timeout: 60_000 });
+    expect(git(remote, 'rev-parse', 'refs/heads/remote-delete').trim()).toBe(replacementOid);
+    await expect(page.getByTestId('cleanup-recovery-todo')).toHaveCount(0);
+  } finally {
+    await app.close();
+    rmSync(userData, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('刪除目前分支時先切換到使用者選定分支，再以同一流程清理', async () => {
+  test.setTimeout(180_000);
+  const { root, repo } = seedRepo();
+  const { app, page, userData } = await launchApp();
+  try {
+    await stubFolderPicker(app, [repo]);
+    await addWorkspaceViaUI(page);
+    await openBranches(page);
+
+    await page.getByRole('button', { name: '更多本地分支操作 main' }).click();
+    await page.getByRole('menuitem', { name: '刪除本地分支（目前分支）' }).click();
+    const switchTo = page.getByLabel('目前正在使用此分支，先切換到');
+    await switchTo.selectOption('merged-local');
+    await page.getByRole('button', { name: '檢查清理風險' }).click();
+    await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole('button', { name: '開始完整清理' }).click();
+
+    await expect.poll(() => git(repo, 'branch', '--show-current').trim(), { timeout: 30_000 }).toBe('merged-local');
+    await expect.poll(() => git(repo, 'branch', '--list', 'main').trim(), { timeout: 30_000 }).toBe('');
   } finally {
     await app.close();
     rmSync(userData, { recursive: true, force: true });

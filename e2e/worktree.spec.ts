@@ -57,7 +57,7 @@ test('REQ-E2E-012：分支→建立 worktree→納管開啟→終端機 cwd＝wo
   expect(existsSync(targetPath)).toBe(true);
 
   // 分支徽章即時顯示 dev（非資料夾名回推、非 null）
-  await expect(page.getByText('⎇ dev', { exact: false })).toBeVisible({ timeout: 8000 });
+  await expect(worktreeRow.getByText('⎇ dev', { exact: false })).toBeVisible({ timeout: 8000 });
 
   await app.close();
   rmSync(root, { recursive: true, force: true });
@@ -108,16 +108,17 @@ test('REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅
   await page.locator('button[aria-label="原始碼控制"]').click();
   await page.getByRole('tab', { name: 'worktree' }).click();
 
-  // ── dirty ＋ 跑中終端機程序 → 連同刪除 dev（teardown 釋放 handle 後 git remove 成功）──
+  // ── dirty ＋ 跑中終端機程序 → 完整清理 dev（統一風險確認，teardown 後刪 worktree 與 branch）──
   writeFileSync(join(devPath, 'app.txt'), 'dirty-change\n'); // 造成未提交變更
   await page.locator('button[aria-label^="移除 worktree"]').first().click();
-  await page.locator('button[aria-label="連同刪除資料夾"]').click();
-  // dirty 兩段確認：未勾不能刪 → 勾了才可
-  const discardBtn = page.locator('button[aria-label="確定丟棄並刪除"]');
-  await expect(discardBtn).toBeVisible({ timeout: 8000 });
-  await expect(discardBtn).toBeDisabled();
-  await page.locator('input[aria-label="確定丟棄未提交變更"]').check();
-  await discardBtn.click();
+  await page.locator('button[aria-label="完整清理資料夾與本地分支"]').click();
+  await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible({ timeout: 60_000 });
+  const cleanupBtn = page.getByRole('button', { name: '開始完整清理' });
+  await expect(cleanupBtn).toBeDisabled();
+  await page.getByLabel('我確認強制清理本機未知／未合併內容').check();
+  await page.getByLabel('我了解確認後外部程序仍可能寫入資料夾').check();
+  await expect(cleanupBtn).toBeEnabled();
+  await cleanupBtn.click();
   // 資料夾被刪、git worktree 登記無殘留（比對正規化後的完整路徑，避免斜線方向/子字串誤配）
   const norm = (p: string): string => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
   const devNorm = norm(devPath);
@@ -133,6 +134,7 @@ test('REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅
       { timeout: 6000 },
     )
     .toBe(false);
+  await expect.poll(() => git(repo, 'branch', '--list', 'dev').trim(), { timeout: 15_000 }).toBe('');
 
   // ── 僅移出列表：feat 資料夾保留 ──
   await page.locator('button[aria-label^="移除 worktree"]').first().click();
@@ -146,6 +148,7 @@ test('REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅
 });
 
 test('worktree 移除相容舊資料：一般工作區加入時兩種移除都有效', async () => {
+  test.setTimeout(120_000);
   const { root, repo } = seedRepo();
   const legacyPath = join(root, 'profile');
   git(repo, 'worktree', 'add', legacyPath, 'dev');
@@ -160,7 +163,7 @@ test('worktree 移除相容舊資料：一般工作區加入時兩種移除都�
   // 僅移出列表：工作區項消失，但 Git 登記與資料夾保留。
   await page.locator('button[aria-label="移除 worktree dev"]').click();
   await page.locator('button[aria-label="僅從列表移出，保留資料夾"]').click();
-  await expect(page.locator('button[aria-label="開啟工作區 profile"]')).toHaveCount(0);
+  await expect(page.locator('button[aria-label="開啟工作區 profile"]')).toHaveCount(0, { timeout: 60_000 });
   expect(existsSync(legacyPath)).toBe(true);
   expect(git(repo, 'worktree', 'list', '--porcelain')).toContain(legacyPath.replace(/\\/g, '/'));
 
@@ -169,12 +172,13 @@ test('worktree 移除相容舊資料：一般工作區加入時兩種移除都�
   await page.getByRole('tab', { name: '變更' }).click();
   await page.getByRole('tab', { name: 'worktree' }).click();
   await page.locator('button[aria-label="移除 worktree dev"]').click();
-  await page.locator('button[aria-label="連同刪除資料夾"]').click();
+  await page.locator('button[aria-label="刪除資料夾並保留分支"]').click();
   const discard = page.locator('button[aria-label="確定丟棄並刪除"]');
   await expect(discard).toBeVisible({ timeout: 8000 });
   await page.locator('input[aria-label="確定丟棄未提交變更"]').check();
   await discard.click();
-  await expect.poll(() => existsSync(legacyPath), { timeout: 8000 }).toBe(false);
+  await expect.poll(() => existsSync(legacyPath), { timeout: 30_000 }).toBe(false);
+  await expect(page.locator('.pd-scm-error')).toHaveCount(0);
   expect(git(repo, 'worktree', 'list', '--porcelain')).not.toContain(legacyPath.replace(/\\/g, '/'));
 
   await app.close();

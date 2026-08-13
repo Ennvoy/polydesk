@@ -308,3 +308,9 @@ polydesk/
 ### 7.2 資料流
 建立：renderer 對話框 → `git:worktreeAdd`（invoke）→ main：序列佇列內 `git worktree add`（必要時先 fetch remote 分支）→ WorkspaceManager 納管（worktree 標記+信任繼承）→ 回新 wsId → renderer 切換開啟。
 狀態：worktree 清單/分支名一律 `git worktree list --porcelain -z` 即時查（不持久化死值）；持久化只存 `Workspace.worktree.mainPath`。
+
+## 8. 完整清理資料流（2026-08-13）
+
+Renderer `SourceControlPanel`／`WorktreePanel` → preload 固定 `git:cleanupPreview/Execute/Status/Cancel/Resume` → `CleanupService` → repository 共用序列佇列 → `CleanupPreviewService`、`RemoteCleanupService`、`LocalCleanupExecutor` → system Git。`CleanupJournalStore` 存在 userData 的版本化 envelope/payload/claim/identity，專案資料夾不寫入 Polydesk journal。
+
+安全順序為：只讀 preview → 使用者確認風險 → 全租約重驗 → prepared journal → mutating checkpoint → remote endpoint expected-OID delete → tracking ref CAS → worktree 收斂 → local ref transaction → metadata/reflog → closed。中途失敗保留 claim，renderer 顯示 repository 待辦；重啟只沿原 payload/checkpoint 恢復，不重新猜測計畫。

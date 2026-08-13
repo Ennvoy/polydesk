@@ -36,7 +36,7 @@ import { join as pathJoin, resolve as pathResolve, dirname as pathDirname } from
 import { validateWorktreeTarget, resolveTargetPath } from './worktreePath';
 import { cloneDirectoryNameError, cloneUrlError, isGitHubHttpsCloneUrl } from '../../shared/gitClone';
 import { publishRepoNameError } from '../../shared/gitPublish';
-import { classifyBranchDeleteError, classifyPushError, classifyGhError, isNoUpstreamError } from './gitErrorClassify';
+import { classifyPushError, classifyGhError, isNoUpstreamError } from './gitErrorClassify';
 import { CleanupService } from './cleanup/core/CleanupService';
 
 const GIT_BIN = 'git';
@@ -635,7 +635,7 @@ export class GitService {
     op: 'list' | 'create' | 'checkout' | 'delete-local' | 'delete-remote',
     name?: string,
     startPoint?: string,
-    remote?: string,
+    _remote?: string,
   ): Promise<
     | { branches: string[]; current: string; remotes?: string[]; remoteBranches?: GitRemoteBranch[] }
     | { ok: true }
@@ -682,73 +682,11 @@ export class GitService {
       return { branches, current, remotes, remoteBranches };
     }
 
-    if (op === 'delete-local') {
-      if (!validateRef(name)) return { error: '無效的分支名稱。', code: 'invalid' };
-      const safe = name as string;
-      const listed = await this.branch(wsId, 'list');
-      if (!('branches' in listed) || !listed.branches.includes(safe)) {
-        return { error: '找不到要刪除的本地分支。', code: 'not-found' };
-      }
-      if (listed.current === safe) return { error: '無法刪除目前分支。', code: 'current' };
-
-      const occupying = (await this.worktreeList(wsId)).find((worktree) => worktree.branch === safe);
-      if (occupying) {
-        const worktreePath = pathResolve(occupying.path);
-        return {
-          error: `此分支正由 worktree 使用：${worktreePath}`,
-          code: 'worktree',
-          detail: worktreePath,
-        };
-      }
-
-      try {
-        // 只提供 -d：由 Git 保護尚未合併 commit；刻意不提供 -D 路徑。
-        await this.run(['branch', '-d', '--', safe], { cwd, env: writeEnv() });
-        return { ok: true };
-      } catch (e) {
-        const message = errMsg(e, '刪除本地分支失敗');
-        // 不解析可能被 Git 在地化的 stderr。-d 失敗後用 exit code 可判讀的 ancestry 查詢分流：
-        // merge-base --is-ancestor 的 1 明確代表 target 尚未合併到目前 HEAD；其他錯誤保留 failed。
-        try {
-          await this.run([...readHardeningArgs(), 'merge-base', '--is-ancestor', safe, 'HEAD'], {
-            cwd,
-            env: readEnv(),
-          });
-        } catch (ancestorError) {
-          if (ancestorError instanceof GitError && ancestorError.code === 1) {
-            return { error: '此分支尚未合併，未執行強制刪除。', code: 'unmerged' };
-          }
-        }
-        return { error: message, code: 'failed' };
-      }
-    }
-
-    if (op === 'delete-remote') {
-      if (!validateRef(remote)) return { error: '無效的遠端名稱。', code: 'invalid' };
-      if (!validateRef(name)) return { error: '無效的遠端分支名稱。', code: 'invalid' };
-      const safeRemote = remote as string;
-      const safe = name as string;
-      const { stdout } = await this.run([...readHardeningArgs(), 'remote'], { cwd, env: readEnv() });
-      const remotes = stdout.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
-      if (remotes.length === 0) return { error: '此 repository 尚未設定遠端。', code: 'no-remote' };
-      if (!remotes.includes(safeRemote)) {
-        return { error: `找不到遠端：${safeRemote}`, code: 'remote-not-found' };
-      }
-      try {
-        await this.run(['push', safeRemote, '--delete', safe], {
-          cwd,
-          env: networkEnv(),
-          timeoutMs: GIT_NETWORK_TIMEOUT_MS,
-        });
-        return { ok: true };
-      } catch (e) {
-        const timedOut = e instanceof GitError && e.timedOut;
-        const message = errMsg(e, '刪除遠端分支失敗');
-        return {
-          error: timedOut ? '刪除遠端分支逾時。' : message,
-          code: classifyBranchDeleteError(message, timedOut),
-        };
-      }
+    if (op === 'delete-local' || op === 'delete-remote') {
+      return {
+        error: '直接刪除入口已停用；請使用具備 preview、lease 與 journal 的完整清理流程。',
+        code: 'invalid',
+      };
     }
 
     // create / checkout：白名單驗證，未過＝注入嫌疑 → 永不進 argv
@@ -1190,6 +1128,9 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, 
   ipc.handle('git:cleanupStatus', () => enqueue('cleanup:claims', () => cleanup.recoverLocal()));
   ipc.handle('git:cleanupCancel', (_e, req: InvokeReq<'git:cleanupCancel'>) =>
     enqueue(qkey(req.wsId), () => cleanup.cancelPrepared(req.wsId, req.journalId)),
+  );
+  ipc.handle('git:cleanupResume', (_e, req: InvokeReq<'git:cleanupResume'>) =>
+    enqueue(qkey(req.wsId), () => cleanup.resume(req)),
   );
 
   ipc.handle('git:worktreeList', (_e, req: InvokeReq<'git:worktreeList'>) =>

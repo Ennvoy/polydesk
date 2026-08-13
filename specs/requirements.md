@@ -91,6 +91,14 @@
 - **REQ-SCM-007**（Unwanted｜操作失敗/逾時）：若 git 操作失敗（push 被拒/無 remote/認證失敗/merge conflict/網路斷），系統應顯示明確錯誤並允許重試，不得偽裝成功；網路類操作應有明確逾時（design 定值），逾時即回錯。
 - **REQ-SCM-008**（併發）：同一工作區有 git 操作進行中時，後續 git 操作應序列化並於 UI 顯示「進行中」。
 - **REQ-SCM-009**（git 安全硬化）：所有 git 呼叫應用 argv 陣列 + `shell:false`（execFile/spawn）、參數前置 `--`、commit message 經 `-F tempfile`/stdin；branch/remote 名做格式驗證；唯讀監控操作加 `GIT_CONFIG_NOSYSTEM=1`、空 `core.hooksPath`、`core.fsmonitor=false`、`--no-pager`、不啟用不可信 textconv、尊重 `safe.directory`。
+
+### 4.9.1 分支／worktree 完整清理（2026-08-13）
+
+- **REQ-SCM-010**（兩階段）：本地分支、遠端分支與 worktree 的完整清理須先產生零副作用 preview；第一階段只選範圍，第二階段顯示 local ref/metadata、commit 風險、worktree dirty/locked/prunable 與遠端 endpoint，最後才允許執行。
+- **REQ-SCM-011**（租約與 journal）：執行前須重驗 target、baseline、retained refs、全部 worktree HEAD/狀態、metadata、repository instance、effective push endpoint 與 expected OID；不可逆步驟寫入 repository 級 write-ahead journal 與 checkpoint。
+- **REQ-SCM-012**（遠端 opt-in）：遠端預設不選，每個 remote/branch 必須明確勾選；刪除以 receive-pack 可見的精確 ref 與 `--force-with-lease` expected OID 執行，hidden／查詢失敗／tip 變動回 unknown 或 stale，不得視為成功。
+- **REQ-SCM-013**（恢復）：prepared 且仍可證明零副作用的計畫可取消；mutating、reconciling 或 unknown 只能沿 journal checkpoint 繼續收斂。部分成功須列出已完成與可重試步驟，不重做已證明完成的遠端 endpoint、tracking ref 或本機步驟。
+- **REQ-SCM-014**（風險誠實）：shallow／partial clone／缺失 objects 時 commit 數標示本機下限或 unknown，遠端完整清理停用；刪 worktree 前明示確認後外部程序仍可能新增內容的殘餘風險。
 - **REQ-SCM-010**（分支分組）：分支頁應將本地與遠端分支分組顯示，各自提供數量與收合狀態；每列的更多按鈕與右鍵應使用同一套操作選單。
 - **REQ-SCM-011**（本地安全刪除）：本地分支刪除只能使用非強制的安全模式；目前分支、任一 worktree 使用中的分支與未合併分支不得刪除，並應具名顯示阻擋原因，不提供默認或隱藏的強制刪除路徑。
 - **REQ-SCM-012**（遠端精確刪除）：遠端刪除前應明示 remote 與 branch 及伺服器影響，成功時只刪除指定遠端分支並保留本地同名分支；remote 與 branch 應以結構化欄位傳遞，支援多 remote 與名稱含 `/` 的合法 remote，不得由顯示字串猜測身分。

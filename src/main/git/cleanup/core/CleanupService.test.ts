@@ -126,4 +126,43 @@ describe('CleanupService compare-and-prepare', () => {
 
     expect(recovered.journals).toContainEqual(expect.objectContaining({ journalId: executed.journalId, phase: 'prepared' }));
   }, 120_000);
+
+  it('同一份 lease 與 journal 完成遠端 expected-OID 刪除後再清本地 ref', async () => {
+    const bare = join(root, 'remote.git');
+    mkdirSync(bare, { recursive: true });
+    git(bare, 'init', '--bare');
+    git(repo, 'remote', 'add', 'origin', bare);
+    git(repo, 'push', 'origin', 'main', 'profile');
+
+    const preview = await service.preview({
+      wsId,
+      branch: 'profile',
+      remoteTargets: [{ remote: 'origin', branch: 'profile' }],
+    });
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    expect(preview.snapshot.remote).toMatchObject({
+      selectedEndpointIds: [expect.any(String)],
+      unresolvedTargets: [],
+      plan: { endpoints: [expect.objectContaining({ remote: 'origin', branch: 'profile', status: 'exists' })] },
+    });
+
+    const result = await service.execute({
+      wsId,
+      branch: 'profile',
+      leaseToken: preview.leaseToken,
+      localPlan: { worktrees: [] },
+      confirmation: {
+        forceLocal: false,
+        acceptExternalWriteRisk: false,
+        remoteTargets: [{ remote: 'origin', branch: 'profile' }],
+      },
+    });
+
+    if (!result.ok) throw new Error(JSON.stringify(result, null, 2));
+    expect(result).toMatchObject({ ok: true, phase: 'closed', remote: { ok: true } });
+    expect(() => git(repo, 'show-ref', '--verify', 'refs/heads/profile')).toThrow();
+    expect(() => git(bare, 'show-ref', '--verify', 'refs/heads/profile')).toThrow();
+    expect(service.status().journals).toEqual([]);
+  }, 180_000);
 });

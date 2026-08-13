@@ -68,9 +68,14 @@ const ARTICLES: HelpArticle[] = [
   },
   {
     id: 'scm-branches', category: '原始碼控制', title: '分支、stash 與 worktree',
-    summary: '切換與建立分支、保存暫存工作，或用獨立 worktree 同時處理多條分支。',
-    steps: ['在分支區展開本地或遠端群組。', '使用⋯或右鍵開啟共用操作選單。', '刪除前閱讀確認內容；本地未合併、目前分支及 worktree 使用中的分支會被阻擋。'],
-    states: [{ label: '遠端快照可能過期', detail: '先 fetch 更新；受保護分支或認證失敗時遠端會拒絕刪除。' }],
+    summary: '切換與建立分支、保存暫存工作，或用兩階段完整清理移除本地、worktree 與明確選取的遠端分支。',
+    steps: ['在分支區展開本地或遠端群組，從⋯或右鍵選擇完整清理。', '第一階段選擇切換分支、worktree 與 opt-in 遠端範圍；按檢查前不會改 Git 或磁碟。', '第二階段閱讀 commit 數、dirty／locked／prunable、endpoint 與 unknown，再勾選必要的 force／外部寫入確認後執行。'],
+    states: [
+      { label: '狀態已變更', detail: '分支 tip、保留 refs、worktree HEAD、metadata、endpoint 或 remote tip 變動時舊 lease 會失效，請重新檢查。' },
+      { label: 'unknown', detail: 'shallow／partial clone、缺失 object、隱藏 ref、權限或網路問題無法證明結果時，不會冒充已刪除；先修正原因再重試。' },
+      { label: '完整清理待辦', detail: 'prepared 零副作用計畫可取消；mutating／reconciling 只能按「繼續收斂」，已完成 checkpoint 不會重做。' },
+      { label: '外部寫入殘餘風險', detail: '不可逆步驟前會重驗，但無法凍結外部 editor、build 或其他 Git 程序；確認後新寫入內容仍可能受刪除影響。' },
+    ],
     action: 'scm', actionLabel: '前往分支管理',
   },
   {
@@ -133,7 +138,7 @@ const ARTICLES: HelpArticle[] = [
   {
     id: 'settings', category: '版面與設定', title: '主題、終端字型與設定可攜',
     summary: '切換深色、淺色、暖色主題，調整終端字型，並匯出或匯入設定。',
-    steps: ['從工作區工具列齒輪或「檔案 → 設定」開啟。', '主題與終端字型會即時套用。', '匯入前確認 JSON 來源；驗證失敗不會破壞目前設定。'],
+    steps: ['從側欄頂部齒輪或「檔案 → 設定」開啟。', '主題與終端字型會即時套用。', '匯入前確認 JSON 來源；驗證失敗不會破壞目前設定。'],
     states: [{ label: '設定檔損毀', detail: '啟動時會備份壞檔並使用安全預設，不讓程式無法開啟。' }],
   },
   {
