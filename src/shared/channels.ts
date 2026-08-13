@@ -57,8 +57,6 @@ export const INVOKE_CHANNELS = [
   'git:publishGitHub',
   'git:worktreeList',
   'git:worktreeAdd',
-  'git:worktreeRemove',
-  'git:worktreePrune',
   'git:worktreeAdopt',
   'git:worktreeSupported',
   'ai:generateCommitMessage',

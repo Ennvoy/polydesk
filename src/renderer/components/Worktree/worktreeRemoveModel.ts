@@ -21,3 +21,14 @@ export function planRemoval(deleteFolder: boolean, changedCount: number): Remove
 export function confirmedDirtyRemoval(): { action: 'remove'; deleteFolder: boolean; force: boolean } {
   return { action: 'remove', deleteFolder: true, force: true };
 }
+
+export type WorktreeCleanupScope = 'list-only' | 'delete-folder' | 'full-cleanup';
+
+/** 完整清理新增第三個明確範圍；不讓「刪資料夾」隱含是否保留 branch。 */
+export function scopeDeletesBranch(scope: WorktreeCleanupScope): boolean {
+  return scope === 'full-cleanup';
+}
+
+export function scopeDeletesFolder(scope: WorktreeCleanupScope): boolean {
+  return scope !== 'list-only';
+}

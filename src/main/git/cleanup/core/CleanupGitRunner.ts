@@ -1,6 +1,7 @@
 import { execFile as nodeExecFile, type ExecFileException, type ExecFileOptionsWithBufferEncoding } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { readEnv, readHardeningArgs } from '../../gitSafeArgs';
+import { writeEnv } from '../../gitSafeArgs';
 import { buildSpawnEnv } from '../../../security/spawnEnv';
 
 const MAX_BUFFER = 64 * 1024 * 1024;
@@ -27,12 +28,24 @@ export class CleanupGitRunner {
   constructor(private readonly exec: CleanupGitExec = defaultExec) {}
 
   run(cwd: string, args: string[], allowFailure = false): Promise<CleanupGitOutput> {
+    return this.invoke(cwd, args, { allowFailure, write: false });
+  }
+
+  write(cwd: string, args: string[], input?: string, allowFailure = false): Promise<CleanupGitOutput> {
+    return this.invoke(cwd, args, { allowFailure, write: true, input });
+  }
+
+  private invoke(
+    cwd: string,
+    args: string[],
+    request: { allowFailure: boolean; write: boolean; input?: string },
+  ): Promise<CleanupGitOutput> {
     return new Promise((resolve, reject) => {
-      const options: ExecFileOptionsWithBufferEncoding = {
+      const execOptions: ExecFileOptionsWithBufferEncoding = {
         cwd,
         env: {
           ...buildSpawnEnv(),
-          ...readEnv(),
+          ...(request.write ? writeEnv() : readEnv()),
           LC_ALL: 'C',
           LANG: 'C',
           GIT_NO_LAZY_FETCH: '1',
@@ -42,7 +55,7 @@ export class CleanupGitRunner {
         maxBuffer: MAX_BUFFER,
         encoding: 'buffer',
       };
-      this.exec('git', [...readHardeningArgs(), ...args], options, (error, stdout, stderr) => {
+      const child = this.exec('git', [...readHardeningArgs(), ...args], execOptions, (error, stdout, stderr) => {
         const out = stdout.toString('utf8');
         const err = stderr.toString('utf8');
         if (!error) {
@@ -50,12 +63,13 @@ export class CleanupGitRunner {
           return;
         }
         const code = typeof error.code === 'number' ? error.code : 128;
-        if (allowFailure) {
+        if (request.allowFailure) {
           resolve({ code, stdout: out, stderr: err || error.message });
           return;
         }
         reject(new Error(err.trim() || out.trim() || error.message));
       });
+      if (request.input !== undefined) child.stdin?.end(request.input);
     });
   }
 }

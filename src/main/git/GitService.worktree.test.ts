@@ -9,46 +9,27 @@ import { join } from 'node:path';
 import { StateStore } from '../store/StateStore';
 import { WorkspaceManager } from '../workspace/WorkspaceManager';
 import { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
-import { GitService, parseWorktreeList, resolveWorktreeRemoval } from './GitService';
+import { GitService, parseWorktreeList } from './GitService';
 
 const NUL = '\0';
 
 describe('parseWorktreeList（--porcelain -z）', () => {
-  it('解析 main/branch/detached/prunable 四型', () => {
+  it('解析 main/branch/detached/prunable/locked 狀態', () => {
     const raw =
       `worktree C:/repos/app${NUL}HEAD aaaa${NUL}branch refs/heads/main${NUL}${NUL}` +
-      `worktree C:/repos/app-worktrees/feat-x${NUL}HEAD bbbb${NUL}branch refs/heads/feat/x${NUL}${NUL}` +
+      `worktree C:/repos/app-worktrees/feat-x${NUL}HEAD bbbb${NUL}branch refs/heads/feat/x${NUL}locked 重要工作${NUL}${NUL}` +
       `worktree C:/repos/app-worktrees/detached1${NUL}HEAD cccc${NUL}detached${NUL}${NUL}` +
       `worktree C:/repos/app-worktrees/gone${NUL}HEAD dddd${NUL}branch refs/heads/old${NUL}prunable gitdir file points to non-existent location${NUL}${NUL}`;
     const list = parseWorktreeList(raw);
     expect(list).toHaveLength(4);
     expect(list[0]).toMatchObject({ path: 'C:/repos/app', branch: 'main', head: 'aaaa', isMain: true, prunable: false });
-    expect(list[1]).toMatchObject({ path: 'C:/repos/app-worktrees/feat-x', branch: 'feat/x', isMain: false });
+    expect(list[1]).toMatchObject({ path: 'C:/repos/app-worktrees/feat-x', branch: 'feat/x', isMain: false, locked: true, lockReason: '重要工作' });
     expect(list[2]).toMatchObject({ branch: null, isMain: false });
     expect(list[3]).toMatchObject({ prunable: true });
   });
 
   it('空輸出 → 空陣列', () => {
     expect(parseWorktreeList('')).toEqual([]);
-  });
-});
-
-describe('resolveWorktreeRemoval（舊版一般工作區相容）', () => {
-  const list = [
-    { path: 'C:/repos/app', branch: 'main', head: 'aaaa', isMain: true, prunable: false },
-    { path: 'C:/repos/app-worktrees/profile', branch: 'profile', head: 'bbbb', isMain: false, prunable: false },
-  ];
-
-  it('不依賴 workspace metadata，從 Git 登記解出主工作樹與目標', () => {
-    expect(resolveWorktreeRemoval(list, 'C:\\repos\\app-worktrees\\profile')).toEqual({
-      targetPath: 'C:/repos/app-worktrees/profile',
-      mainPath: 'C:/repos/app',
-    });
-  });
-
-  it('拒絕主工作樹與未登記資料夾', () => {
-    expect(resolveWorktreeRemoval(list, 'C:\\repos\\app')).toBeNull();
-    expect(resolveWorktreeRemoval(list, 'C:\\repos\\other')).toBeNull();
   });
 });
 
@@ -118,19 +99,4 @@ describe('GitService worktree argv 硬化（REQ-WT-015 對齊 REQ-SCM-009）', (
     expect(ctx.calls).toHaveLength(0);
   });
 
-  it('worktreeRemove：--force 只在 force=true 出現、路徑在 -- 後', async () => {
-    const target = join(ctx.root, 'ws-worktrees', 'feat-x');
-    await ctx.svc.worktreeRemove(ctx.wsId, target, false);
-    expect(ctx.calls[0].args).not.toContain('--force');
-    await ctx.svc.worktreeRemove(ctx.wsId, target, true);
-    const c = ctx.calls[1];
-    expect(c.args).toContain('--force');
-    expect(c.args[c.args.indexOf('--') + 1]).toBe(target);
-  });
-
-  it('worktreePrune：帶 read 硬化', async () => {
-    await ctx.svc.worktreePrune(ctx.wsId);
-    expect(ctx.calls[0].args).toContain('prune');
-    expect(ctx.calls[0].args.join(' ')).toContain('core.hooksPath=');
-  });
 });

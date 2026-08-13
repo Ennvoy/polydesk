@@ -71,11 +71,21 @@ function parseWorktrees(raw: string): RawWorktree[] {
   });
 }
 
-function parseRefs(raw: string): GitCleanupRefLease[] {
+function parseRefs(raw: string, scopePath?: string): GitCleanupRefLease[] {
   return raw.split(/\r?\n/).flatMap((line) => {
-    const [ref = '', oid = ''] = line.split('\0');
-    return ref && oid ? [{ ref, oid }] : [];
+    const [ref = '', oid = '', objectType = '', symref = ''] = line.split('\0');
+    return ref && oid ? [{ ref, oid, objectType, symref, ...(scopePath ? { scopePath } : {}) }] : [];
   });
+}
+
+function sortRefLeases(refs: GitCleanupRefLease[]): GitCleanupRefLease[] {
+  return refs.sort((a, b) =>
+    (a.scopePath ?? '').localeCompare(b.scopePath ?? '') ||
+    a.ref.localeCompare(b.ref) ||
+    a.oid.localeCompare(b.oid) ||
+    (a.objectType ?? '').localeCompare(b.objectType ?? '') ||
+    (a.symref ?? '').localeCompare(b.symref ?? ''),
+  );
 }
 
 function parseMetadata(raw: string): GitCleanupMetadataEntry[] {
@@ -152,14 +162,17 @@ export class CleanupPreviewService {
     let privateRefsCapable = true;
     let markerCapable = true;
     const retainedByName = new Map<string, GitCleanupRefLease>();
-    const commonRefs = await this.git.run(cwd, ['for-each-ref', '--format=%(refname)%00%(objectname)%00%(symref)%00']);
+    const commonRefs = await this.git.run(cwd, ['for-each-ref', '--format=%(refname)%00%(objectname)%00%(objecttype)%00%(symref)']);
     for (const ref of parseRefs(commonRefs.stdout)) {
       if (ref.ref !== targetRef) retainedByName.set(ref.ref, ref);
     }
 
+    const removedWorktreeIds = new Set(request.removeWorktreeIds ?? []);
+    const retainedPrivateScopes: string[] = [];
     for (const worktree of rawWorktrees) {
       const worktreeId = sha256(`${repositoryFingerprint}\0${worktree.path}`);
       let statusDigest: string | null = null;
+      let dirty: boolean | null = null;
       let gitDirDigest: string | null = null;
       let privateRefsDigest: string | null = null;
       const operations = new Set<string>();
@@ -171,13 +184,16 @@ export class CleanupPreviewService {
           this.git.run(worktree.path, ['rev-parse', '--path-format=absolute', ...OPERATION_MARKERS.flatMap(([marker]) => ['--git-path', marker])], true),
           this.git.run(worktree.path, [
             'for-each-ref',
-            '--format=%(refname)%00%(objectname)%00%(symref)%00',
+            '--format=%(refname)%00%(objectname)%00%(objecttype)%00%(symref)',
             'refs/bisect',
             'refs/worktree',
             'refs/rewritten',
           ], true),
         ]);
-        if (status.code === 0 && submodules.code === 0) statusDigest = digest([status.stdout, submodules.stdout]);
+        if (status.code === 0 && submodules.code === 0) {
+          statusDigest = digest([status.stdout, submodules.stdout]);
+          dirty = status.stdout.length > 0 || submodules.stdout.split(/\r?\n/).some((line) => line.trim() && !line.startsWith(' '));
+        }
         else blockers.push({ code: 'worktree-state-unknown', message: `無法讀取 worktree 狀態：${worktree.path}`, worktreeId });
 
         if (gitDir.code === 0 && gitDir.stdout.trim()) gitDirDigest = sha256(resolve(gitDir.stdout.trim()));
@@ -204,9 +220,12 @@ export class CleanupPreviewService {
         }
 
         if (privateRefs.code === 0) {
-          const parsed = parseRefs(privateRefs.stdout);
+          const parsed = parseRefs(privateRefs.stdout, worktree.path);
           privateRefsDigest = digest(parsed);
-          for (const ref of parsed) retainedByName.set(`${worktreeId}:${ref.ref}`, ref);
+          if (!removedWorktreeIds.has(worktreeId)) {
+            retainedPrivateScopes.push(worktree.path);
+            for (const ref of parsed) retainedByName.set(`${worktreeId}:${ref.ref}`, ref);
+          }
         } else {
           privateRefsCapable = false;
           blockers.push({ code: 'private-refs-unknown', message: `無法列舉 worktree 私有 refs：${worktree.path}`, worktreeId });
@@ -222,6 +241,7 @@ export class CleanupPreviewService {
         locked: worktree.locked,
         ...(worktree.lockReason ? { lockReason: worktree.lockReason } : {}),
         statusDigest,
+        dirty,
         gitDirDigest,
         operations: [...operations].sort(),
         privateRefsDigest,
@@ -265,7 +285,14 @@ export class CleanupPreviewService {
 
     const occupied = new Set(rawWorktrees.map((worktree) => worktree.branch).filter((branch): branch is string => branch !== null));
     const switchCandidates = branches.stdout.split(/\r?\n/).map((branch) => branch.trim()).filter((branch) => branch && branch !== request.branch && !occupied.has(branch));
-    const retainedRefs = [...retainedByName.values()].sort((a, b) => a.ref.localeCompare(b.ref) || a.oid.localeCompare(b.oid));
+    const retainedRefs = sortRefLeases([...retainedByName.values()]);
+    retainedPrivateScopes.sort((a, b) => a.localeCompare(b));
+    const [safeDeleteResult, lostCountResult] = await Promise.all([
+      this.git.run(cwd, ['merge-base', '--is-ancestor', target.oid, baseline.oid], true),
+      this.git.run(cwd, ['rev-list', '--count', target.oid, ...(retainedRefs.length > 0 ? ['--not', ...retainedRefs.map((ref) => ref.oid)] : [])], true),
+    ]);
+    const safeDelete = safeDeleteResult.code === 0;
+    const lostCommitCount = lostCountResult.code === 0 ? Number.parseInt(lostCountResult.stdout.trim(), 10) || 0 : 0;
     const repositoryEvidence = {
       bare: bareResult.stdout.trim(),
       head: main?.head ?? '',
@@ -279,7 +306,12 @@ export class CleanupPreviewService {
       },
       target,
       baseline,
-      retainedRefs: { count: retainedRefs.length, digest: digest(retainedRefs), refs: retainedRefs },
+      retainedRefs: {
+        count: retainedRefs.length,
+        digest: digest({ refs: retainedRefs, privateScopes: retainedPrivateScopes }),
+        refs: retainedRefs,
+        privateScopes: retainedPrivateScopes,
+      },
       worktrees,
       metadata: {
         digest: digest(metadataEntries),
@@ -288,6 +320,7 @@ export class CleanupPreviewService {
         reflogExists: reflogExistsResult.code === 0,
       },
       objectGraph: { complete: objectGraphComplete, shallow, promisor, missingObjectCount },
+      localRisk: { safeDelete, lostCommitCount, exact: objectGraphComplete && lostCountResult.code === 0 },
       capabilities: { reflogDrop, privateRefs: privateRefsCapable, operationMarkers: markerCapable },
       switchCandidates,
       blockers,

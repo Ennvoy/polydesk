@@ -9,6 +9,7 @@ import type {
 import type { WorkspaceManager } from '../../../workspace/WorkspaceManager';
 import { CleanupJournalStore, CleanupStoreError } from '../../../store/cleanup/CleanupJournalStore';
 import { CleanupPreviewService } from './CleanupPreview';
+import { LocalCleanupExecutor } from '../local/LocalCleanupExecutor';
 
 interface CleanupJournalPayload {
   schemaVersion: 1;
@@ -21,6 +22,7 @@ interface CleanupJournalPayload {
 export class CleanupService {
   private readonly previewService: CleanupPreviewService;
   private readonly journals: CleanupJournalStore;
+  private readonly local: LocalCleanupExecutor;
 
   constructor(
     private readonly workspaces: WorkspaceManager,
@@ -28,6 +30,7 @@ export class CleanupService {
   ) {
     this.previewService = new CleanupPreviewService(workspaces);
     this.journals = new CleanupJournalStore(userDataDir);
+    this.local = new LocalCleanupExecutor(workspaces, this.journals);
   }
 
   preview(request: GitCleanupPreviewRequest): Promise<GitCleanupPreviewResult> {
@@ -44,6 +47,10 @@ export class CleanupService {
     const currentPreview = await this.previewService.preview({
       wsId: request.wsId,
       branch: request.branch,
+      switchTo: request.localPlan?.switchTo,
+      removeWorktreeIds: request.localPlan?.worktrees
+        .filter((action) => action.mode !== 'list-only')
+        .map((action) => action.id),
       remoteTargets: request.confirmation.remoteTargets,
     });
     if (currentPreview.ok && active.claims.some((claim) => claim.repositoryFingerprint === currentPreview.snapshot.repository.fingerprint)) {
@@ -52,6 +59,8 @@ export class CleanupService {
     if (!currentPreview.ok || currentPreview.leaseToken !== request.leaseToken) {
       return { ok: false, error: 'Git 或磁碟狀態已變更，請重新確認風險摘要。', code: 'state-changed', currentPreview };
     }
+    const localValidation = this.local.validate(currentPreview.snapshot, request);
+    if (localValidation) return localValidation;
     try {
       const commonDir = await this.previewService.resolveCommonDir(request.wsId);
       if (!commonDir) return { ok: false, error: '無法確認 repository 身分。', code: 'repository-identity-unknown' };
@@ -68,7 +77,7 @@ export class CleanupService {
         repositoryGeneration: identity.generation,
         payload,
       });
-      return { ok: true, journalId: journal.journalId, phase: 'prepared' };
+      return this.local.execute(workspace.path, journal.journalId, request, currentPreview.snapshot);
     } catch (error) {
       if (error instanceof CleanupStoreError) {
         const code = error.code === 'active-cleanup' ? 'active-cleanup' : 'cleanup-store-blocked';

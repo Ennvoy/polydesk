@@ -150,6 +150,9 @@ export interface GitWorktree {
   isMain: boolean;
   /** 失效登記（資料夾已不存在，可 prune）。 */
   prunable: boolean;
+  /** `git worktree lock` 保護；刪除前必須另行確認解鎖。 */
+  locked?: boolean;
+  lockReason?: string;
   /** 已納管為 Polydesk 工作區時的 wsId（handler 附加）。 */
   managedWsId?: string;
 }

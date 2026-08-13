@@ -596,7 +596,7 @@ export function SourceControlPanel(): React.JSX.Element {
       return;
     }
     if (target.action === 'prune-or-warn') {
-      setError('該 worktree 已失效或不可切換（資料夾可能已刪除）。請到 worktree 分頁清理失效登記。');
+      setError('該 worktree 已失效或不可切換（資料夾可能已刪除）。請到 worktree 分頁，在該筆項目按「移除」清理登記。');
       return;
     }
     if (target.action === 'not-found') {

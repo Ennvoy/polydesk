@@ -3,7 +3,7 @@
 
 ## 模組索引
 
-- `src/main/`：Electron 特權層。`ipc/router.ts` 註冊服務；`git/GitService.ts` 執行系統 Git；`git/gitSafeArgs.ts` 驗證 ref 與參數；`git/gitSerialQueue.ts` 序列化同 repository 操作；`git/cleanup/core/` 與 `store/cleanup/` 提供零副作用 preview、lease、repository instance identity、write-ahead journal、claim 重建及 quarantine 基礎。其餘模組負責 workspace、PTY、檔案、搜尋、LSP、AI 監控、狀態儲存與更新。
+- `src/main/`：Electron 特權層。`ipc/router.ts` 註冊服務；`git/GitService.ts` 執行系統 Git；`git/gitSafeArgs.ts` 驗證 ref 與參數；`git/gitSerialQueue.ts` 序列化同 repository 操作；`git/cleanup/core/`、`git/cleanup/local/` 與 `store/cleanup/` 提供零副作用 preview、完整 retained-ref/worktree lease、本機 CAS 清理與競態補償、repository instance identity、write-ahead journal、claim 重建及 quarantine。其餘模組負責 workspace、PTY、檔案、搜尋、LSP、AI 監控、狀態儲存與更新。
 - `src/preload/`：固定白名單 IPC bridge，只暴露 namespaced API，不暴露 raw `ipcRenderer` 或 Node API。
 - `src/shared/`：跨程序契約單一來源。`channels.ts` 定義 channel 白名單，`ipc.ts` 定義 request/response，`types.ts` 定義 Workspace、GitStatus、GitLogRef、GitWorktree 等模型。
 - `src/renderer/`：React UI。`components/ActivityBar.tsx` 現匯出水平 `WorkspaceToolbar`，由 `WorkspaceRail.tsx` 放在工作區標頭提供檔案總管／搜尋／SCM／設定入口；`components/Help/` 提供 7 步首次導覽與可搜尋完整指南，`TitleBar.tsx` 與設定共用重開入口。`components/SourceControl/SourceControlPanel.tsx` 負責 SCM 的變更、歷史、分支與 stash；`components/Worktree/` 已有本地／遠端分支來源分流；`state/` 管理工作區、Git snapshot 與導覽匯流排；`theme/compactButtons.css` 提供無框小圖示按鈕樣式。
@@ -25,12 +25,12 @@
 - `GitService.branch(list)` 以 `for-each-ref` 讀取本地與 remote-tracking refs，再以實際 `git remote` 清單的最長前綴組成結構化 `{ remote, name, ref }`；因此合法的斜線 remote 不會被誤拆，並排除 remote `HEAD`。
 - shared IPC 的 `git:branch` 支援 `list | create | checkout | delete-local | delete-remote`；list 同時保留既有扁平 `remotes` 相容 worktree 對話框，並提供 SCM 使用的 `remoteBranches` 結構化身分。
 - SCM 分支頁分成本地與遠端兩個可獨立收合群組，顯示各自數量；每列 `⋯` 與右鍵共用選單，目前分支或 worktree 使用中的本地分支會顯示具名停用原因。
-- 本地刪除只使用 `git branch -d -- <name>`；遠端刪除只使用 `git push <remote> --delete <branch>`。成功後會刷新 branch、snapshot、history 與 worktree 佔用狀態。
+- 舊 `git branch -d` 入口正由 journal 化 cleanup 取代：本機執行會先重驗 target/baseline/retained refs 與全部 worktree 狀態，再依確認範圍切換目前分支、逐筆移除 worktree、CAS 刪 local ref 並清 branch config/reflog；checkout 競態會以 expected-absent 恢復 ref。遠端安全刪除由 T-007 接續。
 - 刪除錯誤回傳結構化 code；顯示前會中和原始 Git 訊息的 bidi 與 C0 控制字元，不靠在地化 stderr 判斷未合併狀態。
 
 ## 已知缺口與地雷
 
-- 分支刪除沒有 `git branch -D` 強制路徑；若未來新增，必須另立需求、加強確認並覆蓋未合併 commit 遺失風險。
+- 分支 cleanup 的遠端 endpoint lease／刪除／恢復仍待 T-007；T-006 只完成 journal 化本機分支與 worktree 清理，不可退回舊 `git push --delete` 旁路。
 - remote 名本身可含 `/`，不可用第一個斜線拆 remote-tracking 顯示字串；應沿用結構化 `remoteBranches`。
 - 遠端刪除可能因認證、網路、逾時、預設分支或保護規則被拒絕；失敗需結構化分類並顯示可行下一步，不得偽裝成功。
 - `remotes` 是本機 remote-tracking snapshot；未 fetch／prune 時可能過期。現有 fetch 未帶 `--prune`。

@@ -1,5 +1,5 @@
 // SCM「worktree」分頁（F-12；REQ-WT-006/007/008/009/014）：列出該 repo 全部 worktree、
-// 切換到此、移除（二選一＋dirty 兩段確認）、＋建立（重用對話框）、清理失效登記(prune)。
+// 切換到此、移除（三範圍＋dirty 兩段確認）、＋建立（重用對話框）；失效登記逐筆確認，不做全域 prune。
 // 分支名/路徑一律經 neutralizeBidi/worktreeBranchDisplay（禁 innerHTML）。
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -9,7 +9,7 @@ import { dialog } from '../Dialogs/host';
 import { neutralizeBidi } from '../Dialogs/TrustConfirm';
 import { CreateWorktreeDialog } from './CreateWorktreeDialog';
 import { worktreeBranchDisplay, worktreePathDisplay, canSwitchWorktree } from './worktreeModel';
-import { planRemoval, confirmedDirtyRemoval } from './worktreeRemoveModel';
+import { planRemoval, confirmedDirtyRemoval, scopeDeletesBranch, scopeDeletesFolder, type WorktreeCleanupScope } from './worktreeRemoveModel';
 import { mark, measure } from '../../../shared/perf';
 import type { GitWorktree } from '../../../shared/types';
 
@@ -79,53 +79,64 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
     }
   };
 
-  const onPrune = async (): Promise<void> => {
-    // 紅軍 A4：prune 需明確確認（暫時不可達的有效 worktree 也可能被 git 標 prunable，誤清＝孤兒）。
-    const ok = await dialog.confirm({
-      title: '清理失效登記',
-      body: '這會移除「資料夾已不存在」的 worktree 登記（git worktree prune）。若某 worktree 只是暫時不可達（如網路磁碟斷線），請先確認它真的不要了。',
-      confirmText: '清理',
-      cancelText: '取消',
-    });
-    if (!ok) return;
-    setBusy(true);
-    try {
-      const r = await ipc.git.worktreePrune({ wsId });
-      if ('error' in r) setError(r.error);
-      await reload();
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const onRemove = async (wt: GitWorktree): Promise<void> => {
+    if (wt.prunable && wt.branch) {
+      const ok = await dialog.confirm({
+        title: '移除失效 worktree 登記',
+        body: '資料夾已不存在；只會移除這一筆 Git 登記並保留本地分支，不會執行全域 prune。確定繼續嗎？',
+        confirmText: '移除登記',
+        cancelText: '取消',
+      });
+      if (!ok) return;
+      setBusy(true);
+      try {
+        const preview = await ipc.git.cleanupPreview({ wsId, branch: wt.branch });
+        if (!preview.ok) {
+          setError(preview.error);
+          return;
+        }
+        const target = preview.snapshot.worktrees.find((entry) => entry.branch === wt.branch && entry.prunable);
+        if (!target) {
+          setError('失效登記狀態已變更，請重新載入後再試。');
+          return;
+        }
+        const plannedPreview = await ipc.git.cleanupPreview({ wsId, branch: wt.branch, removeWorktreeIds: [target.id] });
+        if (!plannedPreview.ok) {
+          setError(plannedPreview.error);
+          return;
+        }
+        const result = await ipc.git.cleanupExecute({
+          wsId,
+          branch: wt.branch,
+          leaseToken: plannedPreview.leaseToken,
+          localPlan: { deleteBranch: false, worktrees: [{ id: target.id, mode: 'stale-registration' }] },
+          confirmation: { forceLocal: false, acceptExternalWriteRisk: false, remoteTargets: [] },
+        });
+        if (!result.ok) setError(result.error);
+        await appStore.loadWorkspaces();
+        await reload();
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (!wt.managedWsId) {
       await dialog.confirm({ title: '無法移除', body: '此 worktree 尚未加入 Polydesk。', confirmText: '知道了', cancelText: '關閉' });
       return;
     }
     const targetWsId = wt.managedWsId;
-    // 二選一：僅移出列表 / 連同刪除
+    // 三選一：僅移出列表 / 刪資料夾保留 branch / 完整清理。
     const choice = (await dialog.open((close) => (
-      <RemoveChoiceDialog branch={worktreeBranchDisplay(wt.branch)} onResult={(v) => close(v)} />
-    ))) as 'list-only' | 'delete' | undefined;
+      <RemoveChoiceDialog branch={worktreeBranchDisplay(wt.branch)} canDeleteBranch={wt.branch !== null} onResult={(v) => close(v)} />
+    ))) as WorktreeCleanupScope | undefined;
     if (!choice) return;
 
     setError(null);
     setBusy(true);
     try {
-      if (choice === 'list-only') {
-        const r = await ipc.git.worktreeRemove({ wsId: targetWsId, deleteFolder: false, force: false });
-        if ('error' in r) {
-          setError(neutralizeBidi(r.error));
-          return;
-        }
-        await appStore.loadWorkspaces();
-        await reload();
-        return;
-      }
-      // 連同刪除：先查未提交變更數（dirty 兩段確認在刪除「之前」，避免半殘）
+      // 會刪資料夾時先查未提交變更數（dirty 兩段確認在刪除「之前」，避免半殘）。
       const changes = await ipc.git.changes({ wsId: targetWsId });
-      const plan = planRemoval(true, changes.length);
+      const plan = planRemoval(scopeDeletesFolder(choice), changes.length);
       let force = false;
       if (plan.action === 'confirm-dirty') {
         const ok = (await dialog.open((close) => (
@@ -134,15 +145,57 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
         if (!ok) return;
         force = confirmedDirtyRemoval().force; // 兩段確認通過 → force
       }
-      const r = await ipc.git.worktreeRemove({ wsId: targetWsId, deleteFolder: true, force });
-      if ('error' in r) {
-        setError(
-          r.code === 'busy'
-            ? '無法刪除：資料夾被佔用（可能有程序仍持有檔案）。請關閉相關程序後重試。'
-            : r.code === 'dirty'
-              ? '該 worktree 仍有未提交變更。請先提交/暫存，或確認丟棄後重試。'
-              : r.error,
-        );
+      let unlock = false;
+      if (wt.locked && scopeDeletesFolder(choice)) {
+        unlock = await dialog.confirm({
+          title: '解除 worktree 鎖定保護',
+          body: `此 worktree${wt.lockReason ? `（${neutralizeBidi(wt.lockReason)}）` : ''}已鎖定。要明確解除保護後繼續嗎？`,
+          confirmText: '解除並繼續',
+          cancelText: '取消',
+        });
+        if (!unlock) return;
+      }
+      const anchorBranch = wt.branch ?? (await ipc.git.status({ wsId })).branch;
+      if (!anchorBranch) {
+        setError('無法取得具名本地分支作為清理租約基準，請先讓主工作樹切到本地分支。');
+        return;
+      }
+      const preview = await ipc.git.cleanupPreview({ wsId, branch: anchorBranch });
+      if (!preview.ok) {
+        setError(preview.error);
+        return;
+      }
+      const normalizedPath = wt.path.replace(/\\/g, '/').toLowerCase();
+      const target = preview.snapshot.worktrees.find((entry) =>
+        !entry.isMain && entry.displayPath.replace(/\\/g, '/').toLowerCase() === normalizedPath,
+      );
+      if (!target) {
+        setError('worktree 狀態已變更，請重新載入後再試。');
+        return;
+      }
+      const plannedPreview = scopeDeletesFolder(choice)
+        ? await ipc.git.cleanupPreview({ wsId, branch: anchorBranch, removeWorktreeIds: [target.id] })
+        : preview;
+      if (!plannedPreview.ok) {
+        setError(plannedPreview.error);
+        return;
+      }
+      const cleaned = await ipc.git.cleanupExecute({
+        wsId,
+        branch: anchorBranch,
+        leaseToken: plannedPreview.leaseToken,
+        localPlan: {
+          deleteBranch: scopeDeletesBranch(choice),
+          worktrees: [{ id: target.id, mode: choice, unlock }],
+        },
+        confirmation: {
+          forceLocal: force,
+          acceptExternalWriteRisk: scopeDeletesFolder(choice),
+          remoteTargets: [],
+        },
+      });
+      if (!cleaned.ok) {
+        setError(cleaned.error);
         return;
       }
       await appStore.loadWorkspaces();
@@ -159,9 +212,6 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
       <div className="pd-scm-stash" style={{ display: 'flex', gap: 'var(--space-2)' }}>
         <button className="pd-btn pd-btn-primary" aria-label="建立 worktree" onClick={() => void onCreate()} disabled={busy}>
           ＋ 建立
-        </button>
-        <button className="pd-btn" aria-label="清理失效登記" title="git worktree prune" onClick={() => void onPrune()} disabled={busy}>
-          清理失效登記
         </button>
       </div>
 
@@ -216,13 +266,15 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
   );
 }
 
-/** 移除二選一（REQ-WT-006）：僅移出列表 / 連同刪除。 */
+/** 移除三選一：列表、資料夾、完整分支清理。 */
 function RemoveChoiceDialog({
   branch,
+  canDeleteBranch,
   onResult,
 }: {
   branch: string;
-  onResult: (r: 'list-only' | 'delete' | undefined) => void;
+  canDeleteBranch: boolean;
+  onResult: (r: WorktreeCleanupScope | undefined) => void;
 }): React.JSX.Element {
   return (
     <div style={{ minWidth: 420, maxWidth: 520 }}>
@@ -234,9 +286,14 @@ function RemoveChoiceDialog({
         <button className="pd-btn" aria-label="僅從列表移出，保留資料夾" onClick={() => onResult('list-only')}>
           僅移出列表（保留資料夾，之後可再加回）
         </button>
-        <button className="pd-btn pd-btn-danger" aria-label="連同刪除資料夾" onClick={() => onResult('delete')}>
-          連同刪除資料夾（git worktree remove）
+        <button className="pd-btn" aria-label="刪除資料夾並保留分支" onClick={() => onResult('delete-folder')}>
+          刪除資料夾，保留本地分支
         </button>
+        {canDeleteBranch && (
+          <button className="pd-btn pd-btn-danger" aria-label="完整清理資料夾與本地分支" onClick={() => onResult('full-cleanup')}>
+            完整清理資料夾與本地分支
+          </button>
+        )}
         <button className="pd-btn" aria-label="取消移除" onClick={() => onResult(undefined)} style={{ marginTop: 4 }}>
           取消
         </button>

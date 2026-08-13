@@ -25,6 +25,22 @@ export class WorkspaceLifecycle {
     }
   }
 
+  /**
+   * 破壞性 worktree 清理用：所有 concern 都會執行，但任一失敗會在最後以 AggregateError 回報，
+   * 呼叫端因此能保留 workspace/Git 登記並停止刪除，不把部分 teardown 冒充成功。
+   */
+  async teardownStrict(wsId: string): Promise<void> {
+    const failures: Error[] = [];
+    for (const [concern, handler] of this.handlers) {
+      try {
+        await handler(wsId);
+      } catch (error) {
+        failures.push(new Error(`concern=${concern}: ${error instanceof Error ? error.message : String(error)}`));
+      }
+    }
+    if (failures.length > 0) throw new AggregateError(failures, '工作區仍有無法安全關閉的程序或監看服務。');
+  }
+
   /** 已註冊的 concern 數（測試用）。 */
   get size(): number {
     return this.handlers.size;

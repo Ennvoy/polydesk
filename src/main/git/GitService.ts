@@ -1004,23 +1004,6 @@ export class GitService {
     return { ok: true };
   }
 
-  /** REQ-WT-006/007：移除 worktree（force 才帶 --force；路徑置 '--' 後）。teardown 由 handler 先做。 */
-  async worktreeRemove(wsId: string, targetPath: string, force: boolean): Promise<{ ok: true }> {
-    const cwd = this.path(wsId);
-    if (!cwd) throw new Error('workspace not found');
-    return this.worktreeRemoveByPath(targetPath, cwd, force);
-  }
-
-  /**
-   * 由主工作樹 cwd 執行 remove（移除 handler 已先把該 worktree 工作區移出列表，
-   * 故不能再靠其 wsId 取 cwd——改用主工作樹路徑當 cwd）。
-   */
-  async worktreeRemoveByPath(targetPath: string, mainCwd: string, force: boolean): Promise<{ ok: true }> {
-    const args = [...readHardeningArgs(), 'worktree', 'remove', ...(force ? ['--force'] : []), '--', targetPath];
-    await this.run(args, { cwd: mainCwd, env: writeEnv() });
-    return { ok: true };
-  }
-
   /**
    * REQ-WT-002＋藍軍 R2：判斷此 repo 是否支援建立 worktree。bare repo（無工作樹）與 submodule
    * 工作區不支援，回 reason 供 UI 事前提示（不讓使用者填完表單才被 git 擋）。
@@ -1040,18 +1023,6 @@ export class GitService {
     }
   }
 
-  /** REQ-WT-009：清除失效登記。 */
-  async worktreePrune(wsId: string): Promise<{ pruned: number }> {
-    const cwd = this.path(wsId);
-    if (!cwd) return { pruned: 0 };
-    const { stdout } = await this.run([...readHardeningArgs(), 'worktree', 'prune', '-v'], {
-      cwd,
-      env: writeEnv(),
-    });
-    // -v 每 prune 一筆輸出一行；數行數當計數（無輸出＝0）。
-    const pruned = stdout.split('\n').filter((l) => l.trim().length > 0).length;
-    return { pruned };
-  }
 }
 
 /** git-common-dir / 路徑正規化（realpath 後小寫化 on win32；解不了退 resolve）。紅軍 A2 lineage 用。 */
@@ -1063,22 +1034,6 @@ export function canonicalPath(p: string): string {
     /* 路徑不存在：用 lexical resolve */
   }
   return process.platform === 'win32' ? abs.toLowerCase() : abs;
-}
-
-/**
- * 從 Git 的真實登記解析待刪 worktree 與主工作樹。
- * 舊版可能把既有 worktree 以一般工作區加入，state 內沒有 worktree.mainPath；
- * 移除時不可只信持久化 metadata，須回到 `git worktree list` 判定。
- */
-export function resolveWorktreeRemoval(
-  list: GitWorktree[],
-  targetPath: string,
-): { targetPath: string; mainPath: string } | null {
-  const targetKey = canonicalPath(targetPath);
-  const target = list.find((entry) => canonicalPath(entry.path) === targetKey);
-  const main = list.find((entry) => entry.isMain);
-  if (!target || target.isMain || !main) return null;
-  return { targetPath: target.path, mainPath: main.path };
 }
 
 /**
@@ -1131,14 +1086,20 @@ export function parseWorktreeList(raw: string): GitWorktree[] {
     let head = '';
     let branch: string | null = null;
     let prunable = false;
+    let locked = false;
+    let lockReason: string | undefined;
     for (const line of rec) {
       if (line.startsWith('worktree ')) path = line.slice('worktree '.length);
       else if (line.startsWith('HEAD ')) head = line.slice('HEAD '.length);
       else if (line.startsWith('branch ')) branch = line.slice('branch '.length).replace(/^refs\/heads\//, '');
       else if (line === 'detached') branch = null;
       else if (line === 'prunable' || line.startsWith('prunable ')) prunable = true;
+      else if (line === 'locked' || line.startsWith('locked ')) {
+        locked = true;
+        lockReason = line.slice('locked'.length).trim() || undefined;
+      }
     }
-    if (path) out.push({ path, branch, head, isMain: idx === 0, prunable });
+    if (path) out.push({ path, branch, head, isMain: idx === 0, prunable, locked, ...(lockReason ? { lockReason } : {}) });
   });
   return out;
 }
@@ -1312,16 +1273,6 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, 
     }),
   );
 
-  ipc.handle('git:worktreePrune', (_e, req: InvokeReq<'git:worktreePrune'>) =>
-    enqueue(qkey(req.wsId), async () => {
-      try {
-        return await svc.worktreePrune(req.wsId);
-      } catch (e) {
-        return { error: errMsg(e, 'worktree prune 失敗') };
-      }
-    }),
-  );
-
   ipc.handle('git:worktreeSupported', (_e, req: InvokeReq<'git:worktreeSupported'>) =>
     enqueue(qkey(req.wsId), async () => {
       try {
@@ -1362,51 +1313,4 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, 
       return { wsId: res.id };
     }),
   );
-  // git:worktreeRemove 需先 teardown（走 workspaces.remove → lifecycle）：同一 svc/workspaces 即可註冊。
-  registerWorktreeRemoveHandler(ipc, workspaces, svc);
-}
-
-/**
- * REQ-WT-006/007＋紅軍 A5：移除 worktree handler（需 lifecycle → 在 router 層註冊，拿得到 teardown）。
- * 順序鐵則：先完整 teardown（等程序結束、handle 釋放）→ 再 git worktree remove（Windows 防 EBUSY）。
- * deleteFolder=false → 僅移出列表（保留資料夾）；true → git remove（dirty 由前端兩段確認後帶 force）。
- */
-export function registerWorktreeRemoveHandler(
-  ipc: IpcMain,
-  workspaces: WorkspaceManager,
-  svc: GitService,
-): void {
-  ipc.handle('git:worktreeRemove', async (_e, req: InvokeReq<'git:worktreeRemove'>) => {
-    const ws = workspaces.get(req.wsId);
-    if (!ws) return { error: '找不到工作區' };
-    const target = ws.path;
-    const mainKey = req.wsId;
-    return enqueue(workspaces.queueKeyForRepo(mainKey), async () => {
-      if (!req.deleteFolder) {
-        // 僅移出列表：完整 teardown＋delist，資料夾保留。
-        await workspaces.remove(req.wsId, false);
-        return { ok: true as const };
-      }
-      // 舊版／手動加入的 worktree 可能沒有 ws.worktree metadata；以 Git 真實登記回查，
-      // 同時阻止把主工作樹或已不屬於此 repo 的一般資料夾交給 worktree remove。
-      const removal = resolveWorktreeRemoval(await svc.worktreeList(req.wsId), target);
-      if (!removal) return { error: '找不到有效的 Git worktree 登記' };
-      // 連同刪除（REQ-WT-006 順序鐵則）：先 teardown 釋放 handle（Windows 防 EBUSY）→ git remove
-      // 成功後才 delist。git remove 失敗則「不 delist」＝工作區項保留、不半殘。
-      await workspaces.teardownOnly(req.wsId);
-      try {
-        await svc.worktreeRemoveByPath(removal.targetPath, removal.mainPath, req.force);
-      } catch (e) {
-        const msg = errMsg(e, 'worktree remove 失敗');
-        const code = /is dirty|contains modified|use --force/i.test(msg)
-          ? ('dirty' as const)
-          : /unable to|EBUSY|being used|locked/i.test(msg)
-            ? ('busy' as const)
-            : undefined;
-        return { error: msg, code }; // 工作區項保留（未 delist）
-      }
-      await workspaces.remove(req.wsId, false); // git remove 成功才 delist（teardown 冪等）
-      return { ok: true as const };
-    });
-  });
 }

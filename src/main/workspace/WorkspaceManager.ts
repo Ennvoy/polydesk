@@ -210,8 +210,14 @@ export class WorkspaceManager {
    * 供「連同刪除」流程先 teardown→git remove 成功後才 delist（失敗則工作區項保留、不半殘）。
    */
   async teardownOnly(wsId: string): Promise<void> {
-    await this.lifecycle.teardown(wsId);
+    await this.lifecycle.teardownStrict(wsId);
     this.hydrated.delete(wsId);
+  }
+
+  /** 已完成 strict teardown 或八態重查後，只移除 Polydesk 登記，不再次執行 lifecycle。 */
+  delistOnly(wsId: string): void {
+    this.hydrated.delete(wsId);
+    this.write(this.read().filter((workspace) => workspace.id !== wsId));
   }
 
   private purgeProfileDir(profileDir: string): void {

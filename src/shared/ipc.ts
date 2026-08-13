@@ -179,11 +179,6 @@ export interface InvokeChannels {
     };
     res: { wsId: string } | { error: string; code?: 'branch-taken' | 'path-exists' | 'net' | 'invalid-path' };
   };
-  'git:worktreeRemove': {
-    req: { wsId: string; deleteFolder: boolean; force: boolean };
-    res: { ok: true } | { error: string; code?: 'dirty' | 'busy' };
-  };
-  'git:worktreePrune': { req: { wsId: string }; res: { pruned: number } | { error: string } };
   /** REQ-WT-002：此 repo 是否支援建 worktree（bare/submodule 不支援，供對話框事前提示）。 */
   'git:worktreeSupported': {
     req: { wsId: string };
