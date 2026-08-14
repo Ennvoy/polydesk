@@ -231,22 +231,27 @@ describe('F-2-A4 lazy-start 冪等 + teardown 無殭屍', () => {
 });
 
 describe('F-2-A5 事件洪水 coalesce + awaitWriteFinish', () => {
-  it('短時間新增 500 檔，flood breaker 把推送數壓到遠小於 500（且 < 上限+對帳）', async () => {
+  it('短時間注入 500 個新增事件，flood breaker 把推送數壓到遠小於 500（且 < 上限+對帳）', async () => {
     const ws = mkTmp();
     const events: FsChange[] = [];
+    const watcher = fakeWatcher();
     const fw = track(
       new FileWatcher(() => ws, {
         emit: (p) => events.push(p),
+        watchFactory: () => watcher,
         coalesceMs: 50,
         awaitWriteFinishMs: 20,
         maxBatch: 30, // 一波逐檔上限；超量切 coarse
       }),
     );
     fw.ensureWatch(WS);
+    (watcher as unknown as EventEmitter).emit('ready');
     await fw.whenReady(WS);
 
-    for (let i = 0; i < 500; i++) writeFileSync(path.join(ws, `f${i}.txt`), 'x');
-    await delay(1000); // 含波結束靜止後的根目錄對帳
+    for (let i = 0; i < 500; i++) {
+      (watcher as unknown as EventEmitter).emit('add', path.join(ws, `f${i}.txt`));
+    }
+    await delay(500); // 含波結束靜止後的根目錄對帳
 
     // 逐檔至多 ~maxBatch 筆 → 切 coarse 推根目錄重抓 → 靜止後再對帳一次：總數遠小於 500
     expect(events.length).toBeGreaterThan(0);
