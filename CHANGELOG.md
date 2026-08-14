@@ -30,7 +30,7 @@ Git 分支與 worktree 現在共用同一套可恢復完整清理流程；側欄
 
 - T-008 票級 runner 4/4 指令通過：typecheck、正式 build、16 個目標 Vitest 檔 89/89，以及 8 個真 Electron 清理 E2E 全綠。
 - 真 Electron 直接驗證已合併／未合併風險、目前分支切換、worktree 三種範圍、遠端 tip 變動、多 endpoint 部分失敗、重啟待辦與繼續收斂，並查驗真實 refs、worktree 登記、資料夾與 bare remote 最終狀態。
-- 完整 ship runner 覆蓋 typecheck、正式 build、序列 Vitest 與 12 個單 worker Electron E2E shard；Spec／Standards 兩軸最終複核皆為 0 blocker、0 suggestion。
+- 完整 ship runner 覆蓋 typecheck、正式 build、序列 Vitest 與 12 個單 worker Electron E2E shard；Spec 複核為 0 blocker／0 suggestion，Standards 複核為 0 blocker，另保留 3 個不影響正確性的重構建議。
 
 ## v0.29.0（2026-08-12）
 

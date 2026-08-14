@@ -243,4 +243,4 @@
 - [x] 核心 preview、repository identity、journal／claim、local CAS／worktree reconciliation 與 remote expected-OID engine。
 - [x] 本地分支、遠端分支與 worktree 入口統一到兩階段 UI；移除舊直接 `branch -d`／`push --delete` 產品旁路。
 - [x] 加入啟動待辦、prepared 取消、mutating／reconciling resume、部分結果與 unknown/stale 說明。
-- [x] 完成 8/8 個真 Electron 清理／worktree 全旅程、兩軸 0 blocker／0 suggestion 與完整出貨 runner，發布 v0.30.0。
+- [x] 完成 8/8 個真 Electron 清理／worktree 全旅程、兩軸 0 blocker 與完整出貨 runner；Spec 為 0 suggestion，Standards 另保留 3 個不影響正確性的重構建議，發布 v0.30.0。
