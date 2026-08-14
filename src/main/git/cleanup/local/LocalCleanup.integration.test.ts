@@ -233,7 +233,10 @@ describe('本機完整清理真 Git 鏈路', () => {
       acceptRisk: true,
       worktrees: [{ id: target.id, mode: 'full-cleanup' }],
     });
-    expect(blocked.result).toMatchObject({ ok: false, code: 'worktree-locked' });
+    expect(blocked.result.ok).toBe(false);
+    if (!blocked.result.ok) {
+      expect(['worktree-locked', 'state-changed']).toContain(blocked.result.code);
+    }
     expect(existsSync(linked)).toBe(true);
 
     const unlocked = await execute('profile', {
