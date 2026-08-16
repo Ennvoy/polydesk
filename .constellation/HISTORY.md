@@ -1,3 +1,9 @@
+## 2026-08-17 可恢復的分支、worktree 與遠端完整清理
+- 完成 5 張票：共用 preview／lease／journal 基礎、本機與遠端清理引擎、兩階段 SCM 操作，以及側欄頂部工具列降噪。
+- 影響 main Git／cleanup／journal、shared IPC、renderer SCM／Dock 版面、完整指南與真 Git／Electron 測試；舊名稱式破壞性刪除入口停用。
+- 關鍵決策為 `decisions/042`–`084`；出貨修正提交 `75345cc`，Standards／Spec 最終皆 0 blocker、0 suggestion。
+- 完整 ship runner 20/20：Vitest 626/626、115 個非豁免 Electron E2E 全綠、3 個真 AI dogfood 跳過；v0.30.0 portable 已驗證 PE／asar 版本與 SHA-256。
+
 ## 2026-08-12 portable 單一動畫啟動畫面
 - 修正自解壓靜態 BMP 無法轉動、關閉後又跳出 Electron splash 的雙重啟動畫面。
 - 移除 `portable.splashImage` 與 BMP 資產；自解壓完成後只保留既有 Electron 動畫 splash，接受自解壓期間短暫無畫面的取捨。

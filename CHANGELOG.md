@@ -11,7 +11,7 @@
 
 Git 分支與 worktree 現在共用同一套可恢復完整清理流程；側欄切換入口也移到受控內容正上方，減少工作區管理與側欄檢視混在一起的認知負擔。
 
-- 對應功能 commits：`c871d8a`、`ec33f61`、`70d3d74`、`01339c9`、`f64aa9a`、`1619f45`、`fe91716`。
+- 對應功能 commits：`c871d8a`、`ec33f61`、`70d3d74`、`01339c9`、`f64aa9a`、`1619f45`、`fe91716`、`75345cc`。
 
 ### 2026-08-13｜可恢復的分支／worktree 完整清理與側欄頂部入口
 
@@ -32,7 +32,8 @@ Git 分支與 worktree 現在共用同一套可恢復完整清理流程；側欄
 - T-008 票級 runner 4/4 指令通過：typecheck、正式 build、16 個目標 Vitest 檔 89/89，以及 8 個真 Electron 清理 E2E 全綠。
 - 真 Electron 直接驗證已合併／未合併風險、目前分支切換、worktree 三種範圍、遠端 tip 變動、多 endpoint 部分失敗、重啟待辦與繼續收斂，並查驗真實 refs、worktree 登記、資料夾與 bare remote 最終狀態。
 - 最終 ship runner 20/20 指令全數 exit 0，總耗時 1,962 秒：typecheck、正式 build、77 個 Vitest 檔 626/626，以及 12 個單 worker Electron E2E shard 共 115 通過；3 個需真 AI 帳號的 dogfood 依條件跳過，`REQ-PERF-001` 依既有核准豁免分離。
-- Standards 複核發現 endpoint 技術細節可能殘留到後續不相干錯誤，修正後以 typecheck、build 與遠端多 endpoint 部分失敗真 Electron 案例重驗；最終 Standards／Spec 均為 0 blocker、0 suggestion。完整 runner 證據簽章 `adf2926ff98a9fab76ef452f544877569c6c550fb1ab305291fc09306fd032bb`。
+- Standards 複核發現 endpoint 技術細節可能殘留到後續不相干錯誤，修正後以 typecheck、build 與遠端多 endpoint 部分失敗真 Electron 案例重驗；最終 Standards／Spec 均為 0 blocker、0 suggestion。完整 runner 證據簽章 `adf2926ff98a9fab76ef452f544877569c6c550fb1ab305291fc09306fd032bb`，歸檔於 `.constellation/archive/2026-08-17-recoverable-branch-worktree-remote-cleanup/ship-evidence.md`。
+- portable 成品 `Polydesk-0.30.0-portable.exe` 為 95,884,822 bytes，SHA-256 `15C2832077500FA5696BAA6446E1BB9DE8D98D5B78B08743750EF583C28C5123`；PE ProductVersion、app.asar `package.json` 與來源版本皆為 0.30.0。沿用既有未簽章交付方式，electron-builder 未找到簽章資訊並明確跳過簽署。
 
 ## v0.29.0（2026-08-12）
 

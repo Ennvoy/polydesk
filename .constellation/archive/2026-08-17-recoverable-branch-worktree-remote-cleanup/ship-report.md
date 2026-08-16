@@ -16,6 +16,6 @@
 
 ## 證據在哪
 
-- 全量 runner 指令、輸出、耗時與簽章：`.constellation/ship-evidence.md`。
-- 逐票正式驗證與 Standards／Spec 結論：`.constellation/tickets/T-005` 至 `T-009` 對應票檔。
-- 視覺核准與解凍脈絡：`.constellation/design-frozen.json`、`.constellation/decisions/080`、`083`、`084`。
+- 全量 runner 指令、輸出、耗時與簽章：本歸檔目錄的 `ship-evidence.md`。
+- 逐票正式驗證與 Standards／Spec 結論：本歸檔目錄 `tickets/T-005` 至 `T-009` 對應票檔。
+- 視覺核准與解凍脈絡：本歸檔目錄 `design-frozen.json`，以及仍留在主目錄的 `.constellation/decisions/080`、`083`、`084`。
