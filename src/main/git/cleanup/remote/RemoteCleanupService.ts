@@ -109,7 +109,7 @@ export class RemoteCleanupService {
   }
 
   /** 只有 renderer 已明確 opt-in 遠端清理時才呼叫；本方法會連線所有 effective push endpoints。 */
-  async discover(cwd: string, branch: string, localBranch = branch): Promise<RemoteCleanupPlan> {
+  async discover(cwd: string, branch: string, localBranch = branch, ownClaimId?: string): Promise<RemoteCleanupPlan> {
     if (!validateRef(branch) || !validateRef(localBranch)) throw new Error('無效的本地或遠端分支名稱。');
     const localTargetRef = `refs/heads/${localBranch}`;
     const [
@@ -232,7 +232,7 @@ export class RemoteCleanupService {
       localIdentityAfterTargetDeleteDigest: localIdentityDigest(localIdentity, localTargetRef),
       endpointConfigDigest: outputDigest(endpointConfig),
       refspecDigest: canonicalRefspecDigest(fetchRecords),
-      conflictDigest: await this.guard.snapshot(cwd),
+      conflictDigest: await this.guard.snapshot(cwd, ownClaimId),
       endpoints: internalEndpoints.map(({ rawEndpoint: _rawEndpoint, ...endpoint }) => endpoint),
       trackingRefs,
     };

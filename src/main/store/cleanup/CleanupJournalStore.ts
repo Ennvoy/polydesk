@@ -126,7 +126,10 @@ export class CleanupJournalStore {
     return this.withLock(() => {
       const rebuilt = this.rebuildClaimsUnsafe();
       if (rebuilt.globalBlocked) throw new CleanupStoreError('global-blocked', '清理儲存區存在無法歸屬的狀態。');
-      if (rebuilt.claims.some((claim) => claim.repositoryFingerprint === input.repositoryFingerprint)) {
+      if (rebuilt.claims.some((claim) =>
+        claim.repositoryFingerprint === input.repositoryFingerprint
+        || claim.repositoryGeneration === input.repositoryGeneration,
+      )) {
         throw new CleanupStoreError('active-cleanup', '此 repository 已有未完成的本機清理。');
       }
       const journalId = randomUUID();
@@ -286,6 +289,47 @@ export class CleanupJournalStore {
     return { envelope, payload };
   }
 
+  rebindActiveJournal(input: {
+    journalId: string;
+    repositoryFingerprint: string;
+    repositoryGeneration: string;
+    payload: unknown;
+  }): JournalEnvelopeBase {
+    return this.withLock(() => {
+      const rebuilt = this.rebuildClaimsUnsafe();
+      if (rebuilt.globalBlocked) throw new CleanupStoreError('global-blocked', '清理儲存區存在無法歸屬的狀態。');
+      if (rebuilt.claims.some((claim) => claim.journalId !== input.journalId && (
+        claim.repositoryFingerprint === input.repositoryFingerprint
+        || claim.repositoryGeneration === input.repositoryGeneration
+      ))) {
+        throw new CleanupStoreError('active-cleanup', '此 repository 已有另一份未完成的本機清理。');
+      }
+      const envelopePath = this.envelopePath(this.activeDir, input.journalId);
+      const payloadPath = this.payloadPath(this.activeDir, input.journalId);
+      const current = this.readEnvelope(envelopePath);
+      let currentPayload: unknown;
+      try {
+        currentPayload = JSON.parse(readFileSync(payloadPath, 'utf8')) as unknown;
+      } catch {
+        throw new CleanupStoreError('invalid-payload', 'journal payload 無法解析。');
+      }
+      if (digest(currentPayload) !== current.payloadChecksum) {
+        throw new CleanupStoreError('invalid-payload', 'journal payload checksum 已變更。');
+      }
+      if (current.repositoryGeneration !== input.repositoryGeneration) {
+        throw new CleanupStoreError('repository-generation-changed', 'journal 不屬於目前的 repository 實例。');
+      }
+      this.atomicWriteJson(payloadPath, input.payload);
+      const next = this.nextEnvelope(current, {
+        repositoryFingerprint: input.repositoryFingerprint,
+        payloadChecksum: digest(input.payload),
+      });
+      this.atomicWriteJson(envelopePath, next);
+      this.writeClaims(this.scanCanonicalClaims().claims);
+      return next;
+    });
+  }
+
   readActiveEnvelope(journalId: string): JournalEnvelopeBase {
     return this.readEnvelope(this.envelopePath(this.activeDir, journalId));
   }
@@ -315,16 +359,7 @@ export class CleanupJournalStore {
     return this.withLock(() => {
       mkdirSync(this.root, { recursive: true });
       const canonical = resolve(commonDir);
-      let stat: ReturnType<typeof statSync>;
-      try {
-        stat = statSync(canonical, { bigint: true });
-      } catch {
-        throw new CleanupStoreError('repository-identity-unknown', '無法讀取 repository common-dir 身分。');
-      }
-      const fileIdentity = `${stat.dev}:${stat.ino}:${stat.birthtimeNs}`;
-      if (stat.ino === 0n && stat.dev === 0n) {
-        throw new CleanupStoreError('repository-identity-unknown', '平台未提供穩定 filesystem identity。');
-      }
+      const fileIdentity = this.fileIdentity(canonical);
       const fingerprint = sha256(process.platform === 'win32' ? canonical.toLowerCase() : canonical);
       const registry = this.readIdentityRegistry();
       const sameInstance = registry.entries.find((entry) => entry.fileIdentity === fileIdentity && entry.evidenceDigest === evidenceDigest);
@@ -344,6 +379,14 @@ export class CleanupJournalStore {
       this.writeIdentityRegistry([...registry.entries, entry]);
       return { fingerprint, generation: entry.generation };
     });
+  }
+
+  /** SCM 輪詢只能讀取既有 identity registry，不得因狀態查詢改寫路徑或世代。 */
+  repositoryGenerations(commonDir: string): string[] {
+    const fileIdentity = this.fileIdentity(resolve(commonDir));
+    return [...new Set(this.readIdentityRegistry().entries
+      .filter((entry) => entry.fileIdentity === fileIdentity)
+      .map((entry) => entry.generation))];
   }
 
   repositoryFingerprint(commonDir: string): string {
@@ -514,6 +557,19 @@ export class CleanupJournalStore {
   private writeIdentityRegistry(entries: IdentityEntry[]): void {
     const body: IdentityRegistryBody = { schemaVersion: SCHEMA_VERSION, entries };
     this.atomicWriteJson(this.identitiesPath, withChecksum(body, 'checksum'));
+  }
+
+  private fileIdentity(commonDir: string): string {
+    let stat: ReturnType<typeof statSync>;
+    try {
+      stat = statSync(commonDir, { bigint: true });
+    } catch {
+      throw new CleanupStoreError('repository-identity-unknown', '無法讀取 repository common-dir 身分。');
+    }
+    if (stat.ino === 0n && stat.dev === 0n) {
+      throw new CleanupStoreError('repository-identity-unknown', '平台未提供穩定 filesystem identity。');
+    }
+    return `${stat.dev}:${stat.ino}:${stat.birthtimeNs}`;
   }
 
   private withLock<T>(fn: () => T): T {

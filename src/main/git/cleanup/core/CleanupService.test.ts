@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { StateStore } from '../../../store/StateStore';
+import { CleanupJournalStore } from '../../../store/cleanup/CleanupJournalStore';
 import { WorkspaceManager } from '../../../workspace/WorkspaceManager';
 import { WorkspaceLifecycle } from '../../../workspace/workspaceLifecycle';
 import { CleanupService } from './CleanupService';
@@ -108,6 +109,64 @@ describe('CleanupService compare-and-prepare', () => {
     expect(await service.cancelPrepared(wsId, executed.journalId)).toEqual({ ok: true });
     expect(service.status().journals).toEqual([]);
   }, 120_000);
+
+  it('中斷後留下的 prepared 完整計畫會連同切換與 worktree 範圍重驗後取消', async () => {
+    const sidePath = join(root, 'side-worktree');
+    git(repo, 'branch', 'side');
+    git(repo, 'worktree', 'add', sidePath, 'side');
+    const initial = await service.preview({ wsId, branch: 'main', switchTo: 'profile' });
+    if (!initial.ok) throw new Error(JSON.stringify(initial));
+    const side = initial.snapshot.worktrees.find((worktree) => worktree.branch === 'side');
+    if (!side) throw new Error('missing side worktree');
+    const preview = await service.preview({
+      wsId,
+      branch: 'main',
+      switchTo: 'profile',
+      removeWorktreeIds: [side.id],
+    });
+    if (!preview.ok) throw new Error(JSON.stringify(preview));
+    const request = {
+      wsId,
+      branch: 'main',
+      leaseToken: preview.leaseToken,
+      localPlan: {
+        switchTo: 'profile',
+        worktrees: [{ id: side.id, mode: 'full-cleanup' as const }],
+      },
+      confirmation: { forceLocal: false, acceptExternalWriteRisk: true, remoteTargets: [] },
+    };
+    const store = new CleanupJournalStore(userData);
+    const commonDir = git(repo, 'rev-parse', '--path-format=absolute', '--git-common-dir');
+    const identity = store.resolveRepositoryIdentity(commonDir, preview.snapshot.repository.evidenceDigest);
+    const prepared = store.createPrepared({
+      repositoryFingerprint: identity.fingerprint,
+      repositoryGeneration: identity.generation,
+      payload: { schemaVersion: 1 as const, leaseToken: preview.leaseToken, request, preview, checkpoints: [] },
+    });
+
+    expect(await service.cancelPrepared(wsId, prepared.journalId)).toEqual({ ok: true });
+    expect(git(repo, 'branch', '--show-current')).toBe('main');
+    expect(existsSync(sidePath)).toBe(true);
+  }, 180_000);
+
+  it('prepared payload 被竄改時取消會 fail-closed 並保留 claim', async () => {
+    const preview = await service.preview({ wsId, branch: 'profile' });
+    if (!preview.ok) throw new Error(JSON.stringify(preview));
+    const prepared = await service.execute({
+      wsId,
+      branch: 'profile',
+      leaseToken: preview.leaseToken,
+      confirmation: { forceLocal: false, acceptExternalWriteRisk: false, remoteTargets: [] },
+    });
+    if (!prepared.ok) throw new Error(JSON.stringify(prepared));
+    writeFileSync(join(userData, 'branch-cleanup', 'active', `${prepared.journalId}.payload.json`), '{"tampered":true}', 'utf8');
+
+    await expect(service.cancelPrepared(wsId, prepared.journalId)).resolves.toMatchObject({ ok: false });
+    expect(new CleanupJournalStore(userData).peek().claims).toContainEqual(expect.objectContaining({
+      journalId: prepared.journalId,
+      phase: 'prepared',
+    }));
+  }, 180_000);
 
   it('mutating 尚無任何 checkpoint 且完整 pre-state 一致時可在恢復階段降回 prepared', async () => {
     const preview = await service.preview({ wsId, branch: 'profile' });
@@ -259,6 +318,110 @@ describe('CleanupService compare-and-prepare', () => {
       error: expect.stringContaining('不是建立 journal 時的 repository 實例'),
     });
   }, 180_000);
+
+  it('repository 搬移並重新納管後仍依同一實體世代顯示待辦並完成恢復', async () => {
+    const bare = join(root, 'move-resume.git');
+    mkdirSync(bare, { recursive: true });
+    git(bare, 'init', '--bare');
+    git(repo, 'remote', 'add', 'origin', bare);
+    git(repo, 'push', 'origin', 'main', 'profile');
+    git(bare, 'config', 'receive.denyDeletes', 'true');
+    const preview = await service.preview({ wsId, branch: 'profile', remoteTargets: [{ remote: 'origin', branch: 'profile' }] });
+    if (!preview.ok) throw new Error(JSON.stringify(preview));
+    const partial = await service.execute({
+      wsId,
+      branch: 'profile',
+      leaseToken: preview.leaseToken,
+      localPlan: { worktrees: [] },
+      confirmation: { forceLocal: false, acceptExternalWriteRisk: false, remoteTargets: [{ remote: 'origin', branch: 'profile' }] },
+    });
+    expect(partial).toMatchObject({ ok: false, code: 'remote-cleanup-failed', journalId: expect.any(String) });
+    if (partial.ok) return;
+    if (!partial.journalId) throw new Error('missing recovery journal');
+    const journalId = partial.journalId;
+
+    const moved = join(root, 'repo-moved');
+    renameSync(repo, moved);
+    workspaces.delistOnly(wsId);
+    const reboundWorkspace = workspaces.add({ path: moved });
+    if (!('id' in reboundWorkspace)) throw new Error('rebound workspace setup failed');
+    await expect(service.statusForWorkspace(reboundWorkspace.id)).resolves.toMatchObject({
+      journals: [expect.objectContaining({ journalId, phase: 'mutating' })],
+    });
+
+    git(bare, 'config', 'receive.denyDeletes', 'false');
+    await expect(service.resume({ wsId: reboundWorkspace.id, journalId })).resolves.toMatchObject({
+      ok: true,
+      phase: 'closed',
+    });
+    expect(() => git(bare, 'show-ref', '--verify', 'refs/heads/profile')).toThrow();
+    await expect(service.statusForWorkspace(reboundWorkspace.id)).resolves.toMatchObject({ journals: [] });
+  }, 300_000);
+
+  it('prepared 計畫在 repository 搬移並重新納管後仍可零副作用取消', async () => {
+    const preview = await service.preview({ wsId, branch: 'profile' });
+    if (!preview.ok) throw new Error(JSON.stringify(preview));
+    const prepared = await service.execute({
+      wsId,
+      branch: 'profile',
+      leaseToken: preview.leaseToken,
+      confirmation: { forceLocal: false, acceptExternalWriteRisk: false, remoteTargets: [] },
+    });
+    if (!prepared.ok) throw new Error(JSON.stringify(prepared));
+    const targetOid = git(repo, 'rev-parse', 'refs/heads/profile');
+
+    const moved = join(root, 'prepared-moved');
+    renameSync(repo, moved);
+    workspaces.delistOnly(wsId);
+    const reboundWorkspace = workspaces.add({ path: moved });
+    if (!('id' in reboundWorkspace)) throw new Error('rebound workspace setup failed');
+    await expect(service.statusForWorkspace(reboundWorkspace.id)).resolves.toMatchObject({
+      journals: [expect.objectContaining({ journalId: prepared.journalId, phase: 'prepared', canCancel: true })],
+    });
+
+    await expect(service.cancelPrepared(reboundWorkspace.id, prepared.journalId)).resolves.toEqual({ ok: true });
+    expect(git(moved, 'rev-parse', 'refs/heads/profile')).toBe(targetOid);
+    expect(git(moved, 'branch', '--show-current')).toBe('main');
+    await expect(service.statusForWorkspace(reboundWorkspace.id)).resolves.toMatchObject({ journals: [] });
+  }, 240_000);
+
+  it('含遠端目標的 prepared 計畫搬移後忽略新 nonce 並在零副作用下取消', async () => {
+    const bare = join(root, 'prepared-remote.git');
+    mkdirSync(bare, { recursive: true });
+    git(bare, 'init', '--bare');
+    git(repo, 'remote', 'add', 'origin', bare);
+    git(repo, 'push', 'origin', 'main', 'profile');
+    const remoteTargets = [{ remote: 'origin', branch: 'profile' }];
+    const preview = await service.preview({ wsId, branch: 'profile', remoteTargets });
+    if (!preview.ok) throw new Error(JSON.stringify(preview));
+    const request = {
+      wsId,
+      branch: 'profile',
+      leaseToken: preview.leaseToken,
+      confirmation: { forceLocal: false, acceptExternalWriteRisk: true, remoteTargets },
+    };
+    const store = new CleanupJournalStore(userData);
+    const commonDir = git(repo, 'rev-parse', '--path-format=absolute', '--git-common-dir');
+    const identity = store.resolveRepositoryIdentity(commonDir, preview.snapshot.repository.evidenceDigest);
+    const prepared = store.createPrepared({
+      repositoryFingerprint: identity.fingerprint,
+      repositoryGeneration: identity.generation,
+      payload: { schemaVersion: 1 as const, leaseToken: preview.leaseToken, request, preview, checkpoints: [] },
+    });
+    const localOid = git(repo, 'rev-parse', 'refs/heads/profile');
+    const remoteOid = git(bare, 'rev-parse', 'refs/heads/profile');
+
+    const moved = join(root, 'prepared-remote-moved');
+    renameSync(repo, moved);
+    workspaces.delistOnly(wsId);
+    const reboundWorkspace = workspaces.add({ path: moved });
+    if (!('id' in reboundWorkspace)) throw new Error('rebound workspace setup failed');
+
+    await expect(service.cancelPrepared(reboundWorkspace.id, prepared.journalId)).resolves.toEqual({ ok: true });
+    expect(git(moved, 'rev-parse', 'refs/heads/profile')).toBe(localOid);
+    expect(git(bare, 'rev-parse', 'refs/heads/profile')).toBe(remoteOid);
+    await expect(service.statusForWorkspace(reboundWorkspace.id)).resolves.toMatchObject({ journals: [] });
+  }, 300_000);
 
   it('quarantine 待辦依 repository fingerprint 隔離到正確工作區', async () => {
     const preview = await service.preview({ wsId, branch: 'profile' });

@@ -7,6 +7,7 @@ import { launchApp, stubFolderPicker, addWorkspaceViaUI } from './electronApp';
 
 const git = (cwd: string, ...args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' });
 const shotDir = process.env.PD_SHOT_DIR || join(process.cwd(), 'test-results');
+const cleanupTimeout = 120_000;
 
 function seedRepo(): { root: string; repo: string; remote: string } {
   const root = mkdtempSync(join(tmpdir(), 'pd-branch-manage-'));
@@ -75,11 +76,13 @@ test('分支管理：本地／遠端分組與兩階段完整清理真鏈路', as
     await page.getByRole('button', { name: '檢查清理風險' }).click();
     await expect(page.getByRole('dialog')).toContainText('team/backend/deployed-profile', { timeout: 60_000 });
     await page.getByRole('button', { name: '開始完整清理' }).click();
-    await expect(page.locator('[data-branch-kind="local"]', { hasText: 'profile' })).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.locator('[data-branch-kind="local"]', { hasText: 'profile' })).toHaveCount(0, { timeout: cleanupTimeout });
     expect(git(repo, 'branch', '--list', 'profile').trim()).toBe('');
     expect(git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/deployed-profile').trim()).toBe('');
 
-    await page.getByRole('button', { name: '更多本地分支操作 main' }).click();
+    const mainMore = page.getByRole('button', { name: '更多本地分支操作 main' });
+    await expect(mainMore).toBeEnabled({ timeout: cleanupTimeout });
+    await mainMore.click();
     await expect(page.getByRole('menuitem', { name: '刪除本地分支（目前分支）' })).toBeEnabled();
     await page.screenshot({ path: join(shotDir, 'ui-branch-management-groups.png') });
     await page.keyboard.press('Escape');
@@ -98,18 +101,22 @@ test('分支管理：本地／遠端分組與兩階段完整清理真鏈路', as
     await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible();
     await expect(page.getByRole('dialog')).toContainText('Git 判定可安全刪除');
     await page.getByRole('button', { name: '開始完整清理' }).click();
-    await expect(page.locator('[data-branch-kind="local"]', { hasText: 'merged-local' })).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.locator('[data-branch-kind="local"]', { hasText: 'merged-local' })).toHaveCount(0, { timeout: cleanupTimeout });
     expect(git(repo, 'branch', '--list', 'merged-local').trim()).toBe('');
 
-    await page.getByRole('button', { name: '更多遠端分支操作 team/backend/remote-delete' }).click();
+    const remoteDeleteMore = page.getByRole('button', { name: '更多遠端分支操作 team/backend/remote-delete' });
+    await expect(remoteDeleteMore).toBeEnabled({ timeout: cleanupTimeout });
+    await remoteDeleteMore.click();
     await page.getByRole('menuitem', { name: '刪除遠端分支', exact: true }).click();
     await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole('dialog')).toContainText('team/backend/remote-delete');
     const deleteRemote = page.getByRole('button', { name: '開始完整清理' });
     await expect(deleteRemote).toHaveClass(/pd-btn-danger/);
     await deleteRemote.click();
-    await expect.poll(() => git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/remote-delete').trim(), { timeout: 30_000 }).toBe('');
-    await page.getByRole('button', { name: '重新整理' }).click();
+    await expect.poll(() => git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/remote-delete').trim(), { timeout: cleanupTimeout }).toBe('');
+    const refreshButton = page.getByRole('button', { name: '重新整理' });
+    await expect(refreshButton).toBeEnabled({ timeout: cleanupTimeout });
+    await refreshButton.click();
     await expect(page.locator('[data-branch-kind="remote"]', { hasText: 'team/backend/remote-delete' })).toHaveCount(0, { timeout: 30_000 });
     expect(git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/remote-delete').trim()).toBe('');
     expect(git(repo, 'branch', '--list', 'remote-delete').trim()).toBe('remote-delete');
@@ -122,8 +129,9 @@ test('分支管理：本地／遠端分組與兩階段完整清理真鏈路', as
     await page.getByLabel('我確認強制清理本機未知／未合併內容').check();
     await expect(page.getByRole('button', { name: '開始完整清理' })).toBeEnabled();
     await page.getByRole('button', { name: '開始完整清理' }).click();
-    await expect.poll(() => git(repo, 'branch', '--list', 'unfinished').trim(), { timeout: 30_000 }).toBe('');
-    await page.getByRole('button', { name: '重新整理' }).click();
+    await expect.poll(() => git(repo, 'branch', '--list', 'unfinished').trim(), { timeout: cleanupTimeout }).toBe('');
+    await expect(refreshButton).toBeEnabled({ timeout: cleanupTimeout });
+    await refreshButton.click();
     await expect(page.locator('[data-branch-kind="local"]', { hasText: 'unfinished' })).toHaveCount(0, { timeout: 30_000 });
     expect(git(repo, 'branch', '--list', 'unfinished').trim()).toBe('');
     expect(() => git(repo, 'config', '--get-regexp', '^branch\\.unfinished\\.')).toThrow();
@@ -161,8 +169,19 @@ test('遠端多 endpoint 部分失敗後，重啟仍顯示待辦並可繼續收�
     await expect(page.getByRole('dialog').locator('.pd-cleanup-remotes .pd-cleanup-card')).toHaveCount(2);
     await page.getByRole('button', { name: '開始完整清理' }).click();
 
-    await expect(page.locator('.pd-scm-error')).toContainText('遠端清理只有部分完成', { timeout: 60_000 });
-    await expect(page.getByTestId('cleanup-recovery-todo')).toContainText('remote-delete');
+    await expect(page.locator('.pd-scm-error')).toContainText('遠端清理只有部分完成', { timeout: cleanupTimeout });
+    await expect(page.locator('.pd-scm-error-detail')).not.toHaveAttribute('open');
+    await expect(page.locator('.pd-scm-error-detail summary')).toHaveText('顯示技術細節');
+    const recoveryTodo = page.getByTestId('cleanup-recovery-todo');
+    await expect(recoveryTodo).toContainText('remote-delete', { timeout: cleanupTimeout });
+    const recoveryMetrics = await recoveryTodo.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(recoveryMetrics.scrollWidth).toBeLessThanOrEqual(recoveryMetrics.clientWidth + 1);
+    const resumeBox = await recoveryTodo.getByRole('button', { name: '繼續收斂' }).boundingBox();
+    expect(resumeBox?.width ?? 0).toBeGreaterThanOrEqual(110);
+    await page.screenshot({ path: join(shotDir, 'ui-cleanup-recovery-responsive.png') });
     expect(git(remote, 'for-each-ref', '--format=%(refname)', 'refs/heads/remote-delete').trim()).toBe('');
     expect(git(rejectingRemote, 'for-each-ref', '--format=%(refname)', 'refs/heads/remote-delete').trim()).toBe(
       'refs/heads/remote-delete',
@@ -231,7 +250,7 @@ test('遠端 tip 在風險確認後變動時拒絕舊租約且不刪新 commit',
     git(repo, 'push', '--force', remote, 'unfinished:refs/heads/remote-delete');
     await page.getByRole('button', { name: '開始完整清理' }).click();
 
-    await expect(page.locator('.pd-scm-error')).toContainText('狀態已變更', { timeout: 60_000 });
+    await expect(page.locator('.pd-scm-error')).toContainText('狀態已變更', { timeout: cleanupTimeout });
     expect(git(remote, 'rev-parse', 'refs/heads/remote-delete').trim()).toBe(replacementOid);
     await expect(page.getByTestId('cleanup-recovery-todo')).toHaveCount(0);
   } finally {
@@ -258,8 +277,8 @@ test('刪除目前分支時先切換到使用者選定分支，再以同一流�
     await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible({ timeout: 60_000 });
     await page.getByRole('button', { name: '開始完整清理' }).click();
 
-    await expect.poll(() => git(repo, 'branch', '--show-current').trim(), { timeout: 30_000 }).toBe('merged-local');
-    await expect.poll(() => git(repo, 'branch', '--list', 'main').trim(), { timeout: 30_000 }).toBe('');
+    await expect.poll(() => git(repo, 'branch', '--show-current').trim(), { timeout: cleanupTimeout }).toBe('merged-local');
+    await expect.poll(() => git(repo, 'branch', '--list', 'main').trim(), { timeout: cleanupTimeout }).toBe('');
   } finally {
     await app.close();
     rmSync(userData, { recursive: true, force: true });

@@ -97,3 +97,8 @@ zone: src/shared/gitCleanup.ts, src/shared/ipc.ts, src/main/git/GitService.ts, s
     ```
   - 耗時：合計 329s｜cmd /c npm run typecheck -- --pretty false 6s｜cmd /c npm test -- --maxWorkers=1 --minWorkers=1 src/renderer/components/SourceControl src/renderer/components/Worktree src/renderer/components/Help src/main/git/cleanup 152s｜cmd /c npm run build 36s｜cmd /c npm run e2e -- --workers=1 e2e/git-branch-management.spec.ts e2e/worktree.spec.ts 134s
   - sig: 28e80d8cacfab2a6a5adc547c2eaef219bc3a16e47604dc2da907c95b9862476
+
+## 出貨雙軸複核（2026-08-17）
+
+- Standards：發現 endpoint 技術細節可能殘留到後續不相干錯誤的狀態污染；已讓每次設定一般錯誤時同步清空舊 detail，並通過 typecheck、build 與遠端多 endpoint 部分失敗真 Electron 回歸。修正後 0 blocker、0 suggestion。
+- Spec：逐條核對 8 項驗收條件、程式內完整指南、兩階段操作、恢復卡響應式呈現與完整 ship runner；決議 080／083／084 的解凍均有使用者授權且已重新凍結，0 blocker、0 suggestion。

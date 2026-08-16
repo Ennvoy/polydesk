@@ -1,0 +1,40 @@
+.pd-docklayout-toolbar {
+  gap: 2px !important;
+  padding-inline: var(--space-2);
+  background: var(--bg);
+}
+
+.pd-docklayout-toolbar .pd-layout-btn {
+  min-height: 28px;
+  padding: 3px 9px;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-2);
+  box-shadow: none;
+}
+
+.pd-docklayout-toolbar .pd-layout-btn:hover {
+  background: var(--surface-warm);
+  color: var(--fg);
+}
+
+.pd-docklayout-toolbar .pd-layout-btn.is-active {
+  background: color-mix(in oklab, var(--accent), transparent 88%);
+  color: var(--fg);
+  box-shadow: inset 0 -2px var(--accent);
+}
+
+.pd-docklayout-toolbar .pd-layout-btn.is-active:hover {
+  background: color-mix(in oklab, var(--accent), transparent 82%);
+}
+
+.pd-docklayout-toolbar .pd-layout-btn:disabled {
+  color: var(--fg-2);
+  opacity: 0.8;
+}
+
+.pd-docklayout-toolbar .pd-layout-btn-reset {
+  color: var(--fg-2);
+  border-color: var(--border-soft);
+}

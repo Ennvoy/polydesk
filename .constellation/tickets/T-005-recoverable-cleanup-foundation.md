@@ -204,3 +204,8 @@ zone: src/shared/**, src/preload/**, src/main/git/cleanup/core/**, src/main/stor
     ```
   - 耗時：合計 263s｜cmd /c npm run typecheck -- --pretty false 17s｜cmd /c npm test -- --maxWorkers=1 --minWorkers=1 src/main/git/cleanup src/main/store 247s
   - sig: 16067753885fc2b23f9be1cd33b3b3b31a2c02320cad7940e65d90907437cd49
+
+## 出貨雙軸複核（2026-08-17）
+
+- Standards：從基準 `652ebe4` 檢查 shared IPC、repository queue、lease、journal、claim、quarantine 與失敗收斂邊界；0 blocker、0 suggestion。
+- Spec：逐條核對 6 項驗收條件、票面證據與完整 ship runner；preview 零副作用、互斥、checksum／generation 驗證與恢復契約皆有真鏈路證據，0 blocker、0 suggestion。

@@ -2,10 +2,12 @@
 // 顯隱改 group.setVisible（不 dispose、不移除 DOM）後，以 toolbar 鈕的 aria-pressed（= 單一真相
 // panelVisibleById/group.isVisible）判顯隱；顯示時另以空狀態文字可見性 sanity。
 import { test, expect } from '@playwright/test';
-import { rmSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { launchApp } from './electronApp';
 
 const TERM_MARK = '請先選擇工作區後再開啟終端機'; // 終端機面板空狀態文字（顯示時可見性 sanity）
+const shotDir = process.env.PD_SHOT_DIR || join(process.cwd(), 'test-results');
 
 test('F-10：終端機顯隱 / 一鍵重設 / 重啟還原', async () => {
   const first = await launchApp();
@@ -14,15 +16,21 @@ test('F-10：終端機顯隱 / 一鍵重設 / 重啟還原', async () => {
   const termToggle = page.locator('button[aria-label="切換終端機顯示"]');
   // 終端機預設可見
   await expect(termToggle).toHaveAttribute('aria-pressed', 'true', { timeout: 12000 });
+  await expect(termToggle).toHaveClass(/is-active/);
+  await expect(termToggle).not.toHaveClass(/pd-btn-primary/);
   await expect(page.getByText(TERM_MARK)).toBeVisible({ timeout: 12000 });
+  mkdirSync(shotDir, { recursive: true });
+  await page.screenshot({ path: join(shotDir, 'ui-layout-toolbar-refined.png') });
 
   // 切換終端機顯示 → 隱藏（setVisible(false)：toolbar 態反映不可見、splitview 收容器騰空間）
   await termToggle.click();
   await expect(termToggle).toHaveAttribute('aria-pressed', 'false', { timeout: 8000 });
+  await expect(termToggle).not.toHaveClass(/is-active/);
 
   // 再切換 → 回來
   await termToggle.click();
   await expect(termToggle).toHaveAttribute('aria-pressed', 'true', { timeout: 8000 });
+  await expect(termToggle).toHaveClass(/is-active/);
   await expect(page.getByText(TERM_MARK)).toBeVisible({ timeout: 8000 });
 
   // 隱藏終端機 → 關閉 → 重啟同 userData → 仍隱藏（持久化還原）

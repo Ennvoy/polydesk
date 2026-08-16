@@ -15,7 +15,7 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 | 功能 | 說明 |
 | --- | --- |
 | **多工作區** | 左側工作區列（可顯示/隱藏）切換專案；可加入既有資料夾，或透過 HTTPS／SSH Clone Git Repository 後直接開啟；GitHub 私有倉庫支援瀏覽器登入帳號並自動重試；每個工作區獨立狀態。 |
-| **側欄頂部功能列** | 檔案總管、搜尋、原始碼控制與設定集中在側欄頂部，貼近實際切換的內容；工作區欄只管理專案，SCM 變更角標與目前檢視狀態仍會即時更新。 |
+| **側欄頂部功能列** | 檔案總管、搜尋、原始碼控制與設定集中在側欄頂部，貼近實際切換的內容；工作區欄只管理專案，SCM 變更角標與目前檢視狀態仍會即時更新。版面顯隱工具列採低彩度底線狀態，避免與主要內容搶焦。 |
 | **首次導覽與使用說明** | 第一次啟動以 7 步短導覽介紹主要區域，完成或略過後不再自動打擾；可從「說明」或設定重新執行，並搜尋涵蓋操作、狀態與問題排除的完整指南。 |
 | **冷啟動開啟畫面** | portable 自解壓完成並啟動 Electron 後，只顯示一個具有轉圈動畫的輕量開啟畫面；工作區資料與 renderer 可操作後才顯示主視窗，啟動失敗可重試或退出。 |
 | **終端機多開** | 同一工作區可並排/上下多開終端機、可拖曳調整，支援 PowerShell 等 shell；Windows 內建 shell 以絕對路徑啟動，不受其他軟體重排 PATH 影響，啟動失敗會顯示原因；工具列可一鍵建立並啟動 Claude bypass、Codex 或 Agy，且會核對 xterm 與 ConPTY 的實際欄列一致後才啟動 TUI；所有終端機都直接使用完整 xterm 畫面，不再顯示左側內容／對話導覽軸；背景終端以較低成本持續接收資料；選取文字後可用 `Ctrl+C` 在終端機間複製貼上，未選取時仍送出中斷訊號；按住 `Ctrl` 點擊輸出的檔案路徑可直接開檔並跳到指定行欄，點擊 HTTP／HTTPS 網址則交由系統瀏覽器開啟。 |
@@ -60,6 +60,8 @@ AI 執行狀態監控使用 `SystemRoot` 下的 Windows PowerShell／WMIC 絕對
 第一階段只選擇範圍：本地分支、目前分支先切換的目標、linked worktree，以及逐個 opt-in 的遠端分支；本地分支若追蹤不同名稱的 upstream，也會在開啟遠端清理後預先勾選。按「檢查清理風險」前不建立 journal，也不修改 Git、磁碟或遠端。第二階段會即時顯示可能失去的 commit（歷史不完整時標示本機下限／unknown）、worktree 路徑與 dirty／locked／prunable、local ref／metadata，以及每個 effective push endpoint 與 expected OID；需要 force、解鎖或接受外部寫入殘餘風險時必須明確勾選。
 
 執行時會先重驗整份 lease，再以 repository 級 write-ahead journal 依序完成 worktree 移除、本地 ref CAS、branch config／reflog，最後才做遠端 compare-and-delete 與 tracking ref 收斂。認證、網路、受保護分支、遠端 tip 變動或 receive-pack 無法證明 ref 缺席時，結果會標示 stale／unknown，不會偽裝成功；SCM 會顯示逐步 checkpoint 並保留「完整清理待辦」。prepared 零副作用計畫可取消，mutating／reconciling 只能沿 checkpoint 繼續；payload 損壞進入 quarantine 時，只能匯入 checksum 完全相符的原始 journal 證據，不能靠確認文字解鎖。
+
+窄側欄中的清理待辦會改成直向排列，操作按鈕維持完整寬度；冗長 endpoint 與 Git 診斷原文預設收在「技術細節」內，需要排查時再展開，避免錯誤卡片擠成逐字斷行。
 
 在截圖工具、瀏覽器或通訊軟體複製圖片後，先點一下檔案總管中的目標資料夾，再按 `Ctrl+V`，圖片會存成 `貼上圖片.png`；若檔名已存在會自動建立 `貼上圖片 copy.png`，不會覆蓋舊檔。此流程同時支援某些軟體用「無磁碟路徑、通用 MIME 虛擬檔案」提供的圖片，且不依賴系統 `PATH`。從 Windows 檔案總管複製既有圖片檔時，仍會保留原始檔名與格式。
 

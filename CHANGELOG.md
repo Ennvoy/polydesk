@@ -7,7 +7,7 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
-## v0.30.0（2026-08-13）
+## v0.30.0（2026-08-17）
 
 Git 分支與 worktree 現在共用同一套可恢復完整清理流程；側欄切換入口也移到受控內容正上方，減少工作區管理與側欄檢視混在一起的認知負擔。
 
@@ -23,6 +23,7 @@ Git 分支與 worktree 現在共用同一套可恢復完整清理流程；側欄
 - 不同名稱的實際 upstream 會在使用者開啟遠端清理後預先勾選；單獨刪除 worktree 資料夾也必須再確認外部程序可能於確認後寫入的殘餘風險。
 - 舊名稱式 `git branch -d/-D` 與直接 `git push --delete` 破壞性產品旁路停用；worktree 不使用全域 prune，所有入口共用 repository queue、lease 與 journal。
 - 檔案總管、搜尋、原始碼控制與設定入口從工作區欄移到側欄頂部；工作區欄只管理專案，SCM 角標、active、tooltip、鍵盤與無障礙狀態維持不變。
+- 依真 Electron 畫面回饋降低版面顯隱工具列的彩度，以底線呈現開啟狀態；窄側欄的完整清理待辦改為直向響應式卡片，冗長 endpoint／Git 診斷預設折疊，並補足文字對比。
 - 首次 7 步導覽因 selector 與主要資訊架構維持相容而不調升版本；完整使用指南已同步兩階段操作、unknown／部分結果／恢復待辦與高風險提示。
 - 影響 renderer 側欄與 SCM、shared IPC／清理契約、main Git／journal／worktree／remote 清理服務、真 Git／Electron 回歸與發布文件；不變更使用者 repository schema 或環境變數。
 
@@ -30,7 +31,8 @@ Git 分支與 worktree 現在共用同一套可恢復完整清理流程；側欄
 
 - T-008 票級 runner 4/4 指令通過：typecheck、正式 build、16 個目標 Vitest 檔 89/89，以及 8 個真 Electron 清理 E2E 全綠。
 - 真 Electron 直接驗證已合併／未合併風險、目前分支切換、worktree 三種範圍、遠端 tip 變動、多 endpoint 部分失敗、重啟待辦與繼續收斂，並查驗真實 refs、worktree 登記、資料夾與 bare remote 最終狀態。
-- 完整 ship runner 覆蓋 typecheck、正式 build、序列 Vitest 與 12 個單 worker Electron E2E shard；Spec 複核為 0 blocker／0 suggestion，Standards 複核為 0 blocker，另保留 3 個不影響正確性的重構建議。
+- 最終 ship runner 20/20 指令全數 exit 0，總耗時 1,962 秒：typecheck、正式 build、77 個 Vitest 檔 626/626，以及 12 個單 worker Electron E2E shard 共 115 通過；3 個需真 AI 帳號的 dogfood 依條件跳過，`REQ-PERF-001` 依既有核准豁免分離。
+- Standards 複核發現 endpoint 技術細節可能殘留到後續不相干錯誤，修正後以 typecheck、build 與遠端多 endpoint 部分失敗真 Electron 案例重驗；最終 Standards／Spec 均為 0 blocker、0 suggestion。完整 runner 證據簽章 `adf2926ff98a9fab76ef452f544877569c6c550fb1ab305291fc09306fd032bb`。
 
 ## v0.29.0（2026-08-12）
 

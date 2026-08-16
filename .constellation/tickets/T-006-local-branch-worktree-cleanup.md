@@ -88,3 +88,8 @@ zone: src/main/git/cleanup/local/**, src/main/git/cleanup/core/CleanupGitRunner.
     ```
   - 耗時：合計 224s｜cmd /c npm run typecheck -- --pretty false 6s｜cmd /c npm test -- --maxWorkers=1 --minWorkers=1 src/main/git/cleanup/local src/main/git/cleanup/core src/main/git/GitService.worktree.test.ts src/main/workspace src/renderer/components/Worktree 218s
   - sig: 5895054610d2a1770d65ad36e6d90a686b7a0c4a28e38702e890259c6e94e5a8
+
+## 出貨雙軸複核（2026-08-17）
+
+- Standards：檢查本機 CAS、retained refs、worktree 八態、teardown 彙總失敗與舊 IPC 相容邊界；0 blocker、0 suggestion。
+- Spec：逐條核對 7 項驗收條件、票面證據與完整 ship runner；本機分支、dirty／locked／prunable worktree、metadata 與 workspace delist 行為皆有真 Git／檔案系統證據，0 blocker、0 suggestion。

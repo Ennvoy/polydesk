@@ -178,3 +178,8 @@ zone: src/main/git/cleanup/remote/**, src/main/git/cleanup/remote/**/*.test.ts
     ```
   - 耗時：合計 29s｜cmd /c npm run typecheck -- --pretty false 4s｜cmd /c npm test -- --maxWorkers=1 --minWorkers=1 src/main/git/cleanup/remote 25s
   - sig: 9a54b8b1cbd1e690ef11bc29fe63bb8ba23db8906632dc09310ea9d94b219120
+
+## 出貨雙軸複核（2026-08-17）
+
+- Standards：檢查 effective push endpoint、expected OID、refspec producer、symref、object graph 與 compare-and-delete 邊界；0 blocker、0 suggestion。
+- Spec：逐條核對 8 項驗收條件、票面證據與完整 ship runner；遠端 opt-in、端點租約、tip 競態、部分失敗 checkpoint 與 tracking ref 保留皆有真 Git 證據，0 blocker、0 suggestion。

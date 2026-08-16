@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { DockviewDefaultTab, DockviewReact } from 'dockview-react';
 import type { DockviewApi, DockviewReadyEvent, IDockviewPanelHeaderProps } from 'dockview';
 import 'dockview-core/dist/styles/dockview.css';
+import './DockLayout.css';
 import { dockviewComponents } from './panelRegistry';
 import { useTheme } from '../theme/ThemeProvider';
 import { ipc } from '../ipc/client';
@@ -467,7 +468,7 @@ export function DockLayout(): React.JSX.Element {
       >
         <button
           type="button"
-          className="pd-btn"
+          className="pd-btn pd-layout-btn"
           aria-label="開啟總覽"
           title="總覽（各工作區 AI 狀態 + 用量）"
           onClick={() => overviewBus.toggle()}
@@ -477,7 +478,7 @@ export function DockLayout(): React.JSX.Element {
         </button>
         <button
           type="button"
-          className={`pd-btn${railVisible ? ' pd-btn-primary' : ''}`}
+          className={`pd-btn pd-layout-btn${railVisible ? ' is-active' : ''}`}
           aria-label="切換工作區列顯示"
           aria-pressed={railVisible}
           title="顯示/隱藏工作區列"
@@ -488,7 +489,7 @@ export function DockLayout(): React.JSX.Element {
         </button>
         <button
           type="button"
-          className={`pd-btn${toolbar.sidebarVisible ? ' pd-btn-primary' : ''}`}
+          className={`pd-btn pd-layout-btn${toolbar.sidebarVisible ? ' is-active' : ''}`}
           aria-label="切換側欄顯示"
           aria-pressed={toolbar.sidebarVisible}
           title="顯示/隱藏側欄"
@@ -499,7 +500,7 @@ export function DockLayout(): React.JSX.Element {
         </button>
         <button
           type="button"
-          className={`pd-btn${toolbar.editorVisible ? ' pd-btn-primary' : ''}`}
+          className={`pd-btn pd-layout-btn${toolbar.editorVisible ? ' is-active' : ''}`}
           aria-label="切換編輯器顯示"
           aria-pressed={toolbar.editorVisible}
           title="顯示/隱藏編輯器"
@@ -510,7 +511,7 @@ export function DockLayout(): React.JSX.Element {
         </button>
         <button
           type="button"
-          className={`pd-btn${toolbar.terminalVisible ? ' pd-btn-primary' : ''}`}
+          className={`pd-btn pd-layout-btn${toolbar.terminalVisible ? ' is-active' : ''}`}
           aria-label="切換終端機顯示"
           aria-pressed={toolbar.terminalVisible}
           title="顯示/隱藏終端機"
@@ -521,7 +522,7 @@ export function DockLayout(): React.JSX.Element {
         </button>
         <button
           type="button"
-          className={`pd-btn${toolbar.maximized ? ' pd-btn-primary' : ''}`}
+          className={`pd-btn pd-layout-btn${toolbar.maximized ? ' is-active' : ''}`}
           aria-label="最大化終端機"
           aria-pressed={toolbar.maximized}
           title="最大化/還原終端機"
@@ -533,7 +534,7 @@ export function DockLayout(): React.JSX.Element {
         </button>
         <button
           type="button"
-          className="pd-btn"
+          className="pd-btn pd-layout-btn pd-layout-btn-reset"
           aria-label="重設版面"
           title="重設為預設版面"
           onClick={onReset}

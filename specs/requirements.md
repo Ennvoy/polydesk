@@ -99,9 +99,6 @@
 - **REQ-SCM-012**（遠端 opt-in）：遠端預設不選，每個 remote/branch 必須明確勾選；刪除以 receive-pack 可見的精確 ref 與 `--force-with-lease` expected OID 執行，hidden／查詢失敗／tip 變動回 unknown 或 stale，不得視為成功。
 - **REQ-SCM-013**（恢復）：prepared 且仍可證明零副作用的計畫可取消；mutating、reconciling 或 unknown 只能沿 journal checkpoint 繼續收斂。部分成功須列出已完成與可重試步驟，不重做已證明完成的遠端 endpoint、tracking ref 或本機步驟。
 - **REQ-SCM-014**（風險誠實）：shallow／partial clone／缺失 objects 時 commit 數標示本機下限或 unknown，遠端完整清理停用；刪 worktree 前明示確認後外部程序仍可能新增內容的殘餘風險。
-- **REQ-SCM-010**（分支分組）：分支頁應將本地與遠端分支分組顯示，各自提供數量與收合狀態；每列的更多按鈕與右鍵應使用同一套操作選單。
-- **REQ-SCM-011**（本地安全刪除）：本地分支刪除只能使用非強制的安全模式；目前分支、任一 worktree 使用中的分支與未合併分支不得刪除，並應具名顯示阻擋原因，不提供默認或隱藏的強制刪除路徑。
-- **REQ-SCM-012**（遠端精確刪除）：遠端刪除前應明示 remote 與 branch 及伺服器影響，成功時只刪除指定遠端分支並保留本地同名分支；remote 與 branch 應以結構化欄位傳遞，支援多 remote 與名稱含 `/` 的合法 remote，不得由顯示字串猜測身分。
 
 ### 4.6 Claude↔Playwright 網頁測試（REQ-PW）— 核心差異化
 > 設計定調（採用使用者實戰驗證）：**完全沿用官方 `@playwright/mcp`，app 不自建接線、不註冊 MCP、不管理 profile、不注入 env**。官方 MCP 依「啟動它的 claude 的工作目錄(cwd)」自動分流 persistent profile（在 `%LOCALAPPDATA%\ms-playwright`），故每個工作區的 claude 在自己資料夾 cwd 跑即自動獲得 per-workspace profile 隔離、可平行、零 repo 足跡。app 唯一責任＝終端機 cwd=工作區資料夾（REQ-TERM-001）。
@@ -149,10 +146,10 @@
 - **REQ-WT-003**（納管＋開啟＋信任模型）：建立成功後系統應自動將該資料夾加入為工作區（記錄 worktree 標記，**納入 REQ-PERSIST-001 持久化並依 REQ-PERSIST-004 升 schema 版本走遷移**）並切換開啟。「所屬主 repo」定義＝以 `git rev-parse --git-common-dir` 解出的**主工作樹**（自任一 worktree 建立皆收斂到同一主工作樹，非樹狀父子）。信任：繼承主工作樹的 trusted 狀態、不重彈信任確認（理由明文：worktree 簽出內容屬使用者已信任 repo 的版控範圍、共用同一 common `.git`）。持久化只存主工作樹路徑；**分支名於顯示時即時查**（`git worktree list`），不存死值（避免與終端機內手動切分支不同步）。
 - **REQ-WT-004**（列表識別）：worktree 工作區應於工作區列表以 ⎇ 圖示＋**即時查得的分支名**＋worktree 徽章顯示，緊列於所屬主工作樹項之下；主工作樹不在列表時獨立顯示並以徽章標示所屬 repo 名（徽章一律顯示真實分支名，不由資料夾名回推）。
 - **REQ-WT-005**（互斥標示＋即時複查）：建立對話框的分支選單中，已被任一工作樹簽出的分支應標示「已簽出於 …」並禁選；互斥判斷應於**送出前即時複查**（非開窗快照——使用者可能在終端機手動 checkout 繞過 app 佇列），複查發現衝突時就地提示不執行。SCM `分支` 分頁對已簽出於其他 worktree 的分支應以「跳到該 worktree」動作取代 checkout；目標未納管時提示「加入為工作區並開啟」，**納管前應以 `git worktree list` 驗證該路徑確實隸屬某已信任主工作樹**，否則走 REQ-WS-008 正常信任彈窗。
-- **REQ-WT-006**（移除二選一＋先 teardown）：當使用者移除 worktree 工作區時，系統應彈確認窗提供「僅移出列表（保留資料夾）」與「連同刪除（`git worktree remove`）」二選一；有跑中程序時確認窗應列出（對齊 REQ-WS-009/REQ-E2E-008）。選「連同刪除」時應**先執行 REQ-WS-009 完整 teardown 並等待程序結束、檔案 handle 釋放，再執行 `git worktree remove`**（Windows 下持鎖程序未結束會 EBUSY——不得在 teardown 完成前動手刪）；刪除失敗時顯示原始錯誤、工作區項保留不得呈半殘狀態。
-- **REQ-WT-007**（Unwanted｜dirty 防護）：若選「連同刪除」且該 worktree 有未提交變更，系統應列出變更數並要求先 commit/stash；使用者須另行勾選「確定丟棄變更」後方以 `--force` 執行（兩段確認）。
-- **REQ-WT-008**（worktree 分頁）：SCM 面板應新增 `worktree` 分頁：列出該 repo 全部 worktree（分支/路徑/狀態）、每項提供「切換到此」（開啟對應工作區；未納管者先納管）與移除、分頁層級提供「＋建立」與「清理失效登記（prune）」；無項目時顯示簡短說明＋建立 CTA（非空白）。
-- **REQ-WT-009**（Unwanted｜失效登記）：若 worktree 資料夾被外部刪除，工作區列表沿用 missing 標記；`prune` 應清除失效登記且不影響有效 worktree。
+- **REQ-WT-006**（移除範圍＋先 teardown）：worktree 移除須進入 REQ-SCM-010～014 的兩階段完整清理；使用者可明確選擇只移出 Polydesk 列表並保留資料夾，或在租約重驗後完整移除指定 worktree。完整移除前須先執行 REQ-WS-009 teardown、等待程序與 handle 釋放，再只對計畫內 target 執行 Git 收斂；失敗時保留 journal 與工作區狀態，不得呈半殘或改做全域 prune。
+- **REQ-WT-007**（Unwanted｜dirty 防護）：完整清理 preview 須列出指定 worktree 的 tracked、untracked、ignored、submodule、locked 與外部寫入風險；只有使用者在第二階段逐項確認 force／unlock／外部寫入後才能執行，未確認一律 fail-closed。
+- **REQ-WT-008**（worktree 分頁）：SCM 面板應列出該 repo 全部 worktree（分支／路徑／狀態），每項提供「切換到此」與 target-scoped 完整清理入口，分頁層級提供「＋建立」；未納管 worktree 須先驗 lineage 再納管，無項目時顯示簡短說明與建立 CTA。
+- **REQ-WT-009**（Unwanted｜失效登記）：若 worktree 資料夾被外部刪除，工作區列表沿用 missing 標記；清除失效登記只能把該筆 prunable worktree 納入零副作用 preview 與 journal 計畫，不得以全域 prune 影響其他有效或競態新增的 worktree。
 - **REQ-WT-010**（Unwanted｜建立失敗）：若 `git worktree add` 失敗（磁碟滿/權限不足/路徑衝突/**分支於確認瞬間被他處簽出**），系統應顯示原始錯誤（分支被佔用時具名提示「分支已於 … 簽出」並提供跳轉）、自動清理半成品資料夾、不得在列表留下失效項目。目標資料夾已存在時：若係該 repo 之有效 worktree → 提示「直接加入列表」；否則預設路徑自動加序號（`-2`、`-3`…；**slug 碰撞**（如 `feat/x` 與 `feat-x`）同走序號策略）。
 - **REQ-WT-011**（Unwanted｜輸入非法）：新分支名應經 validateRef 即時驗證，非法時輸入框即時標示原因（不等送出才報錯）。
 - **REQ-WT-012**（併發）：worktree 操作應納入該 repo 既有 git 序列佇列（對齊 REQ-SCM-008）；執行中按鈕顯示進行中並防重入。

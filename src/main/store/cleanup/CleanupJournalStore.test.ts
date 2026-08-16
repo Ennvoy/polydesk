@@ -141,4 +141,33 @@ describe('CleanupJournalStore', () => {
     expect(registry).not.toContain(repo);
     expect(registry).not.toContain(moved);
   });
+
+  it('同 repository 世代即使路徑 fingerprint 改變也不能建立第二份 claim', () => {
+    store.createPrepared({
+      repositoryFingerprint: 'old-path',
+      repositoryGeneration: 'same-generation',
+      payload: { leaseToken: 'lease-1' },
+    });
+
+    expect(() => store.createPrepared({
+      repositoryFingerprint: 'new-path',
+      repositoryGeneration: 'same-generation',
+      payload: { leaseToken: 'lease-2' },
+    })).toThrowError(expect.objectContaining({ code: 'active-cleanup' }));
+  });
+
+  it('搬移後可唯讀查回 repository 世代且不改寫 identity registry', () => {
+    const repo = join(root, 'repo-common');
+    mkdirSync(repo);
+    const identity = store.resolveRepositoryIdentity(repo, 'evidence-a');
+    const registryPath = join(root, 'branch-cleanup', 'repository-identities.json');
+    const before = readFileSync(registryPath);
+    const beforeMtime = statSync(registryPath).mtimeMs;
+    const moved = join(root, 'repo-moved');
+    renameSync(repo, moved);
+
+    expect(store.repositoryGenerations(moved)).toContain(identity.generation);
+    expect(readFileSync(registryPath)).toEqual(before);
+    expect(statSync(registryPath).mtimeMs).toBe(beforeMtime);
+  });
 });

@@ -230,7 +230,12 @@ export function SourceControlPanel(): React.JSX.Element {
   const [changes, setChanges] = useState<GitChange[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setErrorMessage] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const setError = useCallback((message: string | null): void => {
+    setErrorMessage(message);
+    setErrorDetail(null);
+  }, []);
   const [fetching, setFetching] = useState(false); // PE-4 取回遠端狀態中
   const [fetchHint, setFetchHint] = useState<string | null>(null); // PE-4 手動 fetch 失敗小字提示（非錯誤橫幅）
   const [message, setMessage] = useState('');
@@ -919,7 +924,8 @@ export function SourceControlPanel(): React.JSX.Element {
           .filter((endpoint) => endpoint.status !== 'deleted' && endpoint.status !== 'already-completed' && endpoint.status !== 'skipped')
           .map((endpoint) => `${endpoint.remote}/${endpoint.branch}：${endpoint.message ?? endpoint.status}`)
           .join('\n');
-        setError(`${result.error}${endpointDetails ? `\n${endpointDetails}` : ''}`);
+        setError(result.error);
+        setErrorDetail(endpointDetails || null);
         await loadCleanupStatus();
         return;
       }
@@ -1138,7 +1144,7 @@ export function SourceControlPanel(): React.JSX.Element {
       </div>
 
       {cleanupJournals.map((journal) => (
-        <div key={journal.journalId} className="pd-cleanup-warning" role="status" data-testid="cleanup-recovery-todo" data-journal-id={journal.journalId}>
+        <div key={journal.journalId} className="pd-cleanup-warning pd-cleanup-recovery" role="status" data-testid="cleanup-recovery-todo" data-journal-id={journal.journalId}>
           <strong>完整清理待辦：{neutralizeBidi(journal.branch ?? '未知分支')}</strong>
           <span>{journal.issue ?? (journal.phase === 'prepared' ? '計畫仍為零副作用，可取消或繼續。' : `已進入 ${journal.phase}，只能沿 journal checkpoint 繼續收斂。`)}</span>
           <span>{journal.checkpoints.length > 0 ? `已完成 ${journal.checkpoints.length} 個步驟；最近：${cleanupCheckpointText(journal.checkpoints.at(-1) as string)}。` : '尚無可證明完成的 checkpoint。'}</span>
@@ -1154,7 +1160,13 @@ export function SourceControlPanel(): React.JSX.Element {
 
       {error && (
         <div className="pd-scm-error" role="alert">
-          {error}
+          <span>{error}</span>
+          {errorDetail && (
+            <details className="pd-scm-error-detail">
+              <summary>顯示技術細節</summary>
+              <pre>{errorDetail}</pre>
+            </details>
+          )}
         </div>
       )}
 

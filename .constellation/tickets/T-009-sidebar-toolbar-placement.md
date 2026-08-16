@@ -64,3 +64,8 @@ zone: src/renderer/components/ActivityBar.tsx, src/renderer/components/Workspace
     ```
   - 耗時：合計 106s｜cmd /c npm run typecheck -- --pretty false 15s｜cmd /c npm run build 59s｜cmd /c npx playwright test e2e/shell.spec.ts --workers=1 32s
   - sig: 776470519ac5373ccae10a4817fe8d58481a60e16ddf0c50de11ddcaed8510d0
+
+## 出貨雙軸複核（2026-08-17）
+
+- Standards：檢查工具列語意、鍵盤／tooltip／`aria-pressed`、SCM 角標、版面持久化與 axe 對比；a11y blocker 已限縮修正並以 2/2 axe 真 Electron 案例證明 serious／critical 為零，最終 0 blocker、0 suggestion。
+- Spec：逐條核對 5 項驗收條件、決議 080／083／084 與凍結日誌；側欄 host、工作區欄責任、低噪音 active 狀態與窄側欄排版均符合核准畫面，0 blocker、0 suggestion。

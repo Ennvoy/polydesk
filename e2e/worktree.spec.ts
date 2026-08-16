@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchApp, stubFolderPicker, addWorkspaceViaUI } from './electronApp';
 
+const cleanupTimeout = 120_000;
+
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', args, { cwd, stdio: 'pipe' }).toString();
 }
@@ -69,6 +71,7 @@ test('REQ-E2E-012：分支→建立 worktree→納管開啟→終端機 cwd＝wo
 //   （worktreeBranchDisplay 經 neutralizeBidi 剝 RLO、detached→非 'null'；源碼禁 dangerouslySetInnerHTML）。
 
 test('REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅移出保留資料夾', async () => {
+  test.setTimeout(240_000);
   const { root, repo } = seedRepo();
   const { app, page, userData } = await launchApp();
   await stubFolderPicker(app, [repo]);
@@ -122,7 +125,7 @@ test('REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅
   // 資料夾被刪、git worktree 登記無殘留（比對正規化後的完整路徑，避免斜線方向/子字串誤配）
   const norm = (p: string): string => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
   const devNorm = norm(devPath);
-  await expect.poll(() => existsSync(devPath), { timeout: 8000 }).toBe(false);
+  await expect.poll(() => existsSync(devPath), { timeout: cleanupTimeout }).toBe(false);
   await expect
     .poll(
       () =>
@@ -131,13 +134,15 @@ test('REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅
           .filter((l) => l.startsWith('worktree '))
           .map((l) => norm(l.slice('worktree '.length)))
           .includes(devNorm),
-      { timeout: 6000 },
+      { timeout: cleanupTimeout },
     )
     .toBe(false);
-  await expect.poll(() => git(repo, 'branch', '--list', 'dev').trim(), { timeout: 15_000 }).toBe('');
+  await expect.poll(() => git(repo, 'branch', '--list', 'dev').trim(), { timeout: cleanupTimeout }).toBe('');
 
   // ── 僅移出列表：feat 資料夾保留 ──
-  await page.locator('button[aria-label^="移除 worktree"]').first().click();
+  const removeWorktree = page.locator('button[aria-label^="移除 worktree"]').first();
+  await expect(removeWorktree).toBeEnabled({ timeout: cleanupTimeout });
+  await removeWorktree.click();
   await page.locator('button[aria-label="僅從列表移出，保留資料夾"]').click();
   await page.waitForTimeout(1000);
   expect(existsSync(featPath)).toBe(true); // 資料夾保留

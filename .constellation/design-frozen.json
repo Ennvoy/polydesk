@@ -1,12 +1,14 @@
 {
   "frozen": [
-    "src/renderer/components/SourceControl/scm.css",
     "src/renderer/components/SourceControl/BranchCleanupDialog.tsx",
     "src/renderer/components/SourceControl/BranchCleanupRiskDialog.tsx",
     "src/renderer/components/ActivityBar.tsx",
     "src/renderer/components/WorkspaceRail.tsx",
     "src/renderer/layout/panelRegistry.ts",
-    "src/renderer/theme/components.css"
+    "src/renderer/theme/components.css",
+    "src/renderer/components/SourceControl/scm.css",
+    "src/renderer/layout/DockLayout.tsx",
+    "src/renderer/layout/DockLayout.css"
   ],
   "log": [
     {
@@ -62,6 +64,42 @@
       "action": "freeze",
       "at": "2026-08-13T18:51:58.0388978+08:00",
       "reason": "使用者核准完整清理 UI 定稿，風險摘要完成並通過本地、worktree、遠端與恢復真 Electron 回歸"
+    },
+    {
+      "path": "src/renderer/components/SourceControl/scm.css",
+      "action": "unfreeze",
+      "at": "2026-08-16T10:46:53.2030273+08:00",
+      "reason": "使用者檢視真 Electron 畫面後明確否定 recovery 卡在窄側欄的破版與整體視覺噪音"
+    },
+    {
+      "path": "src/renderer/components/SourceControl/scm.css",
+      "action": "freeze",
+      "at": "2026-08-16T22:47:22.6123194+08:00",
+      "reason": "使用者核准窄側欄 recovery 卡、折疊技術細節與低噪音警示層級"
+    },
+    {
+      "path": "src/renderer/layout/DockLayout.tsx",
+      "action": "freeze",
+      "at": "2026-08-16T22:47:22.6123194+08:00",
+      "reason": "使用者核准版面控制列改為低彩度並以底線標示開啟狀態"
+    },
+    {
+      "path": "src/renderer/layout/DockLayout.css",
+      "action": "freeze",
+      "at": "2026-08-16T22:47:22.6123194+08:00",
+      "reason": "使用者核准版面控制列低噪音視覺樣式"
+    },
+    {
+      "path": "src/renderer/layout/DockLayout.css",
+      "action": "unfreeze",
+      "at": "2026-08-16T22:56:30.0000000+08:00",
+      "reason": "完整出貨 runner 發現工具列文字對比 serious a11y blocker；使用者已核准畫面並授權繼續出貨，限縮修正文字對比"
+    },
+    {
+      "path": "src/renderer/layout/DockLayout.css",
+      "action": "freeze",
+      "at": "2026-08-16T22:58:03.2259884+08:00",
+      "reason": "工具列文字對比修正完成；歡迎頁與主介面 axe serious/critical 皆為零"
     }
   ],
   "source": {

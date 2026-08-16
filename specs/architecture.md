@@ -300,8 +300,8 @@ polydesk/
 ### 7.1 路徑地圖增補
 | 模組 | 檔案 | 動作 |
 |---|---|---|
-| 契約（單一真相） | `src/shared/types.ts`（`GitWorktree`、`Workspace.worktree?`）、`src/shared/ipc.ts`、`src/shared/channels.ts`（`git:worktree*` ×4） | P-4 一次釘死 |
-| git 後端 | `src/main/git/GitService.ts`（worktree list/add/remove/prune，沿用 run()+序列佇列+硬化）、`src/main/git/worktreePath.ts`（新：slug/路徑驗證純函式）、`src/main/git/gitSafeArgs.ts`（沿用 validateRef） | P-4 |
+| 契約（單一真相） | `src/shared/types.ts`（`GitWorktree`、`Workspace.worktree?`）、`src/shared/ipc.ts`、`src/shared/channels.ts`（`worktreeList/Add/Adopt/Supported`；清理由 `git:cleanup*` 承接） | P-4 / T-008 |
+| git 後端 | `src/main/git/GitService.ts`（worktree list/add，沿用 run()+序列佇列+硬化；移除與失效登記已統一改走第 8 節 target-scoped cleanup）、`src/main/git/worktreePath.ts`（slug/路徑驗證純函式）、`src/main/git/gitSafeArgs.ts`（沿用 validateRef） | P-4 / T-008 |
 | workspace 模型 | `src/main/workspace/WorkspaceManager.ts`（worktree 標記納管+信任繼承）、`src/main/store/schema.ts`（schema v2 遷移）、`src/main/workspace/workspaceLifecycle.ts`（移除時 teardown→remove 順序） | P-4 / F-12 |
 | UI | `src/renderer/components/Worktree/`（新：CreateWorktreeDialog.tsx、WorktreePanel.tsx）、`WorkspaceRail.tsx`（⎇ 識別+入口②）、`SourceControl/SourceControlPanel.tsx`（worktree 分頁掛載+分支分頁入口①③） | F-11/F-12/F-13 |
 

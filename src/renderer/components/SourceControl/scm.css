@@ -5,6 +5,8 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
   color: var(--fg-2);
 }
 
@@ -567,6 +569,30 @@
 .pd-cleanup-remotes code { color: var(--fg); }
 .pd-cleanup-warning { display: flex; gap: 5px; margin-top: var(--space-4); padding: var(--space-3); border: 1px solid color-mix(in oklab, var(--warn), transparent 55%); border-radius: var(--radius-md); background: color-mix(in oklab, var(--warn), transparent 92%); color: var(--fg-2); font-size: var(--text-xs); line-height: 1.5; }
 .pd-cleanup-warning strong { flex: 0 0 auto; color: var(--warn); }
+.pd-cleanup-recovery {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  min-width: 0;
+  margin: var(--space-2);
+  overflow: hidden;
+}
+.pd-cleanup-recovery > strong,
+.pd-cleanup-recovery > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pd-cleanup-recovery > strong { white-space: normal; }
+.pd-cleanup-recovery .pd-scm-hdr-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  width: 100%;
+  margin-top: var(--space-1);
+}
+.pd-cleanup-recovery .pd-btn {
+  min-width: 0;
+  white-space: normal;
+}
 .pd-cleanup-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); padding: var(--space-3) 0 1px; background: linear-gradient(to bottom, transparent, var(--surface) 22%); }
 
 /* diff 全面板 */
@@ -600,6 +626,8 @@
   text-align: center;
 }
 .pd-scm-error {
+  display: grid;
+  gap: var(--space-2);
   margin: var(--space-2);
   padding: var(--space-2) var(--space-3);
   background: color-mix(in oklab, var(--danger), transparent 88%);
@@ -608,6 +636,28 @@
   color: var(--danger);
   font-size: var(--text-xs);
   word-break: break-word;
+}
+
+.pd-scm-error-detail summary {
+  width: max-content;
+  cursor: pointer;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.pd-scm-error-detail pre {
+  max-height: 144px;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2);
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--surface-0), transparent 20%);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: inherit;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 /* DF-12 發佈到 GitHub（無 remote 時取代 pull/push 的主要動作；文字鈕沿用 icon 鈕的互動樣式） */

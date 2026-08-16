@@ -436,7 +436,7 @@ done
 
 ### 6.1 UI 對焦結論
 mockup：`specs/ui-mockups/04-worktree.html`（使用者已拍板：混合案＋三入口＋sibling）。品牌基底：沿用第一迭代 Polydesk 自有 tokens（`src/renderer/theme/tokens.css` 三主題），無外部基底。
-- 畫面/元件：CreateWorktreeDialog（repo 下拉、分支三來源選單＋validateRef 即時驗證＋互斥標禁、路徑欄預設 sibling 可改、進行中 spinner）；WorktreePanel（SCM 第 4 分頁：列表列＝⎇ 分支＋路徑＋狀態＋hover「切換到此」/移除、底部「＋建立」與「清理失效登記」、空狀態說明＋CTA）；WorkspaceRail worktree 項（⎇ 圖示＋縮排＋worktree 徽章，緊列主工作樹之下）；移除確認彈窗（二選一＋dirty 兩段確認）。
+- 畫面/元件：CreateWorktreeDialog（repo 下拉、分支三來源選單＋validateRef 即時驗證＋互斥標禁、路徑欄預設 sibling 可改、進行中 spinner）；WorktreePanel（SCM 第 4 分頁：列表列＝⎇ 分支＋路徑＋狀態＋hover「切換到此」/「移除」、底部只保留「＋建立」、空狀態說明＋CTA）；WorkspaceRail worktree 項（⎇ 圖示＋縮排＋worktree 徽章，緊列主工作樹之下）。移除進入共用兩階段完整清理，第一階段明選「只移出列表／刪除資料夾但保留分支／完整清理資料夾與本地分支」，dirty、locked、目前分支切換與遠端風險都由 live preview 及第二階段確認處理；失效登記只能針對該列清理，不提供全域 prune。
 - 關鍵 journey 對齊：REQ-E2E-012（分支→建立→納管→平行終端機）、REQ-E2E-013（dirty＋跑中程序移除防護）。
 
 ### 6.2 關鍵技術決策
@@ -445,7 +445,7 @@ mockup：`specs/ui-mockups/04-worktree.html`（使用者已拍板：混合案＋
 - **(m) 主工作樹解析**：`git rev-parse --git-common-dir` → 其上層目錄＝主工作樹（自任一 worktree 執行皆收斂）。納管外部 worktree 前以主工作樹的 `git worktree list` 驗 lineage，驗不過走 REQ-WS-008 正常信任彈窗。
 - **(n) UI 拆檔降 conflictZone**：對話框與分頁皆為 `components/Worktree/` 新檔，SourceControlPanel 只加掛載點/入口——但入口①③仍動同檔，故 F-12/F-13 序列（見 6.4）。
 - **(o) slug/路徑驗證獨立純函式 `worktreePath.ts`**：slug（`/`→`-`、剔非法字元、≤60、Windows 保留名前綴 `wt-`）、序號策略、完整路徑 ≤240 預檢、禁指向既有工作區內/系統目錄。純函式可 vitest 全覆蓋。
-- **(p) 移除順序鐵則**：teardown（等程序結束+handle 釋放）→ `git worktree remove [--force]` → 失敗則工作區項保留＋原始錯誤（Windows EBUSY 防半殘）。
+- **(p) 移除順序鐵則**：所有範圍先走 target-scoped journal 與 live lease 重驗；需要移除資料夾時再依 teardown（等程序結束＋handle 釋放）→ `git worktree remove [--force]` 執行，失敗則工作區項與 journal 待辦保留＋結構化錯誤（Windows EBUSY 防半殘）。只移出列表與失效登記也不得呼叫全域 prune。
 
 ### 6.3 接縫契約增補（`src/shared/types.ts`＋`ipc.ts` 單一真相，P-4 釘死）
 ```ts
@@ -455,8 +455,9 @@ export interface GitWorktree { path: string; branch: string | null; head: string
 // ipc.ts InvokeChannels 增：
 // 'git:worktreeList':  { req: { wsId: string }; res: { list: GitWorktree[] } | { error: string } }
 // 'git:worktreeAdd':   { req: { wsId: string; branch: { kind: 'existing'|'new'|'remote'; name: string; base?: string }; path: string }; res: { wsId: string } | { error: string; code?: 'branch-taken'|'path-exists'|'net' } }
-// 'git:worktreeRemove':{ req: { wsId: string; deleteFolder: boolean; force: boolean }; res: { ok: true } | { error: string; code?: 'dirty'|'busy' } }
-// 'git:worktreePrune': { req: { wsId: string }; res: { pruned: number } | { error: string } }
+// 'git:worktreeSupported': { req: { wsId: string }; res: { supported: boolean; reason?: string } }
+// 'git:worktreeAdopt': { req: { wsId: string; path: string }; res: { wsId: string } | { error: string; code?: 'lineage'|'path-missing' } }
+// worktree 移除不另設直接 IPC；統一由 git:cleanupPreview/Execute/Status/Cancel/Resume/ImportEvidence 契約承接。
 ```
 
 ### 6.4 並行度自檢結論（Step 4.5）

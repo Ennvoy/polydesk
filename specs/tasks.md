@@ -204,7 +204,7 @@
 ## 第二迭代：Git Worktree（2026-07-02 凍結立項；波次 [P-4]→[F-11]→[F-12]→[F-13]→[X-5]，序列——並行度自檢見 design §6.4）
 
 - [x] **P-4 worktree 契約＋GitService 擴充＋持久化 schema v2**
-      story：main 端具備完整 worktree 能力——`types.ts`/`ipc.ts`/`channels.ts` 釘 `GitWorktree`＋`git:worktree*` 四通道；GitService worktree list/add/remove/prune（argv 硬化＋序列佇列＋逾時，`--porcelain -z` 解析）；`worktreePath.ts` slug/路徑驗證純函式（≤60、Windows 保留名 `wt-`、序號、≤240 預檢、禁工作區內/系統目錄）；WorkspaceManager worktree 標記納管＋信任繼承；schema v2 遷移。
+      story：main 端具備完整 worktree 能力——`types.ts`/`ipc.ts`/`channels.ts` 釘 `GitWorktree` 契約；GitService worktree list/add（argv 硬化＋序列佇列＋逾時，`--porcelain -z` 解析）；`worktreePath.ts` slug/路徑驗證純函式（≤60、Windows 保留名 `wt-`、序號、≤240 預檢、禁工作區內/系統目錄）；WorkspaceManager worktree 標記納管＋信任繼承；schema v2 遷移。原始 remove/prune 入口已由 T-008 的 target-scoped cleanup 取代，不再作為產品清理旁路。
       reqRefs：REQ-WT-002/003/010/012/015、REQ-PERSIST-004
       blockedBy：—
       conflictZone：src/shared/ipc.ts、src/shared/types.ts、src/shared/channels.ts、src/main/git/GitService.ts、src/main/git/gitSafeArgs.ts、src/main/git/worktreePath.ts、src/main/workspace/WorkspaceManager.ts、src/main/store/schema.ts
@@ -218,7 +218,7 @@
       verify：Playwright REQ-E2E-012 全旅程綠（真 git fixture ≥2 分支；不重彈信任窗、cwd＝worktree、切回主 repo 終端機仍在）。
 
 - [x] **F-12 SCM worktree 分頁（入口①＋列表/切換/移除/prune）**
-      story：SCM 面板第 4 分頁 `worktree`：列出全部 worktree（即時分支/路徑/missing 狀態）＋空狀態說明 CTA；「切換到此」（未納管→lineage 驗證→提示加入並開啟）；「＋建立」重用對話框；移除→二選一彈窗（僅移出/連同刪除）→dirty 兩段確認（列變更數＋跑中程序）→teardown 先行等 handle 釋放→`git worktree remove`；「清理失效登記（prune）」。
+      story：SCM 面板第 4 分頁 `worktree`：列出全部 worktree（即時分支/路徑/missing 狀態）＋空狀態說明 CTA；「切換到此」（未納管→lineage 驗證→提示加入並開啟）；「＋建立」重用對話框。原迭代的移除二選一與全域 prune 已由 T-008 取代；目前所有移除、失效登記與 branch/remote 收斂都進入兩階段、target-scoped、journal 化完整清理。
       reqRefs：REQ-WT-001①/006/007/008/009/014、REQ-E2E-013
       blockedBy：P-4、F-11
       conflictZone：src/renderer/components/Worktree/WorktreePanel.tsx、src/renderer/components/SourceControl/SourceControlPanel.tsx、src/main/workspace/workspaceLifecycle.ts
