@@ -15,6 +15,17 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.31.0',
+    date: '2026-08-17',
+    highlights: [
+      '修正 clone 來的 repository 做完整清理時，因 origin/HEAD 捷徑與 origin/main 撞成同一次更新而整批被 Git 拒絕、分支刪不掉的問題',
+      '清理進度改為行內卡片：顯示目前進行到第幾步，長文字改為換行，不再被截斷成一行',
+      '清理成功會列出實際完成的動作並在 10 秒後自動收起，不再做完就只留一行提示自己消失',
+      '清理失敗會留在畫面上，直接提供「繼續收斂」與可摺疊的技術細節',
+      '分支分頁與 worktree 分頁的清理共用同一張回饋卡，兩邊的進度與結果呈現一致',
+    ],
+  },
+  {
     version: '0.30.0',
     date: '2026-08-17',
     highlights: [

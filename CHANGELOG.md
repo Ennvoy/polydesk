@@ -7,6 +7,19 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.31.0（2026-08-17）
+
+修好完整清理在 clone 來的 repository 上必然失敗的缺陷，並把清理的進度與結果從一行會自己消失的提示，改成有明確終態的行內卡片。
+
+### 2026-08-17｜symref 撞批修正與清理回饋卡
+
+- 本機清理的 CAS transaction 對保留 refs 逐筆加上 `option no-deref`。`refs/remotes/origin/HEAD` 是指向 `refs/remotes/origin/main` 的 symref，未加 no-deref 時會被解引用成同一個目標，與同批的 `origin/main` 撞成重複更新，Git 於 prepare 階段回 `multiple updates for … (including one via symref …) are not allowed` 並拒絕整批，導致分支刪不掉、journal 停在 reconciling。clone 來的 repository 預設都有這個 symref，因此凡走完整清理必踩。
+- 補真 Git 回歸測試：repository 帶 `origin/HEAD` symref 時仍完成刪除，且 symref 與 tracking ref 原樣保留；修正前該測試會重現同一則 fatal。
+- 清理的進度與結果改為行內回饋卡：進行中顯示目前完成到第幾步與步驟名稱；成功列出實際完成的動作並於 10 秒後自動收起；失敗留在畫面上，提供「繼續收斂」與可摺疊技術細節。文字一律換行呈現，不再單行截斷。
+- 修正收斂完成後進度文案仍顯示「正在執行第一個不可逆步驟」的錯誤敘述。
+- 分支分頁與 worktree 分頁的清理共用同一張回饋卡；worktree 分頁不再把 Git 原文直接放進紅色錯誤框。
+- 同批移除因此失去唯一設值來源的 `errorDetail` 狀態與其摺疊區。
+
 ## v0.30.0（2026-08-17）
 
 Git 分支與 worktree 現在共用同一套可恢復完整清理流程；側欄切換入口也移到受控內容正上方，減少工作區管理與側欄檢視混在一起的認知負擔。

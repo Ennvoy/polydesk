@@ -169,9 +169,12 @@ test('遠端多 endpoint 部分失敗後，重啟仍顯示待辦並可繼續收�
     await expect(page.getByRole('dialog').locator('.pd-cleanup-remotes .pd-cleanup-card')).toHaveCount(2);
     await page.getByRole('button', { name: '開始完整清理' }).click();
 
-    await expect(page.locator('.pd-scm-error')).toContainText('遠端清理只有部分完成', { timeout: cleanupTimeout });
-    await expect(page.locator('.pd-scm-error-detail')).not.toHaveAttribute('open');
-    await expect(page.locator('.pd-scm-error-detail summary')).toHaveText('顯示技術細節');
+    const failedFeedback = page.getByTestId('cleanup-feedback');
+    await expect(failedFeedback).toHaveAttribute('data-kind', 'failed', { timeout: cleanupTimeout });
+    await expect(failedFeedback).toContainText('清理未完成，已停在安全點');
+    await expect(failedFeedback).toContainText('遠端清理只有部分完成');
+    await expect(failedFeedback.locator('.pd-scm-error-detail')).not.toHaveAttribute('open');
+    await expect(failedFeedback.locator('.pd-scm-error-detail summary')).toHaveText('顯示技術細節');
     const recoveryTodo = page.getByTestId('cleanup-recovery-todo');
     await expect(recoveryTodo).toContainText('remote-delete', { timeout: cleanupTimeout });
     const recoveryMetrics = await recoveryTodo.evaluate((element) => ({
@@ -250,7 +253,7 @@ test('遠端 tip 在風險確認後變動時拒絕舊租約且不刪新 commit',
     git(repo, 'push', '--force', remote, 'unfinished:refs/heads/remote-delete');
     await page.getByRole('button', { name: '開始完整清理' }).click();
 
-    await expect(page.locator('.pd-scm-error')).toContainText('狀態已變更', { timeout: cleanupTimeout });
+    await expect(page.getByTestId('cleanup-feedback')).toContainText('狀態已變更', { timeout: cleanupTimeout });
     expect(git(remote, 'rev-parse', 'refs/heads/remote-delete').trim()).toBe(replacementOid);
     await expect(page.getByTestId('cleanup-recovery-todo')).toHaveCount(0);
   } finally {

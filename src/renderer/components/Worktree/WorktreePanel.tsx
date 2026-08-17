@@ -13,8 +13,13 @@ import { planRemoval, confirmedDirtyRemoval, scopeDeletesBranch, scopeDeletesFol
 import { BranchCleanupRiskDialog, type BranchCleanupRiskDecision } from '../SourceControl/BranchCleanupRiskDialog';
 import { mark, measure } from '../../../shared/perf';
 import type { GitWorktree } from '../../../shared/types';
+import type { CleanupFeedbackApi } from '../SourceControl/cleanupFeedback';
 
-export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }): React.JSX.Element {
+export function WorktreePanel({ wsId, wsPath, cleanup }: {
+  wsId: string;
+  wsPath: string;
+  cleanup: CleanupFeedbackApi;
+}): React.JSX.Element {
   const [list, setList] = useState<GitWorktree[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +90,7 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
     // be the linked worktree that is about to be removed, so prefer the main worktree.
     const repositoryWsId = list?.find((entry) => entry.isMain && entry.managedWsId)?.managedWsId ?? wsId;
     if (wt.prunable && wt.branch) {
+      const branch = wt.branch;
       const ok = await dialog.confirm({
         title: '移除失效 worktree 登記',
         body: '資料夾已不存在；只會移除這一筆 Git 登記並保留本地分支，不會執行全域 prune。確定繼續嗎？',
@@ -113,14 +119,15 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
           setError(plannedPreview.error);
           return;
         }
-        const result = await ipc.git.cleanupExecute({
+        const result = await cleanup.run(branch, () => ipc.git.cleanupExecute({
           wsId: repositoryWsId,
-          branch: wt.branch,
+          branch,
           leaseToken: plannedPreview.leaseToken,
           localPlan: { deleteBranch: false, worktrees: [{ id: target.id, mode: 'stale-registration' }] },
           confirmation: { forceLocal: false, acceptExternalWriteRisk: false, remoteTargets: [] },
-        });
-        if (!result.ok) setError(result.error);
+        }));
+        if (!result.ok) cleanup.fail(branch, result.error, result.journalId);
+        else cleanup.done(branch);
         await appStore.loadWorkspaces();
         await reload();
       } finally {
@@ -214,7 +221,7 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
         });
         if (!acceptExternalWriteRisk) return;
       }
-      const cleaned = await ipc.git.cleanupExecute({
+      const cleaned = await cleanup.run(anchorBranch, () => ipc.git.cleanupExecute({
         wsId: repositoryWsId,
         branch: anchorBranch,
         leaseToken: plannedPreview.leaseToken,
@@ -227,11 +234,12 @@ export function WorktreePanel({ wsId, wsPath }: { wsId: string; wsPath: string }
           acceptExternalWriteRisk,
           remoteTargets: [],
         },
-      });
+      }));
       if (!cleaned.ok) {
-        setError(cleaned.error);
+        cleanup.fail(anchorBranch, cleaned.error, cleaned.journalId);
         return;
       }
+      cleanup.done(anchorBranch);
       await appStore.loadWorkspaces();
       await reload();
     } catch (e) {

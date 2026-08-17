@@ -73,6 +73,7 @@ const ARTICLES: HelpArticle[] = [
     states: [
       { label: '狀態已變更', detail: '分支 tip、保留 refs、worktree HEAD、metadata、endpoint 或 remote tip 變動時舊 lease 會失效，請重新檢查。' },
       { label: 'unknown', detail: 'shallow／partial clone、缺失 object、隱藏 ref、權限或網路問題無法證明結果時，不會冒充已刪除；先修正原因再重試。' },
+      { label: '清理結果卡', detail: '分支與 worktree 分頁共用同一張卡：進行中顯示目前步驟，成功列出實際完成的動作並在 10 秒後自動收起，失敗留在畫面上並提供「繼續收斂」與技術細節。' },
       { label: '完整清理待辦', detail: 'prepared 零副作用計畫可取消；mutating／reconciling 只能按「繼續收斂」，已完成 checkpoint 不會重做。' },
       { label: 'quarantine', detail: 'payload 驗證失敗時保持鎖定；只能匯入 checksum 完全相符的原始 journal 證據，不能略過或直接解鎖。' },
       { label: '外部寫入殘餘風險', detail: '不可逆步驟前會重驗，但無法凍結外部 editor、build 或其他 Git 程序；確認後新寫入內容仍可能受刪除影響。' },

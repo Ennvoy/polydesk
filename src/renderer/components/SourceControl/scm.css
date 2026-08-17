@@ -593,6 +593,54 @@
   min-width: 0;
   white-space: normal;
 }
+/* 完整清理的行內回饋卡：同一張卡從進行中走到成功摘要／失敗終態。
+ * 破壞性操作的結果要留在畫面上等使用者確認，故不沿用會截斷又自動消失的單行提示樣式。 */
+.pd-cleanup-feedback {
+  display: grid;
+  gap: 7px;
+  margin: var(--space-2);
+  padding: 10px var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-warm);
+  color: var(--fg-2);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.pd-cleanup-feedback.is-running { border-color: color-mix(in oklab, var(--accent), transparent 55%); background: color-mix(in oklab, var(--accent), transparent 92%); }
+.pd-cleanup-feedback.is-done { border-color: color-mix(in oklab, var(--success), transparent 55%); background: color-mix(in oklab, var(--success), transparent 92%); }
+.pd-cleanup-feedback.is-failed { border-color: color-mix(in oklab, var(--danger), transparent 50%); background: color-mix(in oklab, var(--danger), transparent 90%); }
+.pd-cleanup-feedback-head { display: flex; align-items: flex-start; gap: 7px; }
+.pd-cleanup-feedback-head strong { flex: 1; min-width: 0; font-size: var(--text-sm); }
+.pd-cleanup-feedback.is-running .pd-cleanup-feedback-head strong { color: var(--accent); }
+.pd-cleanup-feedback.is-done .pd-cleanup-feedback-head strong { color: var(--success); }
+.pd-cleanup-feedback.is-failed .pd-cleanup-feedback-head strong { color: var(--danger); }
+.pd-cleanup-feedback-close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--meta);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+.pd-cleanup-feedback-close:hover { background: var(--surface-warm); color: var(--fg); }
+.pd-cleanup-feedback-bar { height: 3px; border-radius: var(--radius-pill); background: var(--border); overflow: hidden; }
+.pd-cleanup-feedback-bar i { display: block; width: 40%; height: 100%; border-radius: inherit; background: var(--accent); animation: pd-cleanup-slide 1.4s var(--ease-standard) infinite; }
+@keyframes pd-cleanup-slide { from { transform: translateX(-105%); } to { transform: translateX(260%); } }
+@media (prefers-reduced-motion: reduce) { .pd-cleanup-feedback-bar i { width: 100%; animation: none; } }
+.pd-cleanup-feedback-did { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.pd-cleanup-feedback-did li { display: flex; gap: 6px; }
+.pd-cleanup-feedback-did li::before { content: "✓"; flex: 0 0 auto; color: var(--success); }
+.pd-cleanup-feedback-fade { color: var(--meta); font-size: 11px; }
+
 .pd-cleanup-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); padding: var(--space-3) 0 1px; background: linear-gradient(to bottom, transparent, var(--surface) 22%); }
 
 /* diff 全面板 */

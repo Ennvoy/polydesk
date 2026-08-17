@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { launchApp, stubFolderPicker, addWorkspaceViaUI } from './electronApp';
 
 const cleanupTimeout = 120_000;
+const shotDir = process.env.PD_SHOT_DIR || join(process.cwd(), 'test-results'); // gitignored，避免截圖污染 repo
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', args, { cwd, stdio: 'pipe' }).toString();
@@ -62,8 +63,8 @@ test('REQ-E2E-012：分支→建立 worktree→納管開啟→終端機 cwd＝wo
   await expect(worktreeRow.getByText('⎇ dev', { exact: false })).toBeVisible({ timeout: 8000 });
 
   await app.close();
-  rmSync(root, { recursive: true, force: true });
-  rmSync(userData, { recursive: true, force: true });
+  rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });
 
 // 註：紅軍 A1（惡意分支名 XSS）於 Windows 無法用真 git 重現——NTFS 禁 <>|: 檔名，git 無法建此類 loose ref。
@@ -122,6 +123,23 @@ test('REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅
   await page.getByLabel('我了解確認後外部程序仍可能寫入資料夾').check();
   await expect(cleanupBtn).toBeEnabled();
   await cleanupBtn.click();
+
+  // 成功終態：同一張卡收成摘要並列出實際完成的步驟（一次讀完文字，避免自動收起造成時序 flake）。
+  const feedback = page.getByTestId('cleanup-feedback');
+  await expect(feedback).toHaveAttribute('data-kind', 'done', { timeout: cleanupTimeout });
+  const doneSteps = await feedback.locator('.pd-cleanup-feedback-did li').count();
+  const summaryText = (await feedback.textContent()) ?? '';
+  mkdirSync(shotDir, { recursive: true });
+  await page.screenshot({ path: join(shotDir, 'ui-cleanup-feedback-done.png') });
+  expect(summaryText).toContain('已完整清理 dev');
+  expect(doneSteps).toBeGreaterThanOrEqual(1);
+  // 摘要不得橫向截斷（現況那條單行 ellipsis 提示的病灶）
+  const feedbackMetrics = await feedback.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(feedbackMetrics.scrollWidth).toBeLessThanOrEqual(feedbackMetrics.clientWidth + 1);
+
   // 資料夾被刪、git worktree 登記無殘留（比對正規化後的完整路徑，避免斜線方向/子字串誤配）
   const norm = (p: string): string => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
   const devNorm = norm(devPath);
@@ -148,8 +166,8 @@ test('REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅
   expect(existsSync(featPath)).toBe(true); // 資料夾保留
 
   await app.close();
-  rmSync(root, { recursive: true, force: true });
-  rmSync(userData, { recursive: true, force: true });
+  rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });
 
 test('worktree 移除相容舊資料：一般工作區加入時兩種移除都有效', async () => {
@@ -188,8 +206,8 @@ test('worktree 移除相容舊資料：一般工作區加入時兩種移除都�
   expect(git(repo, 'worktree', 'list', '--porcelain')).not.toContain(legacyPath.replace(/\\/g, '/'));
 
   await app.close();
-  rmSync(root, { recursive: true, force: true });
-  rmSync(userData, { recursive: true, force: true });
+  rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });
 
 test('F-13：分支分頁「在新 worktree 開啟」建立；checkout 衝突→跳到該 worktree', async () => {
@@ -221,6 +239,6 @@ test('F-13：分支分頁「在新 worktree 開啟」建立；checkout 衝突→
   await expect(page.locator('.pdws-item.is-active [aria-label="worktree 工作區"]')).toBeVisible({ timeout: 8000 });
 
   await app.close();
-  rmSync(root, { recursive: true, force: true });
-  rmSync(userData, { recursive: true, force: true });
+  rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });

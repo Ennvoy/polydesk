@@ -205,9 +205,11 @@ export class LocalCleanupExecutor {
         if (!checkpoints.has('local-ref-deleted')) {
           const targetNow = await this.git.run(cwd, ['show-ref', '--verify', snapshot.target.ref], true);
           if (targetNow.code === 0) {
+            // 保留 refs 逐筆 no-deref：symref（如 refs/remotes/origin/HEAD）預設會被解引用成目標 ref，
+            // 與同批的目標本身（refs/remotes/origin/main）撞成同一次更新，整個 transaction 會被 git 擋下。
             const retained = expectedRetained
               .filter((ref) => !ref.scopePath && ref.ref !== snapshot.target.ref && ref.ref !== snapshot.baseline.ref)
-              .map((ref) => `verify ${ref.ref} ${ref.oid}`);
+              .flatMap((ref) => ['option no-deref', `verify ${ref.ref} ${ref.oid}`]);
             const transaction = [
               'start',
               `verify ${snapshot.baseline.ref} ${snapshot.baseline.oid}`,

@@ -28,6 +28,8 @@ import type {
   GitBranchUpstream,
 } from '../../../shared/types';
 import type { GitCleanupJournalSummary, GitCleanupPreviewResult } from '../../../shared/gitCleanup';
+import { cleanupCheckpointText } from './cleanupFeedback';
+import type { CleanupFeedback, CleanupFeedbackApi } from './cleanupFeedback';
 import { DEFAULT_BACKGROUND_POLL_MS, FETCH_COOLDOWN_MS } from '../../../shared/constants';
 import { shouldAutoFetch } from './fetchCooldown';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
@@ -174,16 +176,6 @@ function CleanupEvidenceDialog({ journalId, onResult }: { journalId: string; onR
   );
 }
 
-function cleanupCheckpointText(checkpoint: string): string {
-  if (checkpoint.startsWith('worktree-removed:')) return '已移除 worktree 資料夾與登記';
-  if (checkpoint === 'local-ref-deleted') return '已刪除本地分支 ref';
-  if (checkpoint === 'branch-config-cleared') return '已清除 branch 設定';
-  if (checkpoint === 'branch-reflog-cleared') return '已清除 branch reflog';
-  if (checkpoint.startsWith('remote:endpoint-deleted:')) return '已刪除一個遠端 endpoint 分支';
-  if (checkpoint.startsWith('remote:tracking-deleted:')) return '已清除 remote-tracking ref';
-  return checkpoint;
-}
-
 const STATUS_LABEL: Record<GitChange['status'], string> = {
   M: '修改',
   A: '新增',
@@ -230,12 +222,7 @@ export function SourceControlPanel(): React.JSX.Element {
   const [changes, setChanges] = useState<GitChange[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setErrorMessage] = useState<string | null>(null);
-  const [errorDetail, setErrorDetail] = useState<string | null>(null);
-  const setError = useCallback((message: string | null): void => {
-    setErrorMessage(message);
-    setErrorDetail(null);
-  }, []);
+  const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false); // PE-4 取回遠端狀態中
   const [fetchHint, setFetchHint] = useState<string | null>(null); // PE-4 手動 fetch 失敗小字提示（非錯誤橫幅）
   const [message, setMessage] = useState('');
@@ -245,7 +232,8 @@ export function SourceControlPanel(): React.JSX.Element {
   const [log, setLog] = useState<GitLogEntry[]>([]);
   const [branches, setBranches] = useState<BranchState>(EMPTY_BRANCH_STATE);
   const [cleanupJournals, setCleanupJournals] = useState<GitCleanupJournalSummary[]>([]);
-  const [cleanupProgress, setCleanupProgress] = useState<string | null>(null);
+  const [cleanupFeedback, setCleanupFeedback] = useState<CleanupFeedback | null>(null);
+  const cleanupStepsRef = useRef<string[]>([]); // journal 關閉後查不到 checkpoints，過程中逐次累積才能在成功後列出做過的事
   const [branchGroupsOpen, setBranchGroupsOpen] = useState<Record<BranchKind, boolean>>({ local: true, remote: true });
   const [branchMenu, setBranchMenu] = useState<BranchMenuState | null>(null);
   const [hover, setHover] = useState<{ c: GitLogEntry; top: number; left: number } | null>(null); // PE-1 hover 卡
@@ -545,22 +533,58 @@ export function SourceControlPanel(): React.JSX.Element {
     }
   }, [wsId]);
 
-  const withCleanupProgress = useCallback(async <T,>(operation: () => Promise<T>): Promise<T> => {
-    setCleanupProgress('正在建立安全清理租約…');
+  const withCleanupProgress = useCallback(async <T,>(branch: string, operation: () => Promise<T>): Promise<T> => {
+    cleanupStepsRef.current = [];
+    let settled = false;
+    setCleanupFeedback({ kind: 'running', branch, step: '正在建立安全清理租約…' });
     const timer = window.setInterval(() => {
       void ipc.git.cleanupStatus({ wsId: wsId ?? undefined }).then((statusResult) => {
+        if (settled) return; // 操作已結束：清掉 timer 前發出的查詢不得覆蓋成功／失敗終態
         const journal = statusResult.journals.find((entry) => entry.phase !== 'prepared');
-        const checkpoint = journal?.checkpoints.at(-1);
-        setCleanupProgress(checkpoint ? cleanupCheckpointText(checkpoint) : '正在執行第一個不可逆步驟…');
+        for (const checkpoint of journal?.checkpoints ?? []) {
+          if (!cleanupStepsRef.current.includes(checkpoint)) cleanupStepsRef.current.push(checkpoint);
+        }
+        const latest = cleanupStepsRef.current.at(-1);
+        setCleanupFeedback({
+          kind: 'running',
+          branch,
+          step: latest
+            ? `步驟 ${cleanupStepsRef.current.length}：${cleanupCheckpointText(latest)}，正在進行下一步…`
+            : '正在執行第一個不可逆步驟…',
+        });
       }).catch(() => undefined);
     }, 250);
     try {
       return await operation();
     } finally {
+      settled = true;
       window.clearInterval(timer);
-      setCleanupProgress(null);
     }
   }, [wsId]);
+
+  /** 已完成步驟的白話清單（成功摘要用）。 */
+  const cleanupDoneSteps = useCallback((): string[] => cleanupStepsRef.current.map(cleanupCheckpointText), []);
+
+  // 成功摘要停留數秒後自動收起；失敗一律留在畫面上等使用者處理。
+  useEffect(() => {
+    if (cleanupFeedback?.kind !== 'done') return undefined;
+    const timer = window.setTimeout(() => setCleanupFeedback(null), 10_000);
+    return () => window.clearTimeout(timer);
+  }, [cleanupFeedback]);
+
+  const cleanupRetryJournalId = cleanupFeedback?.kind === 'failed' ? cleanupFeedback.journalId : undefined;
+
+  // worktree 分頁的清理與分支清理共用同一張回饋卡（卡片渲染在分頁上方，兩邊都看得到）。
+  const cleanupApi: CleanupFeedbackApi = {
+    run: withCleanupProgress,
+    done: (branch) => setCleanupFeedback({ kind: 'done', branch, did: cleanupDoneSteps() }),
+    fail: (branch, message, journalId) => setCleanupFeedback({
+      kind: 'failed',
+      branch,
+      message,
+      ...(journalId ? { journalId } : {}),
+    }),
+  };
 
   useEffect(() => {
     if (!wsId) {
@@ -899,7 +923,7 @@ export function SourceControlPanel(): React.JSX.Element {
         { dismissable: false },
       )) as BranchCleanupRiskDecision | undefined;
       if (!decision) return;
-      const result = await withCleanupProgress(() => ipc.git.cleanupExecute({
+      const result = await withCleanupProgress(anchorBranch, () => ipc.git.cleanupExecute({
         wsId,
         branch: anchorBranch,
         leaseToken: preview.leaseToken,
@@ -924,11 +948,17 @@ export function SourceControlPanel(): React.JSX.Element {
           .filter((endpoint) => endpoint.status !== 'deleted' && endpoint.status !== 'already-completed' && endpoint.status !== 'skipped')
           .map((endpoint) => `${endpoint.remote}/${endpoint.branch}：${endpoint.message ?? endpoint.status}`)
           .join('\n');
-        setError(result.error);
-        setErrorDetail(endpointDetails || null);
+        setCleanupFeedback({
+          kind: 'failed',
+          branch: anchorBranch,
+          message: result.error,
+          ...(endpointDetails ? { detail: endpointDetails } : {}),
+          ...(result.journalId ? { journalId: result.journalId } : {}),
+        });
         await loadCleanupStatus();
         return;
       }
+      setCleanupFeedback({ kind: 'done', branch: anchorBranch, did: cleanupDoneSteps() });
       await refresh();
       await loadBranches();
       await loadCleanupStatus();
@@ -937,9 +967,11 @@ export function SourceControlPanel(): React.JSX.Element {
 
   const resumeCleanup = (journalId: string): Promise<void> => run(async () => {
     if (!wsId) return;
-    const result = await withCleanupProgress(() => ipc.git.cleanupResume({ wsId, journalId }));
-    if (!result.ok) setError(result.error);
+    const branch = cleanupJournals.find((entry) => entry.journalId === journalId)?.branch ?? '未知分支';
+    const result = await withCleanupProgress(branch, () => ipc.git.cleanupResume({ wsId, journalId }));
+    if (!result.ok) setCleanupFeedback({ kind: 'failed', branch, message: result.error, journalId });
     else {
+      setCleanupFeedback({ kind: 'done', branch, did: cleanupDoneSteps() });
       await refresh();
       await loadBranches();
     }
@@ -1156,17 +1188,72 @@ export function SourceControlPanel(): React.JSX.Element {
         </div>
       ))}
 
-      {cleanupProgress && <div className="pd-scm-fetch-hint" role="status" aria-live="polite">完整清理進度：{cleanupProgress}</div>}
+      {cleanupFeedback && (
+        <div
+          className={`pd-cleanup-feedback is-${cleanupFeedback.kind}`}
+          role="status"
+          aria-live="polite"
+          data-testid="cleanup-feedback"
+          data-kind={cleanupFeedback.kind}
+        >
+          <div className="pd-cleanup-feedback-head">
+            <strong>
+              {cleanupFeedback.kind === 'running' && `正在完整清理 ${neutralizeBidi(cleanupFeedback.branch)}`}
+              {cleanupFeedback.kind === 'done' && `已完整清理 ${neutralizeBidi(cleanupFeedback.branch)}`}
+              {cleanupFeedback.kind === 'failed' && '清理未完成，已停在安全點'}
+            </strong>
+            {cleanupFeedback.kind !== 'running' && (
+              <button
+                className="pd-cleanup-feedback-close"
+                type="button"
+                aria-label="關閉清理結果"
+                onClick={() => setCleanupFeedback(null)}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {cleanupFeedback.kind === 'running' && (
+            <>
+              <span className="pd-cleanup-feedback-bar"><i /></span>
+              <span>{cleanupFeedback.step}</span>
+            </>
+          )}
+
+          {cleanupFeedback.kind === 'done' && (cleanupFeedback.did.length > 0 ? (
+            <>
+              <ul className="pd-cleanup-feedback-did">
+                {cleanupFeedback.did.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+              </ul>
+              <span className="pd-cleanup-feedback-fade">10 秒後自動收起</span>
+            </>
+          ) : (
+            <span>沒有需要變更的項目，狀態已收斂。</span>
+          ))}
+
+          {cleanupFeedback.kind === 'failed' && (
+            <>
+              <span>{neutralizeBidi(cleanupFeedback.message)}</span>
+              {cleanupFeedback.detail && (
+                <details className="pd-scm-error-detail">
+                  <summary>顯示技術細節</summary>
+                  <pre>{neutralizeBidi(cleanupFeedback.detail)}</pre>
+                </details>
+              )}
+              {cleanupRetryJournalId && (
+                <span className="pd-scm-hdr-actions">
+                  <button className="pd-btn" type="button" disabled={busy} onClick={() => void resumeCleanup(cleanupRetryJournalId)}>繼續收斂</button>
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="pd-scm-error" role="alert">
           <span>{error}</span>
-          {errorDetail && (
-            <details className="pd-scm-error-detail">
-              <summary>顯示技術細節</summary>
-              <pre>{errorDetail}</pre>
-            </details>
-          )}
         </div>
       )}
 
@@ -1490,7 +1577,7 @@ export function SourceControlPanel(): React.JSX.Element {
         </div>
       )}
 
-      {tab === 'worktree' && wsId && <WorktreePanel wsId={wsId} wsPath={wsPath} />}
+      {tab === 'worktree' && wsId && <WorktreePanel wsId={wsId} wsPath={wsPath} cleanup={cleanupApi} />}
 
       {branchMenu && (() => {
         const isCurrent = branchMenu.kind === 'local' && branchMenu.name === branches.current;

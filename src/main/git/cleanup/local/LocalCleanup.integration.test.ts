@@ -93,6 +93,21 @@ describe('本機完整清理真 Git 鏈路', () => {
     expect(service.status().journals).toEqual([]);
   }, 180_000);
 
+  it('保留 refs 含 origin/HEAD symref 時仍完成刪除，且 symref 原樣保留', async () => {
+    // clone 出來的 repo 預設帶 refs/remotes/origin/HEAD；它若在 CAS transaction 中被解引用，
+    // 會與同批的 refs/remotes/origin/main 撞成同一次更新，整批被 git 擋下。
+    git(repo, 'update-ref', 'refs/remotes/origin/main', git(repo, 'rev-parse', 'main'));
+    git(repo, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main');
+    git(repo, 'branch', 'profile');
+
+    const { result } = await execute('profile');
+
+    expect(result).toMatchObject({ ok: true, phase: 'closed' });
+    expect(gitFails(repo, 'show-ref', '--verify', 'refs/heads/profile')).toBe(true);
+    expect(git(repo, 'symbolic-ref', 'refs/remotes/origin/HEAD')).toBe('refs/remotes/origin/main');
+    expect(git(repo, 'rev-parse', 'refs/remotes/origin/main')).toBe(git(repo, 'rev-parse', 'main'));
+  }, 180_000);
+
   it('未合併分支先回 force-required，明確 force 後才刪除並回報不可達 commit 數', async () => {
     git(repo, 'checkout', '-b', 'profile');
     writeFileSync(join(repo, 'profile.txt'), 'only profile\n');
