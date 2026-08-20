@@ -492,6 +492,31 @@ export function TerminalView({
       return false;
     });
 
+    // 滾輪捲動接管（使用者回報：Claude 分頁裡畫面完全捲不上去）：TUI 開啟滑鼠追蹤（?1003）後，
+    // xterm 會把滾輪當成滑鼠回報送給程式而不捲 scrollback，而 Claude/Codex 這類 TUI 並不使用滾輪
+    // ——滾輪等於白白消失。xterm 亦未實作 Shift 逃生口（實測 Shift+滾輪同樣捲 0 行），使用者因此
+    // 沒有任何辦法回看歷史。
+    // 判準用「畫面模式」而非「有沒有開滑鼠追蹤」：主畫面（normal）代表程式把輸出印在有 scrollback
+    // 的緩衝區上（Claude/Codex），使用者要的是捲歷史；替代畫面（alternate）是 vim/htop 這類全螢幕
+    // 接管，本來就沒有 scrollback 可捲，滾輪送給程式才正確。
+    // 只在「主畫面 ＋ 滑鼠追蹤開著」這個真正壞掉的組合接管；其餘一律交還 xterm，原生捲動手感不變。
+    // 捲動量沿用 xterm 自己的像素模型（deltaY ÷ 實際列高），避免同一個終端機在開 TUI 前後
+    // 滾輪速度不一致——那比捲不動更難察覺，但一樣惱人。
+    term.attachCustomWheelEventHandler((ev) => {
+      if (term.buffer.active.type === 'alternate') return true;
+      if (term.modes.mouseTrackingMode === 'none') return true;
+      const rowEl = term.element?.querySelector('.xterm-rows')?.firstElementChild as HTMLElement | null;
+      const rowHeight = rowEl?.getBoundingClientRect().height || 0;
+      const lines =
+        ev.deltaMode === 1 // DOM_DELTA_LINE：deltaY 本身就是列數
+          ? ev.deltaY
+          : rowHeight > 0
+            ? ev.deltaY / rowHeight
+            : ev.deltaY / 20; // 取不到列高時的保底（首次 render 前）
+      term.scrollLines(Math.sign(lines) * Math.max(1, Math.round(Math.abs(lines))));
+      return false; // 不讓 xterm 再把這個滾輪事件回報給 TUI
+    });
+
     // 右鍵：有選取＝複製並清選取；無選取＝貼上（Windows Terminal 慣例；xterm 原生無右鍵貼上）。
     // 貼上防抖 300ms：觸控板/滑鼠驅動偶發把一次手勢送成兩個 contextmenu、或貼上非同步延遲下
     // 使用者連點 → 忠實執行會貼兩次（dogfood 回報）；0.3 秒內故意連貼兩次在終端機無真實需求。

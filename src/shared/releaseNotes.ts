@@ -15,6 +15,14 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.32.0',
+    date: '2026-08-20',
+    highlights: [
+      '修正 Claude、Codex 等 AI 對話進行中時，終端機完全無法用滾輪往上捲看歷史的問題',
+      'vim、htop 等會接管整個畫面的程式，滾輪行為維持不變，仍交給程式自行處理',
+    ],
+  },
+  {
     version: '0.31.0',
     date: '2026-08-17',
     highlights: [
