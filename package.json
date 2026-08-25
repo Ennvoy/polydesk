@@ -1,6 +1,6 @@
 {
   "name": "polydesk",
-  "version": "0.32.0",
+  "version": "0.33.0",
   "description": "Polydesk — 多工作區開發終端機（Electron skeleton）",
   "author": "Polydesk",
   "license": "MIT",
@@ -62,10 +62,12 @@
   "build": {
     "appId": "com.polydesk.app",
     "productName": "Polydesk",
+    "electronVersion": "33.4.11",
     "directories": {
       "output": "../polydesk-dist"
     },
     "npmRebuild": false,
+    "afterPack": "build/afterPack.js",
     "files": [
       "out/**/*",
       "package.json"
@@ -73,7 +75,8 @@
     "asarUnpack": [
       "**/*.node",
       "**/node_modules/node-pty/**",
-      "**/node_modules/@vscode/ripgrep/**"
+      "**/node_modules/@vscode/ripgrep/**",
+      "**/node_modules/@vscode/ripgrep-win32-x64/**"
     ],
     "win": {
       "target": [
@@ -81,8 +84,8 @@
       ],
       "icon": "build/icon.ico"
     },
-  "portable": {
-    "artifactName": "Polydesk-${version}-portable.exe"
+    "portable": {
+      "artifactName": "Polydesk-${version}-portable.exe"
+    }
   }
-}
 }

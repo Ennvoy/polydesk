@@ -15,6 +15,16 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.33.0',
+    date: '2026-08-25',
+    highlights: [
+      'Claude 分頁終於可以正常往上捲動——真正病根是 Windows 內建 ConPTY 吞掉滑鼠與畫面切換訊號，改用 node-pty 內附的新版元件後，全螢幕 AI 對話由程式自己管捲動',
+      '修正終端機輸入中文時字被吃掉、變成空白的問題（與捲不動同一病根，一併根治）',
+      '程序結束後約需兩秒才顯示結束畫面與重新啟動鈕，屬新機制的已知代價，並非當機',
+      '打包流程補上關鍵二進位檢查：缺檔會在打包當下立即失敗，不會交付出開不了終端機的壞包',
+    ],
+  },
+  {
     version: '0.32.0',
     date: '2026-08-20',
     highlights: [
