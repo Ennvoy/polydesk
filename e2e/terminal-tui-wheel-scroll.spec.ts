@@ -5,6 +5,11 @@
 // 「滾也滾不回來」。此症狀早在 terminal-scroll-follow.spec.ts 的檔頭被記錄過，但當時只修了
 // 另一半（輸出時 viewport 被凍住的孤兒旗標），滾輪被送走這半從未處理。
 //
+// 2026-08-21 補註：本測把 ?1003h 直接餵進 xterm、繞過了 ConPTY，只驗 xterm 端（normal buffer）的接管。
+// 回報者的實際情境（Claude 2.1.236 fullscreen＝alt screen＋?1000–1006）病根在 Windows 內建 ConPTY 吞掉
+// alt-screen／滑鼠序列、也不穿透滾輪回報；該病根由 PtyManager USE_CONPTY_DLL 修，真 PTY 鏈路見
+// terminal-conpty-passthrough.spec.ts。本測保留為 xterm 端的回歸基準。
+//
 // 本測分三段釘住行為：(1) 未開滑鼠追蹤時滾輪必須能捲（基準線，確認測試本身有效）；
 // (2) 開啟 ?1003 後滾輪是否仍能捲（回報的症狀）；(3) Shift+滾輪能否繞過（業界慣例的逃生口，
 // 決定修法是「改預設行為」還是「只需把既有逃生口寫進使用說明」）。

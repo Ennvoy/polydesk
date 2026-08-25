@@ -231,8 +231,37 @@ export interface ManagedPty {
 export type SpawnFn = (
   file: string,
   args: string[],
-  opts: { name: string; cols: number; rows: number; cwd: string; env: NodeJS.ProcessEnv; encoding: null },
+  opts: {
+    name: string;
+    cols: number;
+    rows: number;
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    encoding: null;
+    /** Windows：改用 node-pty 內附的 conpty.dll（新版 OpenConsole），而非 OS 內建 ConPTY。 */
+    useConptyDll?: boolean;
+  },
 ) => ManagedPty;
+
+/**
+ * Windows 一律改用 node-pty 內附的 conpty.dll（REQ-TERM：Claude 分頁捲不動／吃字的病根）。
+ * Win10 19045 內建 ConPTY（conhost）有三個實測缺陷，對 Claude Code 這類全螢幕 TUI 是致命的：
+ *  1. 不穿透滑鼠輸入：終端機送的 SGR 滑鼠回報（`ESC[<64;x;yM` 滾輪）進了 ConPTY 就消失，TUI 收不到。
+ *  2. 吞掉 TUI 送的 `?1049h`（alt screen）與 `?1000/1002/1003/1006h`（滑鼠追蹤）不轉給終端機：
+ *     Claude 以為自己在 alt screen＋滑鼠模式，xterm 卻停在 normal buffer 沒開滑鼠——滾輪只捲到
+ *     xterm 自己（沒有對話內容的）scrollback、Claude 也永遠收不到滾輪 ⇒「畫面捲不動」。
+ *  3. 自行重繪（re-render）TUI 畫面，寬字（中文）被覆寫時會位移／留白 ⇒ 輸入中文「吃字」。
+ * 內附 conpty.dll 為近代 OpenConsole，VT 直通、滑鼠穿透、寬字處理皆正確（VS Code
+ * `terminal.integrated.windowsUseConptyDll` 同一機制）。實測副作用：程序結束回報慢約 2 秒。
+ * 逃生口：環境變數 `POLYDESK_CONPTY_DLL=0` 退回 OS 內建 ConPTY（排查用；e2e 對照組也靠它重現病根）。
+ * tradeoff：node-pty 的 dll 分支 kill() 不再列舉 console process list 逐一撲殺（僅 destroy socket＋
+ * 原生 kill）——「中間父程序先亡、孤兒化卻仍掛 console」的程序少了一層備援網；常規程序樹仍由
+ * 本檔 defaultTreeKill 的 `taskkill /PID /T /F` 全覆蓋（app-close e2e 驗證 shell 樹死透）。
+ */
+export const computeUseConptyDll = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv): boolean =>
+  platform === 'win32' && env.POLYDESK_CONPTY_DLL !== '0';
+
+export const USE_CONPTY_DLL = computeUseConptyDll(process.platform, process.env);
 
 export interface PtyDeps {
   spawn?: SpawnFn;
@@ -387,6 +416,7 @@ export class PtyManager {
         // （ELECTRON_RUN_AS_NODE/NODE_OPTIONS），避免 shell rc/profile 自動執行碼濫用。
         env: { ...sanitizeUserEnv(), POLYDESK_TERM_ID: termId },
         encoding: null,
+        useConptyDll: USE_CONPTY_DLL, // 見 USE_CONPTY_DLL 註解：內建 ConPTY 吞滑鼠／alt-screen、重繪吃字
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

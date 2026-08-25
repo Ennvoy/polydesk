@@ -492,14 +492,14 @@ export function TerminalView({
       return false;
     });
 
-    // 滾輪捲動接管（使用者回報：Claude 分頁裡畫面完全捲不上去）：TUI 開啟滑鼠追蹤（?1003）後，
-    // xterm 會把滾輪當成滑鼠回報送給程式而不捲 scrollback，而 Claude/Codex 這類 TUI 並不使用滾輪
-    // ——滾輪等於白白消失。xterm 亦未實作 Shift 逃生口（實測 Shift+滾輪同樣捲 0 行），使用者因此
-    // 沒有任何辦法回看歷史。
-    // 判準用「畫面模式」而非「有沒有開滑鼠追蹤」：主畫面（normal）代表程式把輸出印在有 scrollback
-    // 的緩衝區上（Claude/Codex），使用者要的是捲歷史；替代畫面（alternate）是 vim/htop 這類全螢幕
-    // 接管，本來就沒有 scrollback 可捲，滾輪送給程式才正確。
-    // 只在「主畫面 ＋ 滑鼠追蹤開著」這個真正壞掉的組合接管；其餘一律交還 xterm，原生捲動手感不變。
+    // 滾輪捲動接管（v0.32.0 引入；判準用「畫面模式」而非「有沒有開滑鼠追蹤」）：
+    // 替代畫面（alternate）是 vim/htop/Claude fullscreen 這類全螢幕接管，本來就沒有 scrollback 可捲
+    // ——交還 xterm，由它把滾輪編成滑鼠回報送給程式、程式自己捲歷史（PtyManager USE_CONPTY_DLL 讓
+    // 回報真的穿透到程式；內建 ConPTY 時代這條路是斷的，Claude 分頁因此捲不動）。
+    // 主畫面（normal）代表程式把輸出印在有 scrollback 的緩衝區上，使用者要的是捲歷史——此時程式即使
+    // 開著滑鼠追蹤也收不到滾輪，是刻意的產品決策（捲歷史優先；xterm 未實作 Shift 逃生口，實測
+    // Shift+滾輪捲 0 行，不接管使用者就無路可走）。conpty.dll 穿透後這個取捨才第一次真正作用在
+    // 真實 PTY 程式上。其餘組合一律交還 xterm，原生捲動手感不變。
     // 捲動量沿用 xterm 自己的像素模型（deltaY ÷ 實際列高），避免同一個終端機在開 TUI 前後
     // 滾輪速度不一致——那比捲不動更難察覺，但一樣惱人。
     term.attachCustomWheelEventHandler((ev) => {

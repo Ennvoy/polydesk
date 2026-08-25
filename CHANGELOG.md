@@ -7,6 +7,25 @@
 - 內部需求、驗證與 dogfood 編號：[`specs/tasks.md`](specs/tasks.md)
 - 版本規則（2026-07-15 拍板）：以**版本分節**整理，每完成一批交付即 minor bump＋打 tag＋本檔補節；app 內版本顯示的唯一來源是 `src/shared/releaseNotes.ts`（單測釘死與 `package.json` 同步）。
 
+## v0.33.0（2026-08-25）
+
+Claude 分頁「捲不動」與「輸入中文吃字」的真正病根：Windows 內建 ConPTY。改用 node-pty 內附 conpty.dll。
+
+### 2026-08-25｜落地收尾：打包單一來源收斂、afterPack 必檢、說明同步
+
+- 打包設定收斂為單一來源 package.json `"build"`：歷史上的 electron-builder.yml 只要 package.json 有 `"build"` 鍵就整份被忽略（app-builder-lib 載入順序），從未生效、內容（nsis/publish）與實際交付（portable）矛盾，已刪除；yml 才有的 `electronVersion: 33.4.11` 鎖版與 `afterPack` hook 搬進 package.json，設定理由註記於 `build/afterPack.js` 檔頭。
+- afterPack 必檢清單補 `conpty.dll` 與 `OpenConsole.exe`（本批修法賴以維生的兩檔）；連同 hook 首次真正接上打包流程，缺檔會在打包當下 fail-fast。缺檔症狀＝開終端機即 spawn-failed 且錯誤含「Cannot find conpty.dll」，供日後 triage。
+- 單測防環境污染：`USE_CONPTY_DLL` 判斷抽成純函式 `computeUseConptyDll`，spawn 斷言改釘常數本身，殼層殘留 `POLYDESK_CONPTY_DLL=0` 不再誤紅；e2e 亦以 `env` 釘死後端。`TerminalView` 滾輪接管註解更正（Claude fullscreen 走 alt-screen 分支、由 xterm 原生回報滾輪，「TUI 不使用滾輪」的舊前提已不成立）。
+- 導覽與使用說明同步檢查：完整指南 terminal 篇「程序結束」狀態補述「約需兩秒才顯示結束畫面，並非當機」；其餘經檢查不受影響——指南與導覽本無終端機捲動／中文輸入段落（v0.32.0 已確認過的前例），導覽 target selector 未動，不需調升 ONBOARDING_VERSION。
+- 已知可感知變化（出口逾時稽核結論：無任何 timeout 依賴 exit 事件，全部 kill 路徑走 taskkill，不受影響）：程序結束提示與 AI 狀態燈晚約 2 秒；關 app「仍有執行中終端機」確認窗的既有誤報競態窗由約 1.1 秒拉寬到約 3.2 秒（僅誤報機率上升，確認後照常退出）。
+
+### 2026-08-21｜PTY 改用 node-pty 內附 conpty.dll（USE_CONPTY_DLL）
+
+- 病根：`PtyManager` 以 node-pty 預設值 spawn，等於使用 Win10 19045 內建 ConPTY（conhost）。實測它對 Claude Code 2.1.236 這類全螢幕 TUI 有三個缺陷：(1) 不穿透滑鼠輸入——xterm 送的 SGR 滾輪回報 `ESC[<64;x;yM` 進 ConPTY 就消失；(2) 吞掉 TUI 送的 `?1049h`（alt screen）與 `?1000/1002/1003/1006h`（滑鼠追蹤），不轉給 xterm——Claude 以為自己在 alt screen＋滑鼠模式，xterm 卻停在 normal buffer 沒開滑鼠，滾輪只捲 xterm 自己（沒有對話內容的）scrollback、Claude 也收不到；(3) 自行重繪 TUI 畫面，寬字（中文）被覆寫時位移／留白，輸入中文時字被吃掉。
+- v0.32.0 的滾輪修正與其 e2e 是把 `?1003h` 直接餵進 xterm、繞過 ConPTY，故沒有碰到病根；真實 Claude（alt screen）情境下該修正刻意不介入。
+- 修法：`spawn` 加 `useConptyDll: USE_CONPTY_DLL`（Windows 一律開，VS Code `terminal.integrated.windowsUseConptyDll` 同一機制）；逃生口 `POLYDESK_CONPTY_DLL=0` 退回 OS 內建 ConPTY（排查用，e2e 對照組亦靠它重現病根）。實測 conpty.dll 下 Claude 的 `?1049h`／滑鼠追蹤抵達 xterm、滾輪回報穿透給 Claude、逐字輸入中文渲染完整；程序結束回報慢約 2 秒。
+- 新增真 PTY 鏈路 e2e：`terminal-conpty-passthrough.spec.ts` 由 PowerShell 子程序送 `?1049h`／`?1003h?1006h`，斷言 xterm 真的切 alternate buffer／開滑鼠模式（內建 ConPTY 必敗）。單測補 spawn 選項斷言。
+
 ## v0.32.0（2026-08-20）
 
 修好終端機在 AI 對話進行中完全捲不動的問題——這是使用者回報「畫面沒辦法往上滾動」的直接病因。

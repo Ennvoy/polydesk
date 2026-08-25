@@ -26,6 +26,8 @@ import {
   VALID_SHELLS,
   OSC52_WRITE_MAX_B64,
   OSC52_CARRY_CAP,
+  USE_CONPTY_DLL,
+  computeUseConptyDll,
   type ManagedPty,
   type SpawnFn,
 } from './PtyManager';
@@ -170,6 +172,28 @@ describe('PtyManager 安全：shell allowlist（F-3-A1）', () => {
     });
     const { termId } = mgr.create({ wsId: ctx.wsId, shell: 'powershell' });
     expect(injected).toBe(termId);
+  });
+
+  it('Windows 一律以 node-pty 內附 conpty.dll 建立 PTY（內建 ConPTY 吞滑鼠回報／alt-screen、重繪吃字）', () => {
+    let opts: Parameters<SpawnFn>[2] | undefined;
+    const mgr = new PtyManager(ctx.workspaces, ctx.lifecycle, {
+      spawn: (_file, _args, o) => {
+        opts = o;
+        return new FakePty();
+      },
+    });
+    mgr.create({ wsId: ctx.wsId, shell: 'powershell' });
+    // 釘「spawn 傳的就是那個常數」而非重算一次條件——常數在模組載入時定格，
+    // 環境若殘留 POLYDESK_CONPTY_DLL=0（排查後忘了清）測試也不誤紅。
+    expect(opts?.useConptyDll).toBe(USE_CONPTY_DLL);
+    expect(opts?.encoding).toBeNull(); // bytes 路徑不變：renderer 仍拿原始 Uint8Array
+  });
+
+  it('computeUseConptyDll：win32 預設開、POLYDESK_CONPTY_DLL=0 逃生口關、非 Windows 一律關', () => {
+    expect(computeUseConptyDll('win32', {})).toBe(true);
+    expect(computeUseConptyDll('win32', { POLYDESK_CONPTY_DLL: '0' })).toBe(false);
+    expect(computeUseConptyDll('win32', { POLYDESK_CONPTY_DLL: '1' })).toBe(true);
+    expect(computeUseConptyDll('linux', {})).toBe(false);
   });
 
   it('內建 shell 直接使用 SystemRoot 絕對路徑，不受 PATH 是否含尾分號影響', () => {

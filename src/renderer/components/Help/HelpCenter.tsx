@@ -107,7 +107,7 @@ const ARTICLES: HelpArticle[] = [
     steps: ['在終端機工具列選擇 PowerShell、CMD、pwsh、Git Bash 或 WSL。', '按＋新增；使用並排或上下切換分割方向。', '關閉執行中程序前閱讀確認，避免遺失工作。'],
     states: [
       { label: '找不到 shell', detail: '設定會指出缺少的 shell；安裝後重新開啟 Polydesk。' },
-      { label: '程序結束', detail: '保留輸出並提供重新啟動，不會假裝仍在執行。' },
+      { label: '程序結束', detail: '程序結束後約需兩秒才顯示結束畫面與重新啟動鈕，屬正常現象並非當機；輸出會保留，不會假裝仍在執行。' },
     ],
     action: 'terminal', actionLabel: '顯示終端機',
   },
