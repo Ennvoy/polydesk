@@ -397,9 +397,15 @@ export function TerminalView({
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
     // 輸入：term → main（高頻；標記時間戳供延遲量測）。
+    // keyLatency 只計「使用者敲鍵」：xterm 對 TUI 查詢（DA/DSR/CPR…）的自動回覆也走 onData 且必以
+    // ESC 開頭——conpty.dll 直通後這些查詢真的會抵達 xterm、回覆真的會發生，而回覆送出後往往要等
+    // 下一波提示字元重繪才有輸出，若計入會產生數百 ms 的假樣本（perf e2e 實測 392ms，實際打字
+    // echo 僅 ~10ms）。方向鍵等 ESC 序列一併不計，不影響「打字往返」的量測目的。
     const onDataDisp = term.onData((d) => {
-      keyTsQueueRef.current.push(performance.now());
-      if (keyTsQueueRef.current.length > 1000) keyTsQueueRef.current.splice(0, keyTsQueueRef.current.length - 1000);
+      if (!d.startsWith('\u001b')) {
+        keyTsQueueRef.current.push(performance.now());
+        if (keyTsQueueRef.current.length > 1000) keyTsQueueRef.current.splice(0, keyTsQueueRef.current.length - 1000);
+      }
       ipc.pty.write(termId, d);
     });
 

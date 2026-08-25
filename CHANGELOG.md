@@ -28,6 +28,7 @@ Claude 分頁「捲不動」與「輸入中文吃字」的真正病根：Windows
 - 單測防環境污染：`USE_CONPTY_DLL` 判斷抽成純函式 `computeUseConptyDll`，spawn 斷言改釘常數本身，殼層殘留 `POLYDESK_CONPTY_DLL=0` 不再誤紅；e2e 亦以 `env` 釘死後端。`TerminalView` 滾輪接管註解更正（Claude fullscreen 走 alt-screen 分支、由 xterm 原生回報滾輪，「TUI 不使用滾輪」的舊前提已不成立）。
 - 導覽與使用說明同步檢查：完整指南 terminal 篇「程序結束」狀態補述「約需兩秒才顯示結束畫面，並非當機」；其餘經檢查不受影響——指南與導覽本無終端機捲動／中文輸入段落（v0.32.0 已確認過的前例），導覽 target selector 未動，不需調升 ONBOARDING_VERSION。
 - 已知可感知變化（出口逾時稽核結論：無任何 timeout 依賴 exit 事件，全部 kill 路徑走 taskkill，不受影響）：程序結束提示與 AI 狀態燈晚約 2 秒；關 app「仍有執行中終端機」確認窗的既有誤報競態窗由約 1.1 秒拉寬到約 3.2 秒（僅誤報機率上升，確認後照常退出）。
+- keyLatency 埋點修正（REQ-PERF-004）：xterm 對 TUI 查詢（DA/DSR/CPR…）的自動回覆也走 `term.onData`，conpty.dll 直通後這些查詢真的抵達 xterm、回覆真的發生，被埋點誤計成「使用者敲鍵」產生數百 ms 假樣本（perf e2e 紅在 p95 392~536ms；旁聽 probe 證實實際打字 echo 僅 ~10ms，與內建 ConPTY 的 11ms 相當）。埋點改為只計非 ESC 開頭的輸入；修正後 keyLatency p95 = 11ms、樣本數足額。
 
 ### 2026-08-21｜PTY 改用 node-pty 內附 conpty.dll（USE_CONPTY_DLL）
 
