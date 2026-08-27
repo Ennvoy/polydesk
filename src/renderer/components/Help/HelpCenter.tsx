@@ -108,6 +108,7 @@ const ARTICLES: HelpArticle[] = [
     states: [
       { label: '找不到 shell', detail: '設定會指出缺少的 shell；安裝後重新開啟 Polydesk。' },
       { label: '程序結束', detail: '程序結束後約需兩秒才顯示結束畫面與重新啟動鈕，屬正常現象並非當機；輸出會保留，不會假裝仍在執行。' },
+      { label: '剛結束就關閉 Polydesk', detail: '程序結束後約三秒內關閉 Polydesk，可能仍跳出「仍有執行中終端機」確認；這是狀態尚未更新的誤報，確認後照常退出，不會遺失工作。' },
     ],
     action: 'terminal', actionLabel: '顯示終端機',
   },

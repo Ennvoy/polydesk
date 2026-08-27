@@ -174,7 +174,7 @@ describe('PtyManager 安全：shell allowlist（F-3-A1）', () => {
     expect(injected).toBe(termId);
   });
 
-  it('Windows 一律以 node-pty 內附 conpty.dll 建立 PTY（內建 ConPTY 吞滑鼠回報／alt-screen、重繪吃字）', () => {
+  it('spawn 一律帶上 useConptyDll，值取自模組常數（非 Windows 為 false，屬預期）', () => {
     let opts: Parameters<SpawnFn>[2] | undefined;
     const mgr = new PtyManager(ctx.workspaces, ctx.lifecycle, {
       spawn: (_file, _args, o) => {
@@ -189,11 +189,28 @@ describe('PtyManager 安全：shell allowlist（F-3-A1）', () => {
     expect(opts?.encoding).toBeNull(); // bytes 路徑不變：renderer 仍拿原始 Uint8Array
   });
 
-  it('computeUseConptyDll：win32 預設開、POLYDESK_CONPTY_DLL=0 逃生口關、非 Windows 一律關', () => {
+  it('computeUseConptyDll：win32 預設開、逃生口認整組 falsy 拼法、非 Windows 一律關', () => {
     expect(computeUseConptyDll('win32', {})).toBe(true);
-    expect(computeUseConptyDll('win32', { POLYDESK_CONPTY_DLL: '0' })).toBe(false);
     expect(computeUseConptyDll('win32', { POLYDESK_CONPTY_DLL: '1' })).toBe(true);
     expect(computeUseConptyDll('linux', {})).toBe(false);
+    // 排查的人打的不一定是 '0'；被當成「沒關」會導出「conpty.dll 不是病因」的錯誤結論。
+    for (const off of ['0', 'false', 'FALSE', 'off', 'no', '', '  ']) {
+      expect(computeUseConptyDll('win32', { POLYDESK_CONPTY_DLL: off })).toBe(false);
+    }
+  });
+
+  it('關閉終端機時主動釋放 conout worker（node-pty 的 dll 分支不會自己收，見 disposeConoutWorker）', () => {
+    let disposed = 0;
+    class ConoutPty extends FakePty {
+      readonly _agent = { _conoutSocketWorker: { dispose: () => void (disposed += 1) } };
+    }
+    const mgr = new PtyManager(ctx.workspaces, ctx.lifecycle, {
+      spawn: () => new ConoutPty(),
+      treeKill: () => undefined,
+    });
+    const { termId } = mgr.create({ wsId: ctx.wsId, shell: 'powershell' });
+    mgr.close({ termId });
+    expect(disposed).toBe(1);
   });
 
   it('內建 shell 直接使用 SystemRoot 絕對路徑，不受 PATH 是否含尾分號影響', () => {
@@ -237,6 +254,17 @@ describe('PtyManager 安全：shell allowlist（F-3-A1）', () => {
       error: '找不到 CMD 執行檔，請確認該 shell 已正確安裝。',
       code: 'shell-not-found',
     });
+  });
+
+  it('conpty.dll 載入失敗時指名元件並給逃生口，不再把人導向「檢查安全設定」', () => {
+    const conptyFail = new PtyError('spawn-failed', { cause: new Error('Cannot find conpty.dll') });
+    const result = toPtyCreateResult(conptyFail, 'powershell');
+    expect(result.code).toBe('spawn-failed');
+    expect(result.error).toContain('conpty.dll');
+    expect(result.error).toContain('POLYDESK_CONPTY_DLL=0');
+    // 其他 spawn 失敗維持通用文案，不誤導成 conpty 問題
+    const other = new PtyError('spawn-failed', { cause: new Error('EACCES: permission denied') });
+    expect(toPtyCreateResult(other, 'powershell').error).toContain('請檢查系統安全設定');
   });
 
   it('resolveShellArgs：powershell/cmd 注入 UTF-8 初始化、pwsh/gitbash/wsl 免動（回 []）', () => {

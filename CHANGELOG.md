@@ -11,6 +11,16 @@
 
 Claude 分頁「捲不動」與「輸入中文吃字」的真正病根：Windows 內建 ConPTY。改用 node-pty 內附 conpty.dll。
 
+### 2026-08-25｜合併前 review 修正
+
+- **修正 conpty.dll 造成的資源洩漏**：node-pty 的 `useConptyDll` 分支把 conout worker 的釋放掛在關閉後永遠不會來的事件上，導致每關一個終端機分頁就留下一個 worker thread 與具名管線。`PtyManager.disposeTerm` 改為主動釋放（`disposeConoutWorker`），單測釘住。實測：開關 5 個 PTY 由殘留 5 個 MessagePort、程序無法自然退出，變成 0 個、正常退出；`node-pty@1.2.0-beta.15` 同段程式未修，升版救不了。
+- **afterPack 必檢改為釘死 arch 路徑**：原本只比對檔名，而 node-pty 同時內附 win32-x64／win32-arm64 與 third_party 共三套 `conpty.dll`，「x64 那份掉了」反而驗不出來——正好是本檢查唯一要擋的失敗。改為比對 `node-pty/prebuilds/win32-<arch>/…` 與 `@vscode/ripgrep-win32-<arch>/bin/rg.exe` 的路徑尾段（仍容忍 de-hoist），並改為單次走訪（原本每個必檢檔各重走一次全樹）。
+- **逃生口辨識放寬**：`POLYDESK_CONPTY_DLL` 原本只認 `0`，打 `false`／`off`／`no`／空字串都會被當成「沒關」，讓排查的人誤判 conpty.dll 不是病因；現在整組 falsy 拼法都認。
+- **conpty.dll 載入失敗的錯誤訊息**：原本一律導向「請檢查系統安全設定」，該路徑查不到真因；錯誤含 `conpty` 時改為指名元件並給出 `POLYDESK_CONPTY_DLL=0` 逃生口與其代價。
+- **病根描述更正**：實測（Win11 26200，node 直測 node-pty 四輪）證實 `?1049h`（alt screen）在內建 ConPTY 下**是穿透的**，被吞的是 `?1003h`／`?1006h`。原記述把 alt-screen 一併列為被吞序列有誤，程式註解、決議與 e2e 檔頭同步更正；連帶揭露新 e2e 的斷言 (1) 在內建 ConPTY 下也會通過，真正抓得住病根的是斷言 (2)。
+- **已知未覆蓋**：xterm→TUI 方向的滾輪 SGR 回報（症狀的另一半）仍無自動化測試，已於 `terminal-conpty-passthrough.spec.ts` 檔尾以 TODO 揭露，不以不穩的測試充數。
+- 使用指南 terminal 篇補「剛結束就關閉 Polydesk 可能仍跳確認」狀態（本批已知可感知變化的另一半）；`devDependencies.electron` 由 `^33.0.0` 釘死為 `33.4.11`，與 `build.electronVersion` 對齊，避免測試與打包跑在不同 electron 上；本批決議改號為 `116`（`101` 已由既有決議佔用）。
+
 ### 2026-08-25｜落地收尾：打包單一來源收斂、afterPack 必檢、說明同步
 
 - 打包設定收斂為單一來源 package.json `"build"`：歷史上的 electron-builder.yml 只要 package.json 有 `"build"` 鍵就整份被忽略（app-builder-lib 載入順序），從未生效、內容（nsis/publish）與實際交付（portable）矛盾，已刪除；yml 才有的 `electronVersion: 33.4.11` 鎖版與 `afterPack` hook 搬進 package.json，設定理由註記於 `build/afterPack.js` 檔頭。
@@ -21,10 +31,10 @@ Claude 分頁「捲不動」與「輸入中文吃字」的真正病根：Windows
 
 ### 2026-08-21｜PTY 改用 node-pty 內附 conpty.dll（USE_CONPTY_DLL）
 
-- 病根：`PtyManager` 以 node-pty 預設值 spawn，等於使用 Win10 19045 內建 ConPTY（conhost）。實測它對 Claude Code 2.1.236 這類全螢幕 TUI 有三個缺陷：(1) 不穿透滑鼠輸入——xterm 送的 SGR 滾輪回報 `ESC[<64;x;yM` 進 ConPTY 就消失；(2) 吞掉 TUI 送的 `?1049h`（alt screen）與 `?1000/1002/1003/1006h`（滑鼠追蹤），不轉給 xterm——Claude 以為自己在 alt screen＋滑鼠模式，xterm 卻停在 normal buffer 沒開滑鼠，滾輪只捲 xterm 自己（沒有對話內容的）scrollback、Claude 也收不到；(3) 自行重繪 TUI 畫面，寬字（中文）被覆寫時位移／留白，輸入中文時字被吃掉。
+- 病根：`PtyManager` 以 node-pty 預設值 spawn，等於使用 Win10 19045 內建 ConPTY（conhost）。實測它對 Claude Code 2.1.236 這類全螢幕 TUI 有三個缺陷：(1) 不穿透滑鼠輸入——xterm 送的 SGR 滾輪回報 `ESC[<64;x;yM` 進 ConPTY 就消失；(2) 吞掉 TUI 送的 `?1000/1002/1003/1006h`（滑鼠追蹤）不轉給 xterm——Claude 以為自己開著滑鼠模式，xterm 不知情，滾輪不會被編成回報送給 Claude；(3) 自行重繪 TUI 畫面，寬字（中文）被覆寫時位移／留白，輸入中文時字被吃掉。
 - v0.32.0 的滾輪修正與其 e2e 是把 `?1003h` 直接餵進 xterm、繞過 ConPTY，故沒有碰到病根；真實 Claude（alt screen）情境下該修正刻意不介入。
 - 修法：`spawn` 加 `useConptyDll: USE_CONPTY_DLL`（Windows 一律開，VS Code `terminal.integrated.windowsUseConptyDll` 同一機制）；逃生口 `POLYDESK_CONPTY_DLL=0` 退回 OS 內建 ConPTY（排查用，e2e 對照組亦靠它重現病根）。實測 conpty.dll 下 Claude 的 `?1049h`／滑鼠追蹤抵達 xterm、滾輪回報穿透給 Claude、逐字輸入中文渲染完整；程序結束回報慢約 2 秒。
-- 新增真 PTY 鏈路 e2e：`terminal-conpty-passthrough.spec.ts` 由 PowerShell 子程序送 `?1049h`／`?1003h?1006h`，斷言 xterm 真的切 alternate buffer／開滑鼠模式（內建 ConPTY 必敗）。單測補 spawn 選項斷言。
+- 新增真 PTY 鏈路 e2e：`terminal-conpty-passthrough.spec.ts` 由 PowerShell 子程序送 `?1049h`／`?1003h?1006h`，斷言 xterm 真的切 alternate buffer／開滑鼠模式。單測補 spawn 選項斷言。
 
 ## v0.32.0（2026-08-20）
 

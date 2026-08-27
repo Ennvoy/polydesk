@@ -17,7 +17,7 @@
 - 完整清理：renderer → `git:cleanupPreview/Execute/Status/Cancel/Resume/ImportEvidence` 固定 IPC → repository queue → Git/磁碟/endpoint lease 重驗 → userData 版本化 journal/claim；preview 零副作用，execute 依序執行本機 worktree/ref/metadata，再處理遠端 expected-OID 與 tracking ref，部分結果沿 checkpoint 恢復。
 - 工作區：renderer store／workspace rail → `workspace:*` → `WorkspaceManager` → `StateStore` userData 狀態檔。
 - Worktree：SCM／建立對話框 → `git:worktree*` → `GitService` → `WorkspaceManager` 納管；分支互斥以 `git worktree list` 的即時結果為準。
-- Terminal：xterm → `pty:*` → `PtyManager` → ConPTY；main 主動推播輸出。Windows 一律用 node-pty 內附 conpty.dll（`USE_CONPTY_DLL`，decision 101——內建 ConPTY 吞滑鼠／alt-screen、重繪吃字；逃生口 `POLYDESK_CONPTY_DLL=0`）。
+- Terminal：xterm → `pty:*` → `PtyManager` → ConPTY；main 主動推播輸出。Windows 一律用 node-pty 內附 conpty.dll（`USE_CONPTY_DLL`，decision 116——內建 ConPTY 吞滑鼠追蹤序列、重繪吃字；逃生口 `POLYDESK_CONPTY_DLL=0`）。
 - 檔案／搜尋／LSP：renderer 元件 → 對應固定 IPC → main service；檔案 watcher 再推事件回 renderer。
 
 ## Git 分支現況

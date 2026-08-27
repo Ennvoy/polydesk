@@ -161,8 +161,9 @@ sequenceDiagram
 
 ```
 polydesk/
-├─ package.json                # 鎖定所有 library 版本（見 §4）
-├─ electron-builder.yml        # NSIS target / asarUnpack / publish(generic)
+├─ package.json                # 鎖定所有 library 版本（見 §4）＋ electron-builder 設定唯一來源
+│                              #   （"build" 鍵：portable target / asarUnpack / afterPack；
+│                              #    v0.33.0 刪除 electron-builder.yml——只要有 "build" 鍵，yml 整份被忽略）
 ├─ vite.config.ts              # Monaco worker(?worker) + LSP/vscode-api 設定
 ├─ dev-app-update.yml          # 開發期模擬 auto-update
 ├─ src/

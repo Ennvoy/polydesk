@@ -245,11 +245,12 @@ export type SpawnFn = (
 
 /**
  * Windows 一律改用 node-pty 內附的 conpty.dll（REQ-TERM：Claude 分頁捲不動／吃字的病根）。
- * Win10 19045 內建 ConPTY（conhost）有三個實測缺陷，對 Claude Code 這類全螢幕 TUI 是致命的：
+ * 內建 ConPTY（conhost）對 Claude Code 這類全螢幕 TUI 有三個實測缺陷：
  *  1. 不穿透滑鼠輸入：終端機送的 SGR 滑鼠回報（`ESC[<64;x;yM` 滾輪）進了 ConPTY 就消失，TUI 收不到。
- *  2. 吞掉 TUI 送的 `?1049h`（alt screen）與 `?1000/1002/1003/1006h`（滑鼠追蹤）不轉給終端機：
- *     Claude 以為自己在 alt screen＋滑鼠模式，xterm 卻停在 normal buffer 沒開滑鼠——滾輪只捲到
- *     xterm 自己（沒有對話內容的）scrollback、Claude 也永遠收不到滾輪 ⇒「畫面捲不動」。
+ *  2. 吞掉 TUI 送的 `?1000/1002/1003/1006h`（滑鼠追蹤）不轉給終端機：Claude 以為自己開著滑鼠模式，
+ *     xterm 卻不知情——滾輪不會被編成回報送給 Claude，Claude 永遠收不到 ⇒「畫面捲不動」。
+ *     註：`?1049h`（alt screen）**是穿透的**（2026-08-25 於 Win11 26200 直測四輪複驗），原診斷把它
+ *     一併列為被吞的序列有誤；alt buffer 切換本身正常，壞的是滑鼠追蹤那一半。
  *  3. 自行重繪（re-render）TUI 畫面，寬字（中文）被覆寫時會位移／留白 ⇒ 輸入中文「吃字」。
  * 內附 conpty.dll 為近代 OpenConsole，VT 直通、滑鼠穿透、寬字處理皆正確（VS Code
  * `terminal.integrated.windowsUseConptyDll` 同一機制）。實測副作用：程序結束回報慢約 2 秒。
@@ -257,11 +258,41 @@ export type SpawnFn = (
  * tradeoff：node-pty 的 dll 分支 kill() 不再列舉 console process list 逐一撲殺（僅 destroy socket＋
  * 原生 kill）——「中間父程序先亡、孤兒化卻仍掛 console」的程序少了一層備援網；常規程序樹仍由
  * 本檔 defaultTreeKill 的 `taskkill /PID /T /F` 全覆蓋（app-close e2e 驗證 shell 樹死透）。
+ * 另見 disposeConoutWorker：dll 分支的 conout worker 不會自己釋放，關閉時須主動補一刀。
  */
-export const computeUseConptyDll = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv): boolean =>
-  platform === 'win32' && env.POLYDESK_CONPTY_DLL !== '0';
+const CONPTY_DLL_OFF = new Set(['0', 'false', 'off', 'no', '']);
+
+export const computeUseConptyDll = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv): boolean => {
+  if (platform !== 'win32') return false;
+  const raw = env.POLYDESK_CONPTY_DLL;
+  // 逃生口認整組 falsy 拼法：排查時打 `=false`／`=off`／`set POLYDESK_CONPTY_DLL=`（空字串）的人
+  // 若被當成「沒關」，會得出「conpty.dll 不是病因」的錯誤結論。
+  return raw === undefined || !CONPTY_DLL_OFF.has(raw.trim().toLowerCase());
+};
 
 export const USE_CONPTY_DLL = computeUseConptyDll(process.platform, process.env);
+
+/**
+ * 關閉終端機時主動釋放 node-pty 的 conout worker。
+ *
+ * node-pty 1.1.0（1.2.0-beta.15 亦同，未修）的 `useConptyDll` 分支在 kill() 裡把釋放動作掛在
+ * outSocket 的 'data' 事件上：`this._outSocket.on('data', () => this._conoutSocketWorker.dispose())`。
+ * 但 disposeTerm 是先 `taskkill /T /F` 再 `pty.kill()`，shell 早已死透、conout 不會再有資料，
+ * 該事件永不觸發 ⇒ 每關一個終端機就留下一個 worker thread 與一個具名管線 server。
+ * 實測（node 直測，同一份 node-pty JS）：開關 N 個 PTY 殘留 N 個 MessagePort，程序無法自然退出；
+ * 補上本函式後歸零。node-pty 未暴露公開 API，只能碰內部欄位；`dispose()` 內部先 drain 再關 socket，
+ * 重複呼叫安全。上游修好後可連同本函式一併移除。
+ */
+function disposeConoutWorker(pty: ManagedPty): void {
+  try {
+    const worker = (pty as unknown as {
+      _agent?: { _conoutSocketWorker?: { dispose?: () => void } };
+    })._agent?._conoutSocketWorker;
+    worker?.dispose?.();
+  } catch {
+    /* 內部結構變動或已釋放：忽略，不讓關閉流程失敗 */
+  }
+}
 
 export interface PtyDeps {
   spawn?: SpawnFn;
@@ -299,6 +330,13 @@ const SHELL_DISPLAY_NAME: Record<ShellKind, string> = {
   wsl: 'WSL',
 };
 
+/** 取出底層錯誤訊息（PtyError 只帶 code，真因在 cause）。 */
+const causeMessage = (error: unknown): string => {
+  const cause = error instanceof PtyError ? error.cause : error;
+  if (cause instanceof Error) return cause.message;
+  return cause === undefined || cause === null ? '' : String(cause);
+};
+
 export function toPtyCreateResult(error: unknown, shell: ShellKind): Extract<PtyCreateResult, { error: string }> {
   const code = error instanceof PtyError ? error.code : 'spawn-failed';
   const label = SHELL_DISPLAY_NAME[shell];
@@ -309,8 +347,20 @@ export function toPtyCreateResult(error: unknown, shell: ShellKind): Extract<Pty
       return { error: '工作區不存在或目前無法存取，請先確認資料夾仍然可用。', code };
     case 'shell-not-found':
       return { error: `找不到 ${label} 執行檔，請確認該 shell 已正確安裝。`, code };
-    case 'spawn-failed':
+    case 'spawn-failed': {
+      // v0.33.0 起 Windows 一律走 conpty.dll（USE_CONPTY_DLL）。缺檔或載入失敗時 node-pty 丟的錯含
+      // "conpty"，但通用文案會把使用者導向「檢查安全設定」——那條路查不到真因，也找不到逃生口。
+      const detail = causeMessage(error);
+      if (/conpty/i.test(detail)) {
+        return {
+          error:
+            `無法啟動 ${label}：Windows 終端機元件 conpty.dll 載入失敗。請重新開啟 Polydesk；` +
+            `若仍失敗，設定環境變數 POLYDESK_CONPTY_DLL=0 後重開可改用系統內建元件（代價是 AI 分頁的滾輪捲動會退回舊行為）。`,
+          code,
+        };
+      }
       return { error: `無法啟動 ${label}。請重新開啟 Polydesk；若仍失敗，請檢查系統安全設定。`, code };
+    }
   }
 }
 
@@ -655,6 +705,7 @@ export class PtyManager {
     } catch {
       /* 程序可能已被 treeKill 殺掉 */
     }
+    disposeConoutWorker(t.pty); // dll 分支的 conout worker 不會自己收——見函式註解
     t.onDataDisposable?.dispose();
     t.onExitDisposable?.dispose();
     this.terms.delete(termId);

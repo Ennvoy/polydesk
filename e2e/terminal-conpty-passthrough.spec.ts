@@ -1,8 +1,8 @@
 // 使用者回報（2026-08-20／08-21）：Claude 分頁捲不動、輸入中文吃字。
 //
-// 病根不在 renderer，而在 main 端 PTY 用的 Windows 內建 ConPTY（Win10 conhost）：
-//  - TUI 送的 `?1049h`（alt screen）與 `?1000/1002/1003/1006h`（滑鼠追蹤）被 ConPTY 自己吃掉、不轉給
-//    終端機 ⇒ Claude 以為在 alt screen＋滑鼠模式，xterm 卻停在 normal buffer 沒開滑鼠；
+// 病根不在 renderer，而在 main 端 PTY 用的 Windows 內建 ConPTY（conhost）：
+//  - TUI 送的 `?1000/1002/1003/1006h`（滑鼠追蹤）被 ConPTY 自己吃掉、不轉給終端機
+//    ⇒ Claude 以為滑鼠模式開著，xterm 不知情，滾輪不會被編成回報送給 Claude；
 //  - 終端機送回的 SGR 滑鼠回報（滾輪）也不穿透給 TUI。
 // 這兩點都「只有真的經過 PTY」才測得到——terminal-tui-wheel-scroll.spec.ts 是把序列直接餵進 xterm，
 // 繞過了 ConPTY，因此修好了 xterm 端卻沒碰到病根。
@@ -10,7 +10,10 @@
 // 本測從 PowerShell（真 PTY 子程序）輸出 VT 序列，斷言它們真的抵達 xterm：
 //  (1) `?1049h` → xterm 進 alternate buffer；`?1049l` → 回 normal。
 //  (2) `?1003h ?1006h` → xterm mouse events active（TUI 的滑鼠追蹤要能被終端機看到，滾輪才送得對地方）。
-// 以 OS 內建 ConPTY 跑，(1)(2) 皆失敗；以 node-pty 內附 conpty.dll（PtyManager USE_CONPTY_DLL）跑則通過。
+// 對照組實測（2026-08-25，Win11 26200，node 直測 node-pty 四輪）：內建 ConPTY 下 (2) 必敗、
+// **(1) 會通過**——alt-screen 本來就穿透。故真正抓得住病根的是 (2)，(1) 只是 alt buffer 切換的
+// regression baseline，不可拿它單獨當「conpty.dll 有生效」的證據，拿掉 (2) 這支測試就會假綠。
+// 反向（xterm→TUI 的滾輪 SGR 回報，即症狀的另一半）目前尚無自動化覆蓋，見檔尾 TODO。
 import { test, expect, type Page } from '@playwright/test';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -113,3 +116,8 @@ test('PTY 子程序送的 alt-screen／滑鼠追蹤序列必須真的抵達 xter
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// TODO（症狀的另一半，尚未自動化）：xterm→TUI 方向的滾輪 SGR 回報（`ESC[<64;x;yM`）是否真的送達子程序。
+// 上面兩個斷言都是 TUI→xterm 方向；若日後 node-pty／conpty.dll 升版讓入向回報回歸壞掉，這支測試仍會全綠，
+// 而 Claude 分頁會再次捲不動。要補的話需要子程序能回報自己讀到什麼（例如 PowerShell 迴圈讀 [Console]::In
+// 並回顯字元碼），在 Windows 上容易 flaky，故本批先以本註解揭露缺口，不硬塞不穩的測試。
