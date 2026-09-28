@@ -244,3 +244,9 @@
 - [x] 本地分支、遠端分支與 worktree 入口統一到兩階段 UI；移除舊直接 `branch -d`／`push --delete` 產品旁路。
 - [x] 加入啟動待辦、prepared 取消、mutating／reconciling resume、部分結果與 unknown/stale 說明。
 - [x] 完成 8/8 個真 Electron 清理／worktree 全旅程、兩軸 0 blocker 與完整出貨 runner；Spec 為 0 suggestion，Standards 另保留 3 個不影響正確性的重構建議，發布 v0.30.0。
+## 2026-09-28 Git 操作完整檢查
+
+- [x] 檢查 GitService、repository 序列佇列、SCM 非同步刷新與 worktree 遠端身分邊界，並整理具體回歸案例。
+- [x] 同步 README、完整使用指南、短導覽文案、CHANGELOG 與 v0.34.0 關於視窗紀錄。
+- [x] 收齊 typecheck、Git／安全／SCM／worktree 定點 Vitest 與真 Electron 回歸結果，含原批中止與隔離重跑的限制，記錄於 `specs/git-audit-2026-09-28.md`。
+- [ ] 完成 commit、push、portable 打包及版本、大小、SHA-256 證據。

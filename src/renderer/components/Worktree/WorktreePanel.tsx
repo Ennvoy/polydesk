@@ -23,11 +23,13 @@ export function WorktreePanel({ wsId, wsPath, cleanup }: {
   const [list, setList] = useState<GitWorktree[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isCurrent = (): boolean => appStore.getState().activeWorkspaceId === wsId;
 
   const reload = useCallback(async () => {
     setError(null);
     mark('worktreeListLoad:start'); // REQ-PERF-005：worktree list→渲染 < 300ms
-    const r = await ipc.git.worktreeList({ wsId });
+    const r = await ipc.git.worktreeList({ wsId }).catch((e: unknown) => ({ error: e instanceof Error ? e.message : '無法載入 worktree 清單' }));
+    if (appStore.getState().activeWorkspaceId !== wsId) return;
     if ('list' in r) {
       setList(r.list);
       try {
@@ -65,13 +67,13 @@ export function WorktreePanel({ wsId, wsPath, cleanup }: {
       confirmText: '加入並開啟',
       cancelText: '取消',
     });
-    if (!ok) return;
+    if (!ok || !isCurrent()) return;
     setBusy(true);
     try {
       const r = await ipc.git.worktreeAdopt({ wsId, path: wt.path });
       if ('wsId' in r) {
         await appStore.loadWorkspaces();
-        appStore.setActiveWorkspace(r.wsId);
+        if (isCurrent()) appStore.setActiveWorkspace(r.wsId);
         await reload();
       } else {
         setError(
@@ -80,6 +82,8 @@ export function WorktreePanel({ wsId, wsPath, cleanup }: {
             : neutralizeBidi(r.error),
         );
       }
+    } catch (e) {
+      if (isCurrent()) setError(e instanceof Error ? e.message : '加入 worktree 失敗');
     } finally {
       setBusy(false);
     }
@@ -97,7 +101,7 @@ export function WorktreePanel({ wsId, wsPath, cleanup }: {
         confirmText: '移除登記',
         cancelText: '取消',
       });
-      if (!ok) return;
+      if (!ok || !isCurrent()) return;
       setBusy(true);
       try {
         const preview = await ipc.git.cleanupPreview({ wsId: repositoryWsId, branch: wt.branch });
@@ -144,7 +148,7 @@ export function WorktreePanel({ wsId, wsPath, cleanup }: {
     const choice = (await dialog.open((close) => (
       <RemoveChoiceDialog branch={worktreeBranchDisplay(wt.branch)} canDeleteBranch={wt.branch !== null} onResult={(v) => close(v)} />
     ))) as WorktreeCleanupScope | undefined;
-    if (!choice) return;
+    if (!choice || !isCurrent()) return;
 
     setError(null);
     setBusy(true);
@@ -157,7 +161,7 @@ export function WorktreePanel({ wsId, wsPath, cleanup }: {
         const ok = (await dialog.open((close) => (
           <DirtyConfirmDialog changedCount={plan.changedCount} onResult={(v) => close(v)} />
         ))) as boolean | undefined;
-        if (!ok) return;
+        if (!ok || !isCurrent()) return;
         force = confirmedDirtyRemoval().force; // 兩段確認通過 → force
       }
       let unlock = false;
@@ -168,7 +172,7 @@ export function WorktreePanel({ wsId, wsPath, cleanup }: {
           confirmText: '解除並繼續',
           cancelText: '取消',
         });
-        if (!unlock) return;
+        if (!unlock || !isCurrent()) return;
       }
       const anchorBranch = wt.branch ?? (await ipc.git.status({ wsId: repositoryWsId })).branch;
       if (!anchorBranch) {
@@ -207,7 +211,7 @@ export function WorktreePanel({ wsId, wsPath, cleanup }: {
           />,
           { dismissable: false },
         )) as BranchCleanupRiskDecision | undefined;
-        if (!decision) return;
+        if (!decision || !isCurrent()) return;
         force = decision.forceLocal;
         unlock = decision.unlockWorktreeIds.includes(target.id);
         acceptExternalWriteRisk = decision.acceptExternalWriteRisk;
@@ -219,7 +223,7 @@ export function WorktreePanel({ wsId, wsPath, cleanup }: {
           cancelText: '取消',
           danger: true,
         });
-        if (!acceptExternalWriteRisk) return;
+        if (!acceptExternalWriteRisk || !isCurrent()) return;
       }
       const cleaned = await cleanup.run(anchorBranch, () => ipc.git.cleanupExecute({
         wsId: repositoryWsId,

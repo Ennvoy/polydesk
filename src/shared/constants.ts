@@ -16,6 +16,8 @@ export const GIT_NETWORK_TIMEOUT_MS = 30_000;
 export const GIT_CLONE_TIMEOUT_MS = 5 * 60_000;
 /** git 本機操作逾時。 */
 export const GIT_LOCAL_TIMEOUT_MS = 10_000;
+/** 大型工作樹狀態掃描實測會超過 10 秒；只放寬 status 的讀取預算。 */
+export const GIT_STATUS_TIMEOUT_MS = 30_000;
 /** PE-4：切工作區自動 fetch 的同工作區冷卻（事件驅動、不背景輪詢；防連切狂觸網）。 */
 export const FETCH_COOLDOWN_MS = 60_000;
 /** AI 產生 commit message 的引擎呼叫逾時（codex 等 agentic loop 較慢，實測約 45s，給足餘裕）。 */

@@ -178,6 +178,8 @@ export interface GitStatus {
 }
 export interface GitChange {
   path: string;
+  /** 重新命名的原路徑；取消暫存與捨棄必須同時處理兩端。 */
+  originalPath?: string;
   status: 'M' | 'A' | 'D' | 'R' | 'U' | '?';
   staged: boolean;
 }

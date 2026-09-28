@@ -19,7 +19,7 @@ import { shell, type IpcMain } from 'electron';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
 import type { GitStatus, GitChange, GitSnapshot, GitLogEntry, GitLogRef, GitWorktree, GitCloneInput, GitCloneResult, GitCloneErrorCode, GitHubLoginResult, GitPublishInput, GitPublishResult, GitPushErrorCode, GitRemoteBranch, GitBranchDeleteResult, GitBranchUpstream } from '../../shared/types';
 import type { InvokeReq } from '../../shared/ipc';
-import { GIT_CLONE_TIMEOUT_MS, GIT_LOCAL_TIMEOUT_MS, GIT_NETWORK_TIMEOUT_MS } from '../../shared/constants';
+import { GIT_CLONE_TIMEOUT_MS, GIT_LOCAL_TIMEOUT_MS, GIT_NETWORK_TIMEOUT_MS, GIT_STATUS_TIMEOUT_MS } from '../../shared/constants';
 import {
   validateRef,
   readHardeningArgs,
@@ -30,9 +30,10 @@ import {
 } from './gitSafeArgs';
 import { enqueue } from './gitSerialQueue';
 import { buildSpawnEnv } from '../security/spawnEnv';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, stat } from 'node:fs/promises';
 import { realpathSync, existsSync, rmSync, statSync } from 'node:fs';
-import { join as pathJoin, resolve as pathResolve, dirname as pathDirname } from 'node:path';
+import { join as pathJoin, resolve as pathResolve, dirname as pathDirname, isAbsolute, relative } from 'node:path';
+import { resolveSafe, resolveSafeNoFollowLeaf } from '../fs/fileService';
 import { validateWorktreeTarget, resolveTargetPath } from './worktreePath';
 import { cloneDirectoryNameError, cloneUrlError, isGitHubHttpsCloneUrl } from '../../shared/gitClone';
 import { publishRepoNameError } from '../../shared/gitPublish';
@@ -61,7 +62,7 @@ export class GitError extends Error {
     readonly stdout: string,
     readonly timedOut: boolean,
   ) {
-    super(stderr || stdout || `git 退出碼 ${code ?? 'null'}`);
+    super(gitDiagnostics(stderr, stdout) || `git 退出碼 ${code ?? 'null'}`);
     this.name = 'GitError';
   }
 }
@@ -72,6 +73,8 @@ interface RunOpts {
   /** 寫入 child.stdin（commit -F - 用）。 */
   input?: string;
   timeoutMs?: number;
+  /** 提供操作身分，避免將較長的本機讀取預算誤認為網路逾時。 */
+  timeoutLabel?: string;
 }
 
 function toStr(b: Buffer | string | undefined): string {
@@ -143,11 +146,12 @@ function fieldAfter(line: string, spaceCount: number): string {
   return line.slice(idx);
 }
 
-function pushXY(changes: GitChange[], xy: string, path: string): void {
+function pushXY(changes: GitChange[], xy: string, path: string, originalPath?: string): void {
   const x = xy[0];
   const y = xy[1];
-  if (x && x !== '.') changes.push({ path, status: mapCode(x), staged: true });
-  if (y && y !== '.') changes.push({ path, status: mapCode(y), staged: false });
+  const origin = originalPath === undefined ? {} : { originalPath };
+  if (x && x !== '.') changes.push({ path, status: mapCode(x), staged: true, ...origin });
+  if (y && y !== '.') changes.push({ path, status: mapCode(y), staged: false, ...origin });
 }
 
 /**
@@ -231,7 +235,7 @@ export function parseStatus(stdout: string): { status: GitStatus; changes: GitCh
       pushXY(changes, t.slice(2, 4), fieldAfter(t, 8));
     } else if (kind === '2') {
       changedFiles += 1;
-      pushXY(changes, t.slice(2, 4), fieldAfter(t, 9));
+      pushXY(changes, t.slice(2, 4), fieldAfter(t, 9), t.slice(2, 4).includes('R') ? tokens[i + 1] : undefined);
       i += 1; // 下一個 NUL 欄是 origPath，消費掉不當新紀錄
     } else if (kind === 'u') {
       changedFiles += 1;
@@ -264,6 +268,18 @@ export class GitService {
     return this.workspaces.get(wsId)?.path;
   }
 
+  private safeEntryPaths(wsId: string, paths: string[]): Map<string, string> {
+    const cwd = this.path(wsId);
+    if (!cwd || !Array.isArray(paths)) throw new Error('invalid workspace paths');
+    return new Map(paths.map((p) => {
+      if (typeof p !== 'string' || isAbsolute(p) || /^[A-Za-z]:/.test(p) || p.includes('\0')) throw new Error('outside-workspace');
+      const safe = resolveSafeNoFollowLeaf(this.workspaces, wsId, p);
+      if ('error' in safe || canonicalPath(cwd) === canonicalPath(safe.abs)
+        || p.replace(/\\/g, '/').split('/').some((part) => part.toLowerCase() === '.git')) throw new Error('outside-workspace');
+      return [p, safe.abs];
+    }));
+  }
+
   private run(args: string[], opts: RunOpts): Promise<{ stdout: string; stderr: string }> {
     return this.runBin(GIT_BIN, args, opts);
   }
@@ -288,7 +304,10 @@ export class GitService {
           const e = err as ExecFileException & { killed?: boolean };
           const timedOut = e.killed === true || e.signal === 'SIGTERM';
           const code = typeof e.code === 'number' ? e.code : null;
-          reject(new GitError(code, errOut || e.message, out, timedOut));
+          const diagnostic = timedOut
+            ? `${opts.timeoutLabel ?? (opts.timeoutMs === undefined ? 'Git 本機操作逾時' : 'Git 操作逾時')}（${Math.round((opts.timeoutMs ?? GIT_LOCAL_TIMEOUT_MS) / 1000)} 秒）${errOut.trim() ? `\n${errOut.trim()}` : ''}`
+            : errOut || e.message;
+          reject(new GitError(code, diagnostic, out, timedOut));
           return;
         }
         resolve({ stdout: out, stderr: errOut });
@@ -304,7 +323,7 @@ export class GitService {
     const cwd = this.path(wsId);
     if (!cwd) return { status: NOT_REPO, changes: [] };
     try {
-      const { stdout } = await this.run([...STATUS_ARGS], { cwd, env: readEnv() });
+      const { stdout } = await this.run([...STATUS_ARGS], { cwd, env: readEnv(), timeoutMs: GIT_STATUS_TIMEOUT_MS, timeoutLabel: 'Git 狀態讀取逾時' });
       const parsed = parseStatus(stdout);
       const st = parsed.status;
       // hasRemote（DF-12）：有 upstream（ahead 非 null）必有 remote、免查；
@@ -339,7 +358,7 @@ export class GitService {
     const cwd = this.path(wsId);
     if (!cwd) return [];
     try {
-      const { stdout } = await this.run([...STATUS_ARGS], { cwd, env: readEnv() });
+      const { stdout } = await this.run([...STATUS_ARGS], { cwd, env: readEnv(), timeoutMs: GIT_STATUS_TIMEOUT_MS, timeoutLabel: 'Git 狀態讀取逾時' });
       return parseStatus(stdout).changes;
     } catch (e) {
       if (isNotARepo(e)) return [];
@@ -356,6 +375,7 @@ export class GitService {
       'diff',
       '--no-color',
       '--no-textconv',
+      '--no-ext-diff',
       ...(staged ? ['--cached'] : []),
     ];
     try {
@@ -374,14 +394,14 @@ export class GitService {
   async stagedDiff(wsId: string, maxChars: number): Promise<{ patch: string; truncated: boolean }> {
     const cwd = this.path(wsId);
     if (!cwd) return { patch: '', truncated: false };
-    const base = [...readHardeningArgs(), 'diff', '--cached', '--no-color', '--no-textconv'];
+    const base = [...readHardeningArgs(), 'diff', '--cached', '--no-color', '--no-textconv', '--no-ext-diff'];
     try {
       const { stdout } = await this.run(base, { cwd, env: readEnv() });
       if (stdout.length <= maxChars) return { patch: stdout, truncated: false };
       // 超量：截斷 patch + 附完整 --stat 摘要，讓 AI 仍知全貌。
       let stat = '';
       try {
-        const r = await this.run([...readHardeningArgs(), 'diff', '--cached', '--stat'], { cwd, env: readEnv() });
+        const r = await this.run([...base, '--stat'], { cwd, env: readEnv() });
         stat = r.stdout;
       } catch {
         /* stat 取不到：略過摘要 */
@@ -410,7 +430,7 @@ export class GitService {
   private async noIndexDiff(cwd: string, path: string): Promise<string> {
     try {
       const { stdout } = await this.run(
-        [...readHardeningArgs(), 'diff', '--no-index', '--no-color', '--no-textconv', '--', '/dev/null', path],
+        [...readHardeningArgs(), 'diff', '--no-index', '--no-color', '--no-textconv', '--no-ext-diff', '--', '/dev/null', path],
         { cwd, env: readEnv() },
       );
       return stdout;
@@ -425,11 +445,25 @@ export class GitService {
     const cwd = this.path(wsId);
     if (!cwd) throw new Error('workspace not found');
     if (paths.length === 0) return { ok: true };
+    this.safeEntryPaths(wsId, paths);
+    const snapshot = await this.snapshot(wsId);
+    const selected = new Set(paths);
+    for (const change of snapshot.changes) {
+      if (selected.has(change.path) && change.status === 'R' && change.originalPath) selected.add(change.originalPath);
+    }
+    const root = canonicalPath(cwd);
+    const safePaths = new Map([...this.safeEntryPaths(wsId, [...selected]).values()].map((abs) => [relative(root, abs).replace(/\\/g, '/'), abs]));
+    const headPaths = snapshot.status.head === null ? '' : (await this.run(
+      withPathspecs([...readHardeningArgs(), 'ls-tree', '-r', '--name-only', '-z', 'HEAD'], [...safePaths.keys()]),
+      { cwd, env: readEnv() },
+    )).stdout;
+    const inHead = new Set(headPaths.split('\0').filter(Boolean));
     const tracked: string[] = [];
     const untracked: string[] = [];
-    for (const p of paths) {
-      if (await this.isUntracked(cwd, p)) untracked.push(p);
-      else tracked.push(p);
+    for (const p of safePaths.keys()) {
+      const directoryPrefix = `${p.replace(/\\/g, '/').replace(/\/+$/, '')}/`;
+      if (inHead.has(p) || [...inHead].some((name) => name.startsWith(directoryPrefix))) tracked.push(p);
+      else untracked.push(p);
     }
     if (tracked.length > 0) {
       // checkout HEAD -- <paths>：index + 工作樹都還原到 HEAD（徹底丟棄該檔變更）。
@@ -439,7 +473,9 @@ export class GitService {
       // untracked＝從未被 git 追蹤的新檔，捨棄＝從工作區移除。改用系統資源回收桶（shell.trashItem）而非
       // git clean -fd 永久刪除——誤按「取消變更」仍可從回收桶救回（資料安全，取代不可復原的硬刪）。
       for (const p of untracked) {
-        await this.trash(pathJoin(cwd, p));
+        const abs = safePaths.get(p)!;
+        if (existsSync(abs)) await this.trash(abs);
+        await this.run(withPathspecs(['rm', '--cached', '--force', '--ignore-unmatch'], [p]), { cwd, env: writeEnv() });
       }
     }
     return { ok: true };
@@ -449,6 +485,9 @@ export class GitService {
   async ignore(wsId: string, paths: string[]): Promise<{ ok: true }> {
     const cwd = this.path(wsId);
     if (!cwd) throw new Error('workspace not found');
+    this.safeEntryPaths(wsId, paths);
+    if (paths.some((p) => /[\r\n]/.test(p))) throw new Error('invalid ignore path');
+    if ('error' in resolveSafe(this.workspaces, wsId, '.gitignore')) throw new Error('outside-workspace');
     const giPath = pathJoin(cwd, '.gitignore');
     let existing = '';
     try {
@@ -474,8 +513,14 @@ export class GitService {
     const cwd = this.path(wsId);
     if (!cwd) throw new Error('workspace not found');
     if (paths.length === 0) return { ok: true };
+    const selected = new Set(paths);
+    if (!staged) {
+      for (const change of await this.changes(wsId)) {
+        if (change.staged && change.status === 'R' && selected.has(change.path) && change.originalPath) selected.add(change.originalPath);
+      }
+    }
     const base = staged ? ['add'] : ['reset', '--quiet'];
-    await this.run(withPathspecs(base, paths), { cwd, env: writeEnv() });
+    await this.run(withPathspecs(base, [...selected]), { cwd, env: writeEnv() });
     return { ok: true };
   }
 
@@ -657,7 +702,9 @@ export class GitService {
       );
       const refs = stdout.split(/\r?\n/).filter((line) => line.length > 0).map((line) => {
         const [full = '', short = '', head = '', upstreamRemote = '', upstreamRef = ''] = line.split('\t');
-        return { full, short, current: head.trim() === '*', upstreamRemote, upstreamRef };
+        const name = full.startsWith('refs/heads/') ? full.slice('refs/heads/'.length)
+          : full.startsWith('refs/remotes/') ? full.slice('refs/remotes/'.length) : short;
+        return { full, short: name, current: head.trim() === '*', upstreamRemote, upstreamRef };
       });
       const branches = refs.filter((ref) => ref.full.startsWith('refs/heads/')).map((ref) => ref.short);
       // 遠端分支（REQ-WT-002 來源③；排除 origin/HEAD 符號指標）——與本地分支共用一次 for-each-ref。
@@ -716,7 +763,7 @@ export class GitService {
     if (!cwd) throw new Error('workspace not found');
     if (!validateRef(ref)) throw new Error('invalid ref');
     // --format=：抑制 commit header，只留 diff（parseUnifiedDiff 反正跳過 header，但較乾淨）。
-    const base = [...readHardeningArgs(), 'show', '--no-textconv', '--no-color', '--format=', ref as string];
+    const base = [...readHardeningArgs(), 'show', '--no-textconv', '--no-ext-diff', '--diff-merges=first-parent', '--no-color', '--format=', ref as string];
     const args = path !== undefined ? withPathspecs(base, [path]) : base;
     const { stdout } = await this.run(args, { cwd, env: readEnv() });
     return { patch: stdout };
@@ -729,7 +776,7 @@ export class GitService {
     if (!validateRef(ref)) throw new Error('invalid ref');
     try {
       const { stdout } = await this.run(
-        [...readHardeningArgs(), 'diff-tree', '--no-commit-id', '--name-status', '-r', '-z', '--root', ref as string],
+        [...readHardeningArgs(), 'diff-tree', '--no-commit-id', '--name-status', '-r', '-z', '--root', '--diff-merges=first-parent', ref as string],
         { cwd, env: readEnv() },
       );
       return { files: parseNameStatusZ(stdout) };
@@ -773,7 +820,6 @@ export class GitService {
         });
     } catch (e) {
       if (isNotARepo(e)) return [];
-      if (e instanceof GitError && e.code === 128) return []; // 空 repo（無 commit）
       throw e;
     }
   }
@@ -900,6 +946,43 @@ export class GitService {
     const cwd = this.path(wsId);
     if (!cwd) return null;
     return this.gitCommonDirAt(cwd);
+  }
+
+  /** 即時依實體 common-dir 歸一；不依賴工作區是否已納管主樹或保存 worktree metadata。 */
+  async repositoryQueueKey(wsId: string): Promise<string> {
+    const cwd = this.path(wsId);
+    // 標準工作樹直接讀 Git 的 .git / gitdir / commondir，每次重讀，不保存可能過期的身分快取。
+    // 子目錄、bare 或不規範 metadata 才退回真 Git，避免每次 SCM refresh 額外啟動 Git 程序。
+    if (cwd) {
+      try {
+        const dotGit = pathJoin(cwd, '.git');
+        const info = await stat(dotGit);
+        let gitDir = dotGit;
+        if (!info.isDirectory()) {
+          if (!info.isFile() || info.size > 16384) throw new Error('nonstandard gitdir');
+          const match = /^gitdir: ([^\r\n]+)\r?\n?$/.exec(await readFile(dotGit, 'utf8'));
+          if (!match) throw new Error('nonstandard gitdir');
+          gitDir = pathResolve(cwd, match[1]);
+        }
+        const head = (await readFile(pathJoin(gitDir, 'HEAD'), 'utf8')).trim();
+        if (!/^ref: refs\/[^\r\n]+$/.test(head) && !/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i.test(head)) throw new Error('nonstandard HEAD');
+        let common = gitDir;
+        try {
+          const commondir = (await readFile(pathJoin(gitDir, 'commondir'), 'utf8')).trim();
+          if (!commondir || /[\r\n\0]/.test(commondir)) throw new Error('nonstandard commondir');
+          common = pathResolve(gitDir, commondir);
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+        }
+        if (!(await stat(pathJoin(common, 'objects'))).isDirectory()) throw new Error('nonstandard objects');
+        return `git:${canonicalPath(common)}`;
+      } catch {
+        // Git 的非標準／移動中配置須由 Git 自身判讀，不猜測 lineage。
+      }
+    }
+    const common = await this.gitCommonDir(wsId);
+    if (common) return `git:${common}`;
+    return cwd ? `workspace:${canonicalPath(cwd)}` : `workspace:${wsId}`;
   }
 
   /** path 版：直接以任意目錄為 cwd 解 git-common-dir（納管外部 worktree 的 lineage 驗證用）。 */
@@ -1046,105 +1129,111 @@ export function parseWorktreeList(raw: string): GitWorktree[] {
   return out;
 }
 
+function gitDiagnostics(stderr: string, stdout: string): string {
+  return [...new Set([stderr.trim(), stdout.trim()].filter(Boolean))].join('\n');
+}
+
 function errMsg(e: unknown, fallback: string): string {
-  if (e instanceof GitError) return e.stderr.trim() || e.stdout.trim() || fallback;
+  if (e instanceof GitError) return gitDiagnostics(e.stderr, e.stdout) || fallback;
   if (e instanceof Error) return e.message || fallback;
   return fallback;
 }
 
 /**
- * 註冊 git:* handlers（取代 stub）。全部經 gitSerialQueue.enqueue(wsId,...) 每工作區序列化（REQ-SCM-008）。
+ * 註冊 git:* handlers。一般操作與清理以即時 canonical common-dir 共用序列佇列。
  * router.ts：registerGitHandlers(ipcMain, services.workspaces)。
  */
 export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, userDataDir: string): void {
   const svc = new GitService(workspaces);
   const cleanup = new CleanupService(workspaces, userDataDir);
+  const enqueueRepo = async <T>(wsId: string, task: () => Promise<T>): Promise<T> =>
+    enqueue(await svc.repositoryQueueKey(wsId), task);
 
   ipc.handle('git:snapshot', (_e, req: InvokeReq<'git:snapshot'>) =>
-    enqueue(req.wsId, () => svc.snapshot(req.wsId)),
+    enqueueRepo(req.wsId, () => svc.snapshot(req.wsId)),
   );
   ipc.handle('git:status', (_e, req: InvokeReq<'git:status'>) =>
-    enqueue(req.wsId, () => svc.status(req.wsId)),
+    enqueueRepo(req.wsId, () => svc.status(req.wsId)),
   );
   ipc.handle('git:changes', (_e, req: InvokeReq<'git:changes'>) =>
-    enqueue(req.wsId, () => svc.changes(req.wsId)),
+    enqueueRepo(req.wsId, () => svc.changes(req.wsId)),
   );
   ipc.handle('git:diff', (_e, req: InvokeReq<'git:diff'>) =>
-    enqueue(req.wsId, () => svc.diff(req.wsId, req.path, req.staged)),
+    enqueueRepo(req.wsId, () => svc.diff(req.wsId, req.path, req.staged)),
   );
   ipc.handle('git:stage', (_e, req: InvokeReq<'git:stage'>) =>
-    enqueue(req.wsId, () => svc.stage(req.wsId, req.paths, req.staged)),
+    enqueueRepo(req.wsId, () => svc.stage(req.wsId, req.paths, req.staged)),
   );
   ipc.handle('git:discard', (_e, req: InvokeReq<'git:discard'>) =>
-    enqueue(req.wsId, () => svc.discard(req.wsId, req.paths)),
+    enqueueRepo(req.wsId, () => svc.discard(req.wsId, req.paths)),
   );
   ipc.handle('git:ignore', (_e, req: InvokeReq<'git:ignore'>) =>
-    enqueue(req.wsId, () => svc.ignore(req.wsId, req.paths)),
+    enqueueRepo(req.wsId, () => svc.ignore(req.wsId, req.paths)),
   );
   ipc.handle('git:commit', (_e, req: InvokeReq<'git:commit'>) =>
-    enqueue(req.wsId, () => svc.commit(req.wsId, req.message)),
+    enqueueRepo(req.wsId, () => svc.commit(req.wsId, req.message)),
   );
   ipc.handle('git:push', (_e, req: InvokeReq<'git:push'>) =>
-    enqueue(req.wsId, () => svc.push(req.wsId)),
+    enqueueRepo(req.wsId, () => svc.push(req.wsId)),
   );
   ipc.handle('git:pull', (_e, req: InvokeReq<'git:pull'>) =>
-    enqueue(req.wsId, () => svc.pull(req.wsId)),
+    enqueueRepo(req.wsId, () => svc.pull(req.wsId)),
   );
   ipc.handle('git:fetch', (_e, req: InvokeReq<'git:fetch'>) =>
-    enqueue(req.wsId, () => svc.fetch(req.wsId)),
+    enqueueRepo(req.wsId, () => svc.fetch(req.wsId)),
   );
   ipc.handle('git:branch', (_e, req: InvokeReq<'git:branch'>) =>
-    enqueue(req.wsId, () => svc.branch(req.wsId, req.op, req.name, req.startPoint, req.remote)),
+    enqueueRepo(req.wsId, () => svc.branch(req.wsId, req.op, req.name, req.startPoint, req.remote)),
   );
   ipc.handle('git:log', (_e, req: InvokeReq<'git:log'>) =>
-    enqueue(req.wsId, () => svc.log(req.wsId, req.limit)),
+    enqueueRepo(req.wsId, () => svc.log(req.wsId, req.limit)),
   );
   ipc.handle('git:show', (_e, req: InvokeReq<'git:show'>) =>
-    enqueue(req.wsId, () => svc.show(req.wsId, req.ref, req.path)),
+    enqueueRepo(req.wsId, () => svc.show(req.wsId, req.ref, req.path)),
   );
   ipc.handle('git:commitFiles', (_e, req: InvokeReq<'git:commitFiles'>) =>
-    enqueue(req.wsId, () => svc.commitFiles(req.wsId, req.ref)),
+    enqueueRepo(req.wsId, () => svc.commitFiles(req.wsId, req.ref)),
   );
   ipc.handle('git:stash', (_e, req: InvokeReq<'git:stash'>) =>
-    enqueue(req.wsId, () => svc.stash(req.wsId, req.op, req.includeUntracked)),
+    enqueueRepo(req.wsId, () => svc.stash(req.wsId, req.op, req.includeUntracked)),
   );
   ipc.handle('git:init', (_e, req: InvokeReq<'git:init'>) =>
-    enqueue(req.wsId, () => svc.init(req.wsId)),
+    enqueueRepo(req.wsId, () => svc.init(req.wsId)),
   );
   ipc.handle('git:clone', (_e, req: InvokeReq<'git:clone'>) =>
     enqueue(`clone:${pathResolve(req?.parentPath ?? '', req?.directoryName ?? '')}`, () => svc.clone(req)),
   );
   ipc.handle('git:loginGitHub', () => enqueue('github:login', () => svc.loginGitHub()));
   ipc.handle('git:publishGitHub', (_e, req: InvokeReq<'git:publishGitHub'>) =>
-    enqueue(req.wsId, () => svc.publishGitHub(req)),
+    enqueueRepo(req.wsId, () => svc.publishGitHub(req)),
   );
 
   // ── Git Worktree（REQ-WT）──
   // 佇列鍵一律用該 repo 的統一鍵（worktree 工作區解回主工作樹），避免 index.lock 交錯（紅軍 A5）。
-  const qkey = (wsId: string): string => workspaces.queueKeyForRepo(wsId);
+  // 一般 Git、worktree 與 cleanup 共用即時解析的 repository queue。
 
   ipc.handle('git:cleanupPreview', (_e, req: InvokeReq<'git:cleanupPreview'>) =>
-    enqueue(qkey(req.wsId), () => cleanup.preview(req)),
+    enqueueRepo(req.wsId, () => cleanup.preview(req)),
   );
   ipc.handle('git:cleanupExecute', (_e, req: InvokeReq<'git:cleanupExecute'>) =>
-    enqueue(qkey(req.wsId), () => cleanup.execute(req)),
+    enqueueRepo(req.wsId, () => cleanup.execute(req)),
   );
   void enqueue('cleanup:claims', () => cleanup.recoverLocal()).catch(() => undefined);
   ipc.handle('git:cleanupStatus', (_e, req: InvokeReq<'git:cleanupStatus'>) =>
     enqueue('cleanup:claims', () => cleanup.statusForWorkspace(req?.wsId)),
   );
   ipc.handle('git:cleanupCancel', (_e, req: InvokeReq<'git:cleanupCancel'>) =>
-    enqueue(qkey(req.wsId), () => cleanup.cancelPrepared(req.wsId, req.journalId)),
+    enqueueRepo(req.wsId, () => cleanup.cancelPrepared(req.wsId, req.journalId)),
   );
   ipc.handle('git:cleanupResume', (_e, req: InvokeReq<'git:cleanupResume'>) =>
-    enqueue(qkey(req.wsId), () => cleanup.resume(req)),
+    enqueueRepo(req.wsId, () => cleanup.resume(req)),
   );
   ipc.handle('git:cleanupImportEvidence', (_e, req: InvokeReq<'git:cleanupImportEvidence'>) =>
-    enqueue(qkey(req.wsId), () => cleanup.importEvidence(req)),
+    enqueueRepo(req.wsId, () => cleanup.importEvidence(req)),
   );
 
   ipc.handle('git:worktreeList', (_e, req: InvokeReq<'git:worktreeList'>) =>
-    enqueue(qkey(req.wsId), async () => {
+    enqueueRepo(req.wsId, async () => {
       try {
         const list = await svc.worktreeList(req.wsId);
         // 附 managedWsId：worktree 路徑已納管者標記，供 UI「切換到此」判斷。
@@ -1168,7 +1257,7 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, 
   );
 
   ipc.handle('git:worktreeAdd', (_e, req: InvokeReq<'git:worktreeAdd'>) =>
-    enqueue(qkey(req.wsId), async () => {
+    enqueueRepo(req.wsId, async () => {
       const target0 = validateWorktreeTarget(
         req.path,
         workspaces.list().map((w) => w.path),
@@ -1225,7 +1314,7 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, 
   );
 
   ipc.handle('git:worktreeSupported', (_e, req: InvokeReq<'git:worktreeSupported'>) =>
-    enqueue(qkey(req.wsId), async () => {
+    enqueueRepo(req.wsId, async () => {
       try {
         return await svc.worktreeSupported(req.wsId);
       } catch (e) {
@@ -1235,7 +1324,7 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, 
   );
 
   ipc.handle('git:worktreeAdopt', (_e, req: InvokeReq<'git:worktreeAdopt'>) =>
-    enqueue(qkey(req.wsId), async () => {
+    enqueueRepo(req.wsId, async () => {
       // F-13＋紅軍 A3：納管外部 worktree 前，lineage 交叉驗證——
       // ① 該 path 須出現在本 repo 的 worktree list（git 認得）
       // ② 該 path 自解的 git-common-dir 須等於本 repo 的（防惡意 repo 竄改登記指向外部路徑竊信任）。

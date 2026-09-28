@@ -61,8 +61,9 @@ const ARTICLES: HelpArticle[] = [
     steps: ['按分支圖示；角標是未提交變更數。', '點檔案看 diff，使用＋暫存或取消暫存。', '輸入提交訊息後提交，再依需要推送或拉取。'],
     states: [
       { label: '不是 Git repository', detail: '會提供初始化入口；確認後才建立 .git。' },
-      { label: '衝突', detail: '先在編輯器處理衝突標記並重新暫存，不會自動覆蓋。' },
-      { label: '推送／拉取失敗', detail: '依認證、網路、遠端拒絕或分支分歧顯示可行下一步。' },
+      { label: '本機內容可能被覆蓋', detail: '拉取或切換分支前，先提交要保留的內容，或用 Stash 保存。Polydesk 的 Stash 會包含未追蹤新檔，保存後仍需核對內容；在終端機使用 git stash 時需加 -u 才會包含新檔。確認後再重試原操作。' },
+      { label: '拉取後發生合併衝突', detail: '先在變更清單確認衝突檔案，開啟編輯器處理衝突標記，再重新暫存並完成合併提交；若要取消本次合併，可在終端機執行 git merge --abort，先確認合併前的工作已保存。' },
+      { label: '推送／拉取失敗', detail: '錯誤卡會顯示原因與處理方式，可展開「技術細節」查看 Git 原文。失敗後仍會重新讀取變更與歷史，反映 Git 已經產生的衝突或部分結果；依認證、網路、遠端拒絕或分支分歧處理後再重試。' },
     ],
     action: 'scm', actionLabel: '前往原始碼控制',
   },
@@ -71,6 +72,7 @@ const ARTICLES: HelpArticle[] = [
     summary: '切換與建立分支、保存暫存工作，或用兩階段完整清理移除本地、worktree 與明確選取的遠端分支。',
     steps: ['在分支區展開本地或遠端群組，從⋯或右鍵選擇完整清理。', '第一階段選擇切換分支、worktree 與 opt-in 遠端範圍；不同名稱的實際 upstream 會預選，按檢查前不會改 Git 或磁碟。', '第二階段閱讀 commit 數、dirty／locked／prunable、endpoint 與 unknown，再勾選必要的 force／外部寫入確認後執行。'],
     states: [
+      { label: 'stash 還原發生衝突', detail: 'stash pop 發生衝突時，Git 會保留該筆 stash。先處理衝突並確認檔案完整，再決定是否刪除；Polydesk 不會自動 force、drop 或丟棄本機內容。' },
       { label: '狀態已變更', detail: '分支 tip、保留 refs、worktree HEAD、metadata、endpoint 或 remote tip 變動時舊 lease 會失效，請重新檢查。' },
       { label: 'unknown', detail: 'shallow／partial clone、缺失 object、隱藏 ref、權限或網路問題無法證明結果時，不會冒充已刪除；先修正原因再重試。' },
       { label: '清理結果卡', detail: '分支與 worktree 分頁共用同一張卡：進行中顯示目前步驟，成功列出實際完成的動作並在 10 秒後自動收起，失敗留在畫面上並提供「繼續收斂」與技術細節。' },

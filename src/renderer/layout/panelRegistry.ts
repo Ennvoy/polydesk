@@ -67,8 +67,9 @@ function Placeholder({ slot }: { slot: string }): React.JSX.Element {
 /** 渲染某槽位已註冊的元件，未註冊則 placeholder（late registration 會自動重繪）。 */
 function Slot({ slot }: { slot: string }): React.JSX.Element {
   useRegistryVersion();
+  const { activeWorkspaceId } = useAppState();
   const Comp = registry.get(slot);
-  return Comp ? React.createElement(Comp) : React.createElement(Placeholder, { slot });
+  return Comp ? React.createElement(Comp, slot === SLOT.viewScm ? { key: activeWorkspaceId ?? 'none' } : {}) : React.createElement(Placeholder, { slot });
 }
 
 /** 側欄 host：工具列貼近其控制的內容，並依選中視圖渲染對應槽位。 */

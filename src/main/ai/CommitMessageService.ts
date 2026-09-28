@@ -122,7 +122,7 @@ export class CommitMessageService {
   /** 取 staged diff → 組 prompt → 依設定引擎產生 → 回乾淨訊息（或明確 error）。不自動 commit。 */
   async generate(wsId: string): Promise<{ message: string } | { error: string }> {
     // 取 diff 經 serial queue（與同工作區 git 操作不搶 index.lock）。
-    const { patch } = await enqueue(wsId, () => this.git.stagedDiff(wsId, AI_DIFF_MAX_CHARS));
+    const { patch } = await enqueue(await this.git.repositoryQueueKey(wsId), () => this.git.stagedDiff(wsId, AI_DIFF_MAX_CHARS));
     if (patch.trim().length === 0) {
       return { error: '沒有已暫存（staged）的變更——請先把要提交的檔案加入暫存區，再產生訊息。' };
     }

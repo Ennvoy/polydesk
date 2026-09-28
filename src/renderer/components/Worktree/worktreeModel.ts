@@ -4,6 +4,7 @@
 
 import { branchSlug, defaultWorktreeBase } from '../../../shared/worktreeNaming';
 import { neutralizeBidi } from '../Dialogs/TrustConfirm';
+import type { GitRemoteBranch } from '../../../shared/types';
 
 export type BranchSourceKind = 'existing' | 'new' | 'remote';
 
@@ -66,7 +67,7 @@ export function isBranchTaken(
  */
 export function buildBranchSpec(
   kind: BranchSourceKind,
-  input: { existing?: string; newName?: string; base?: string; remoteRef?: string },
+  input: { existing?: string; newName?: string; base?: string; remoteRef?: string; remoteBranch?: GitRemoteBranch },
 ): { branch: { kind: BranchSourceKind; name: string; base?: string }; slugSource: string } | { error: string } {
   if (kind === 'existing') {
     const name = input.existing?.trim() ?? '';
@@ -85,7 +86,7 @@ export function buildBranchSpec(
   // remote
   const remoteRef = input.remoteRef?.trim() ?? '';
   if (!remoteRef) return { error: '請選擇 remote 分支' };
-  const local = localNameFromRemote(remoteRef);
+  const local = input.remoteBranch?.name ?? localNameFromRemote(remoteRef);
   const err = branchNameError(local);
   if (err) return { error: `remote 分支名無法作為本地分支：${err}` };
   return { branch: { kind, name: local, base: remoteRef }, slugSource: local };

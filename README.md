@@ -1,6 +1,6 @@
 # Polydesk
 
-![version](https://img.shields.io/badge/version-v0.33.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+![version](https://img.shields.io/badge/version-v0.34.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
 
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
@@ -46,6 +46,14 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 Windows PowerShell、CMD 與 WSL 會由 Polydesk 使用系統絕對路徑啟動，即使安裝 Sunlike365 等軟體後 `PATH` 順序改變也不需手動修環境變數。PowerShell 7 或 Git Bash 若未安裝，終端機面板會顯示 `shell-not-found` 錯誤；工作區遺失或 ConPTY 無法建立時也會提供對應代碼，不再只像按鈕沒有反應。
 
 AI 執行狀態監控使用 `SystemRoot` 下的 Windows PowerShell／WMIC 絕對路徑掃描程序，因此同一類 PATH 重排不會再造成工作區的 Claude、Codex、Agy 標籤消失。標籤只會在對應 AI CLI 確實於 Polydesk 終端機內啟動時顯示；工具結束並關閉終端機後會回到未啟動狀態。
+
+### Git 操作失敗與衝突處理
+
+Git 操作失敗時，SCM 會顯示原因、可行的處理方式與可展開的「技術細節」。拉取或 stash 還原可能已經留下衝突，因此失敗後仍會重新讀取變更與歷史；切換工作區時，前一個專案的非同步結果不會覆蓋目前畫面。
+
+若提示本機檔案會被覆蓋，先提交要保留的內容，或用 stash 保存後再重試。未追蹤新檔也必須一併保存，例如在終端機使用 `git stash push -u`，再確認 stash 內容。Polydesk 不會自動丟棄檔案或強制拉取。若拉取已產生合併衝突，處理衝突標記、重新暫存並完成合併提交；決定取消時可用 `git merge --abort`，先確認合併前的工作已有保存。`stash pop` 發生衝突時，Git 會保留該筆 stash，確認還原結果完整後再決定是否刪除。
+
+v0.34.0 同時修正改名檔案取消暫存、新增檔案放棄變更、同名分支與標籤的分支列表身分，以及合併提交的檔案清單；主工作樹與 linked worktree 共用 repository 序列佇列，diff 不執行外部 diff 程式。大型工作樹的狀態讀取最多等待 30 秒，其他本機 Git 操作仍維持原有的 10 秒限制；若讀取仍失敗，畫面會保留錯誤供展開查看。檢查範圍、回歸案例與驗證結果見 [Git 完整檢查紀錄](specs/git-audit-2026-09-28.md)。
 
 ### Git worktree 管理
 

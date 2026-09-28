@@ -32,6 +32,7 @@ import { cleanupCheckpointText } from './cleanupFeedback';
 import type { CleanupFeedback, CleanupFeedbackApi } from './cleanupFeedback';
 import { DEFAULT_BACKGROUND_POLL_MS, FETCH_COOLDOWN_MS } from '../../../shared/constants';
 import { shouldAutoFetch } from './fetchCooldown';
+import { gitErrorDetail, gitErrorFeedback } from './gitErrorFeedback';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
 import { record } from '../../../shared/perf';
 
@@ -199,6 +200,8 @@ function nOrNA(n: number | null): string {
 
 /** PE-4：切工作區自動 fetch 的冷卻時計——放模組層，面板卸載重掛不歸零（避免切視圖就重置冷卻）。 */
 const autoFetchAt = new Map<string, number>();
+// 工作區切換重建 SCM，但保留本次啟動期間各工作區尚未提交的訊息草稿。
+const commitDrafts = new Map<string, string>();
 
 /** SCM 畫面需要關心的 Git 狀態是否相同；HEAD 納入才能偵測外部 commit/pull。 */
 function sameGitStatus(a: GitStatus, b: GitStatus): boolean {
@@ -209,6 +212,7 @@ function sameGitStatus(a: GitStatus, b: GitStatus): boolean {
     a.ahead === b.ahead &&
     a.behind === b.behind &&
     a.changedCount === b.changedCount &&
+    a.hasRemote === b.hasRemote &&
     a.detached === b.detached
   );
 }
@@ -217,6 +221,12 @@ export function SourceControlPanel(): React.JSX.Element {
   const { activeWorkspaceId, workspaces } = useAppState();
   const wsId = activeWorkspaceId;
   const wsPath = workspaces.find((w) => w.id === wsId)?.path ?? '';
+  const alive = useRef(true);
+  const isCurrent = useCallback(() => alive.current && appStore.getState().activeWorkspaceId === wsId, [wsId]);
+  useLayoutEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
 
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [changes, setChanges] = useState<GitChange[]>([]);
@@ -225,7 +235,11 @@ export function SourceControlPanel(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false); // PE-4 取回遠端狀態中
   const [fetchHint, setFetchHint] = useState<string | null>(null); // PE-4 手動 fetch 失敗小字提示（非錯誤橫幅）
-  const [message, setMessage] = useState('');
+  const [message, setMessageState] = useState(() => wsId ? commitDrafts.get(wsId) ?? '' : '');
+  const setMessage = (value: string): void => {
+    if (wsId) commitDrafts.set(wsId, value);
+    setMessageState(value);
+  };
   const [genBusy, setGenBusy] = useState(false); // ✨ 智慧產生進行中（與 commit busy 分離，不互卡）
   const [engine, setEngine] = useState<AiEngine>('claude');
   const [tab, setTab] = useState<Tab>('changes');
@@ -244,12 +258,14 @@ export function SourceControlPanel(): React.JSX.Element {
   const [cFiles, setCFiles] = useState<Record<string, { path: string; status: string }[]>>({}); // commit→檔案清單快取
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null); // hover 延遲關閉計時器（滑入卡片可取消）
   const statusRef = useRef<GitStatus | null>(null);
+  const changesRef = useRef<GitChange[]>([]);
 
   // 世代號取消 stale 載入：大 repo 的 git status/changes 各要 ~1.5-2s 且 git 走 serial queue。快速連切
   // 工作區時，若不取消，切到最新工作區還得等前面每個 stale 載入跑完、且 stale 結果會回頭覆蓋當前 →
   // 面板卡在 loading。每次 refresh 遞增 gen，await 回來後 gen 不是最新就丟棄（不 setState、不搶 loading）。
   const loadGen = useRef(0);
   const refresh = useCallback(async (fresh = true): Promise<void> => {
+    if (!isCurrent()) return;
     const gen = ++loadGen.current;
     if (!wsId) {
       setStatus(null);
@@ -258,20 +274,20 @@ export function SourceControlPanel(): React.JSX.Element {
       return;
     }
     setLoading(true);
-    setError(null);
     try {
       const snapshot = fresh ? await refreshGitSnapshot(wsId) : await loadGitSnapshot(wsId);
-      if (gen !== loadGen.current) return; // 期間又切了工作區：丟棄 stale
+      if (gen !== loadGen.current || !isCurrent()) return;
       statusRef.current = snapshot.status;
       setStatus(snapshot.status);
       setChanges(snapshot.status.isRepo ? snapshot.changes : []);
+      changesRef.current = snapshot.status.isRepo ? snapshot.changes : [];
       if (fresh) setAuxRevision((value) => value + 1);
     } catch (e) {
-      if (gen === loadGen.current) setError(errText(e));
+      if (gen === loadGen.current && isCurrent()) setError(errText(e));
     } finally {
-      if (gen === loadGen.current) setLoading(false);
+      if (gen === loadGen.current && isCurrent()) setLoading(false);
     }
-  }, [wsId]);
+  }, [wsId, isCurrent]);
 
   useEffect(() => {
     statusRef.current = status;
@@ -281,7 +297,7 @@ export function SourceControlPanel(): React.JSX.Element {
   // 非 repo／無 remote 不觸發；自動路徑（切工作區）失敗靜默，手動路徑（⟳）顯示小字提示；成功後 refresh 補數字。
   const fetchRemote = useCallback(
     async (manual: boolean): Promise<void> => {
-      if (!wsId) return;
+      if (!wsId || !isCurrent()) return;
       try {
         const st = statusRef.current;
         if (!st) return;
@@ -289,6 +305,7 @@ export function SourceControlPanel(): React.JSX.Element {
         if (!manual && !shouldAutoFetch(autoFetchAt, wsId, Date.now(), FETCH_COOLDOWN_MS)) return;
         setFetching(true);
         const r = await ipc.git.fetch({ wsId });
+        if (!isCurrent()) return;
         if ('error' in r) {
           if (manual) setFetchHint(`取回失敗：${r.error}`);
         } else {
@@ -301,7 +318,7 @@ export function SourceControlPanel(): React.JSX.Element {
         setFetching(false);
       }
     },
-    [wsId, refresh],
+    [wsId, refresh, isCurrent],
   );
 
   // 工作區切換 → 回變更分頁並刷新。防抖 120ms：快速連切只載入「最終停留」的工作區，中間掠過的
@@ -364,10 +381,11 @@ export function SourceControlPanel(): React.JSX.Element {
       try {
         const next = await loadGitSnapshot(wsId);
         const current = statusRef.current;
-        if (!stopped && current && !sameGitStatus(current, next.status)) {
+        if (!stopped && isCurrent() && current && (!sameGitStatus(current, next.status) || JSON.stringify(changesRef.current) !== JSON.stringify(next.changes))) {
           statusRef.current = next.status;
           setStatus(next.status);
           setChanges(next.status.isRepo ? next.changes : []);
+          changesRef.current = next.status.isRepo ? next.changes : [];
         }
       } catch {
         // 背景探測失敗不覆蓋面板既有資料；使用者手動刷新時仍會看到正式錯誤。
@@ -423,6 +441,7 @@ export function SourceControlPanel(): React.JSX.Element {
       ipc.git.branch({ wsId, op: 'list' }),
       ipc.git.worktreeList({ wsId }),
     ]);
+    if (!isCurrent()) return;
     if (!('branches' in branchResult)) return;
     const worktreePaths: Record<string, string> = {};
     if ('list' in worktreeResult) {
@@ -446,8 +465,8 @@ export function SourceControlPanel(): React.JSX.Element {
       record('gitLogRequest', 1);
       void ipc.git
         .log({ wsId, limit: 50 })
-        .then(setLog)
-        .catch((e) => setError(errText(e)));
+        .then((entries) => { if (isCurrent()) setLog(entries); })
+        .catch((e) => { if (isCurrent()) setError(errText(e)); });
     } else if (tab === 'branches') {
       record('gitBranchListRequest', 1);
       void loadBranches().catch((e) => setError(errText(e)));
@@ -456,17 +475,22 @@ export function SourceControlPanel(): React.JSX.Element {
 
   const run = useCallback(
     async (fn: () => Promise<void>): Promise<void> => {
+      if (!isCurrent()) return;
       setBusy(true);
       setError(null);
       try {
         await fn();
       } catch (e) {
-        setError(errText(e));
+        if (isCurrent()) {
+          setError(errText(e));
+          // Git 失敗仍可能已改寫索引或工作樹（例如 stash pop 衝突）。
+          await refresh();
+        }
       } finally {
         setBusy(false);
       }
     },
-    [],
+    [isCurrent, refresh],
   );
 
   const onInit = (): Promise<void> =>
@@ -496,6 +520,7 @@ export function SourceControlPanel(): React.JSX.Element {
       const res = await ipc.git.commit({ wsId, message });
       if ('error' in res) {
         setError(res.error);
+        await refresh();
         return;
       }
       setMessage('');
@@ -509,6 +534,7 @@ export function SourceControlPanel(): React.JSX.Element {
     setError(null);
     try {
       const r = await ipc.ai.generateCommitMessage({ wsId });
+      if (!isCurrent()) return;
       if ('error' in r) setError(r.error);
       else setMessage(r.message);
     } catch (e) {
@@ -526,6 +552,7 @@ export function SourceControlPanel(): React.JSX.Element {
   const loadCleanupStatus = useCallback(async (): Promise<void> => {
     try {
       const result = await ipc.git.cleanupStatus({ wsId: wsId ?? undefined });
+      if (!isCurrent()) return;
       setCleanupJournals(result.journals);
       if (result.globalBlocked) setError('清理儲存區有無法歸屬的狀態；新的破壞性清理已暫停。');
     } catch (cleanupError) {
@@ -614,7 +641,7 @@ export function SourceControlPanel(): React.JSX.Element {
       if (!wsId) return;
       const r = await ipc.git.push({ wsId });
       if ('error' in r) setError(pushErrorText(r));
-      else await refresh();
+      await refresh();
     });
 
   // 發佈到 GitHub（DF-12）：無 remote 時同步列的主要動作；對話框關閉後刷新（成功＝origin 已設、已推送）。
@@ -632,7 +659,7 @@ export function SourceControlPanel(): React.JSX.Element {
       if (!wsId) return;
       const r = await ipc.git.pull({ wsId });
       if ('error' in r) setError(r.error);
-      else await refresh();
+      await refresh();
     });
 
   const onCheckout = (name: string): Promise<void> =>
@@ -653,7 +680,7 @@ export function SourceControlPanel(): React.JSX.Element {
               confirmText: '跳到該 worktree',
               cancelText: '取消',
             });
-            if (jump) await jumpToWorktree(conflict.path);
+            if (jump && isCurrent()) await jumpToWorktree(conflict.path);
           } else {
             setError(`分支「${name}」已在其他 git worktree 簽出，無法在此同時簽出。`);
           }
@@ -662,9 +689,10 @@ export function SourceControlPanel(): React.JSX.Element {
         // checkout 失敗：以「結構化 status」判斷是否因工作區有未提交變更被擋——不靠 git 錯誤字串
         // （在地化 locale 會翻譯、untracked 也含 'overwritten by checkout'，字串比對兩頭不可靠）。
         const cur = await ipc.git.changes({ wsId }).catch(() => [] as GitChange[]);
+        if (!isCurrent()) return;
         if (cur.length === 0) throw e; // 工作樹乾淨 → 是別的錯誤（分支不存在等），照原樣回報
         const choice = await dialog.open((close) => <DirtyCheckoutPrompt branch={name} onChoose={close} />);
-        if (choice !== 'stash') return; // 取消：維持原分支
+        if (choice !== 'stash' || !isCurrent()) return;
         // -u：tracked + untracked 全收，確保工作樹乾淨（untracked 不收會讓第二次 checkout 仍被擋）。
         await ipc.git.stash({ wsId, op: 'push', includeUntracked: true });
         try {
@@ -733,7 +761,7 @@ export function SourceControlPanel(): React.JSX.Element {
   const onCreateBranch = async (): Promise<void> => {
     if (!wsId) return;
     const name = (await dialog.open((close) => <CreateBranchForm onDone={close} />)) as string | undefined;
-    if (!name) return;
+    if (!name || !isCurrent()) return;
     await run(async () => {
       await ipc.git.branch({ wsId, op: 'create', name });
       await ipc.git.branch({ wsId, op: 'checkout', name });
@@ -761,7 +789,7 @@ export function SourceControlPanel(): React.JSX.Element {
         confirmText: '捨棄變更',
         cancelText: '取消',
       });
-      if (!ok) return;
+      if (!ok || !isCurrent()) return;
       await ipc.git.discard({ wsId, paths: [...new Set(paths)] });
       await refresh();
     });
@@ -784,7 +812,7 @@ export function SourceControlPanel(): React.JSX.Element {
         confirmText: '簽出',
         cancelText: '取消',
       });
-      if (!ok) return;
+      if (!ok || !isCurrent()) return;
       try {
         await ipc.git.branch({ wsId, op: 'checkout', name: c.hash });
       } catch (e) {
@@ -799,7 +827,7 @@ export function SourceControlPanel(): React.JSX.Element {
   const onBranchFromCommit = async (c: GitLogEntry): Promise<void> => {
     if (!wsId) return;
     const name = (await dialog.open((close) => <CreateBranchForm onDone={close} />)) as string | undefined;
-    if (!name) return;
+    if (!name || !isCurrent()) return;
     await run(async () => {
       await ipc.git.branch({ wsId, op: 'create', name, startPoint: c.hash });
       await ipc.git.branch({ wsId, op: 'checkout', name });
@@ -877,7 +905,7 @@ export function SourceControlPanel(): React.JSX.Element {
         ),
         { dismissable: false },
       )) as BranchCleanupDraft | undefined;
-      if (!cleanupDraft) return;
+      if (!cleanupDraft || !isCurrent()) return;
     }
     await run(async () => {
       const deleteLocal = kind === 'local';
@@ -922,7 +950,7 @@ export function SourceControlPanel(): React.JSX.Element {
         />,
         { dismissable: false },
       )) as BranchCleanupRiskDecision | undefined;
-      if (!decision) return;
+      if (!decision || !isCurrent()) return;
       const result = await withCleanupProgress(anchorBranch, () => ipc.git.cleanupExecute({
         wsId,
         branch: anchorBranch,
@@ -991,7 +1019,7 @@ export function SourceControlPanel(): React.JSX.Element {
       (close) => <CleanupEvidenceDialog journalId={journalId} onResult={(value) => close(value)} />,
       { dismissable: false },
     )) as string | undefined;
-    if (!payloadJson) return;
+    if (!payloadJson || !isCurrent()) return;
     await run(async () => {
       const result = await ipc.git.cleanupImportEvidence({ wsId, journalId, payloadJson });
       if (!result.ok) setError(result.error);
@@ -1149,7 +1177,12 @@ export function SourceControlPanel(): React.JSX.Element {
       {/* PE-4：手動取回失敗的小字提示（離線/認證屬常態情境，不佔錯誤橫幅）。 */}
       {fetchHint && (
         <div className="pd-scm-fetch-hint" role="status">
-          {fetchHint}
+          <strong style={{ display: 'block' }}>取回未完成：{gitErrorFeedback(fetchHint).summary}</strong>
+          <span style={{ display: 'block' }}>{gitErrorFeedback(fetchHint).nextStep}</span>
+          <details className="pd-scm-error-detail">
+            <summary>顯示技術細節</summary>
+            <pre>{gitErrorDetail(fetchHint)}</pre>
+          </details>
         </div>
       )}
 
@@ -1253,7 +1286,12 @@ export function SourceControlPanel(): React.JSX.Element {
 
       {error && (
         <div className="pd-scm-error" role="alert">
-          <span>{error}</span>
+          <strong style={{ display: 'block' }}>{gitErrorFeedback(error).summary}</strong>
+          <span style={{ display: 'block' }}>{gitErrorFeedback(error).nextStep}</span>
+          <details className="pd-scm-error-detail">
+            <summary>顯示技術細節</summary>
+            <pre>{gitErrorDetail(error)}</pre>
+          </details>
         </div>
       )}
 

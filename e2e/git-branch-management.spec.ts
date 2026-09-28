@@ -48,7 +48,7 @@ async function openBranches(page: import('@playwright/test').Page): Promise<void
 }
 
 test('分支管理：本地／遠端分組與兩階段完整清理真鏈路', async () => {
-  test.setTimeout(360_000);
+  test.setTimeout(600_000); // 四段完整清理各自可能需要預檢與執行，涵蓋每段既有 120 秒等待上限。
   const { root, repo, remote } = seedRepo();
   const { app, page, userData } = await launchApp();
   try {
@@ -98,7 +98,7 @@ test('分支管理：本地／遠端分組與兩階段完整清理真鏈路', as
     await expect(page.getByRole('dialog')).toContainText('此畫面尚未開始刪除');
     expect(git(repo, 'branch', '--list', 'merged-local').trim()).toBe('merged-local');
     await page.getByRole('button', { name: '檢查清理風險' }).click();
-    await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole('dialog')).toContainText('Git 判定可安全刪除');
     await page.getByRole('button', { name: '開始完整清理' }).click();
     await expect(page.locator('[data-branch-kind="local"]', { hasText: 'merged-local' })).toHaveCount(0, { timeout: cleanupTimeout });

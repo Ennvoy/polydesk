@@ -22,6 +22,9 @@
 
 ## Git 分支現況
 
+- 2026-09-28 Git 完整稽核記錄位於 `specs/git-audit-2026-09-28.md`：涵蓋取消暫存、放棄變更、分支／標籤同名、合併提交檔案清單、common-dir 序列佇列、外部 diff 與 SCM 非同步結果；驗證及發布證據以該檔即時狀態為準。
+- SCM 失敗回饋提供原因、處理方式及可摺疊技術細節；失敗後仍重新讀取狀態，切換工作區忽略前一工作區結果。完整指南說明含未追蹤檔案的保存範圍、合併衝突與 stash pop 衝突保留 stash 的處理方式。
+
 - `GitService.branch(list)` 以 `for-each-ref` 讀取本地與 remote-tracking refs，再以實際 `git remote` 清單的最長前綴組成結構化 `{ remote, name, ref }`；因此合法的斜線 remote 不會被誤拆，並排除 remote `HEAD`。
 - shared IPC 的 `git:branch` 支援 `list | create | checkout | delete-local | delete-remote`；list 同時保留既有扁平 `remotes` 相容 worktree 對話框，並提供 SCM 使用的 `remoteBranches` 結構化身分。
 - SCM 分支頁分成本地與遠端兩個可獨立收合群組，顯示各自數量；每列 `⋯` 與右鍵共用選單，目前分支或 worktree 使用中的本地分支會顯示具名停用原因。

@@ -15,7 +15,7 @@ import {
 } from './worktreeModel';
 import { makeCreateAction, friendlyCreateError } from './worktreeSubmit';
 import { mark, measure } from '../../../shared/perf';
-import type { GitWorktree } from '../../../shared/types';
+import type { GitRemoteBranch, GitWorktree } from '../../../shared/types';
 
 interface Props {
   /** 來源 repo 工作區（主工作樹或其 worktree 皆可，main 端解回主工作樹）。 */
@@ -35,10 +35,11 @@ const LABEL: Record<BranchSourceKind, string> = {
 export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: Props): React.JSX.Element {
   const [kind, setKind] = useState<BranchSourceKind>(presetBranch ? 'existing' : 'new');
   const [locals, setLocals] = useState<string[]>([]);
-  const [remotes, setRemotes] = useState<string[]>([]);
+  const [remotes, setRemotes] = useState<GitRemoteBranch[]>([]);
   const [current, setCurrent] = useState<string>('');
   const [worktrees, setWorktrees] = useState<GitWorktree[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const [existing, setExisting] = useState(presetBranch ?? '');
   const [newName, setNewName] = useState('');
@@ -49,6 +50,7 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
   const [pathValue, setPathValue] = useState('');
   // REQ-WT-002：bare/submodule repo 不支援建 worktree，事前提示（null=檢查中/支援）。
   const [unsupported, setUnsupported] = useState<'bare' | 'submodule' | 'not-repo' | null>(null);
+  const [supportChecked, setSupportChecked] = useState(false);
   // 主工作樹路徑（sibling 基準）：從 worktree list 的 isMain 取；未載入前退回 wsPath。
   // 修：在 worktree 工作區中建立時，基準須是「主 repo」而非作用中的 worktree，否則會巢狀成
   // <main>-worktrees/<dev>-worktrees/<new>（REQ-WT-003 主工作樹收斂）。
@@ -63,7 +65,10 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
     // 分支下拉的 enabled）——獨立 fire、不進阻塞式 Promise.all（藍軍 R2 修正的副作用回收）。
     void ipc.git.worktreeSupported({ wsId }).then((sup) => {
       if (alive && 'supported' in sup && !sup.supported) setUnsupported(sup.reason ?? 'not-repo');
-    });
+      if (alive && 'error' in sup) { setLoadFailed(true); setError({ msg: `${sup.error}。請取消後重新開啟建立視窗。`, retry: false }); }
+    }).catch((e: unknown) => {
+      if (alive) { setLoadFailed(true); setError({ msg: `${e instanceof Error ? e.message : '無法檢查 worktree 支援狀態'}。請取消後重新開啟建立視窗。`, retry: false }); }
+    }).finally(() => { if (alive) setSupportChecked(true); });
     void (async () => {
       const [b, wt] = await Promise.all([
         ipc.git.branch({ wsId, op: 'list' }),
@@ -72,17 +77,22 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
       if (!alive) return;
       if ('branches' in b) {
         setLocals(b.branches);
-        setRemotes(b.remotes ?? []);
+        setRemotes(b.remoteBranches ?? []);
         setCurrent(b.current);
         setBase(b.current); // 新分支起點預設當前分支（D-WT-BRANCH-BASE）
+      } else {
+        setLoadFailed(true);
+        setError({ msg: '無法讀取來源分支。請取消後重新開啟建立視窗。', retry: false });
       }
       if ('list' in wt) {
         setWorktrees(wt.list);
         const main = wt.list.find((x) => x.isMain);
         if (main) setMainPath(main.path); // sibling 基準＝主工作樹（非作用中的 worktree）
       }
-      setLoading(false);
-    })();
+      if ('error' in wt) { setLoadFailed(true); setError({ msg: `${wt.error}。請取消後重新開啟建立視窗。`, retry: false }); }
+    })().catch((e: unknown) => {
+      if (alive) { setLoadFailed(true); setError({ msg: `${e instanceof Error ? e.message : '無法載入分支與 worktree 清單'}。請取消後重新開啟建立視窗。`, retry: false }); }
+    }).finally(() => { if (alive) setLoading(false); });
     return () => {
       alive = false;
     };
@@ -94,9 +104,8 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
   const slugSource = useMemo(() => {
     if (kind === 'existing') return existing;
     if (kind === 'new') return newName;
-    const idx = remoteRef.indexOf('/');
-    return idx >= 0 ? remoteRef.slice(idx + 1) : remoteRef;
-  }, [kind, existing, newName, remoteRef]);
+    return remotes.find((entry) => entry.ref === remoteRef)?.name ?? '';
+  }, [kind, existing, newName, remoteRef, remotes]);
 
   useEffect(() => {
     if (!pathEdited) setPathValue(slugSource ? previewTargetPath(mainPath, slugSource) : '');
@@ -114,7 +123,10 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
 
   const submit = async (): Promise<void> => {
     setError(null);
-    const spec = buildBranchSpec(kind, { existing, newName, base, remoteRef });
+    if (appStore.getState().activeWorkspaceId !== wsId) return;
+    const remoteBranch = remotes.find((entry) => entry.ref === remoteRef);
+    if (kind === 'remote' && !remoteBranch) { setError({ msg: '遠端分支身分已變更，請重新開啟建立視窗。', retry: false }); return; }
+    const spec = buildBranchSpec(kind, { existing, newName, base, remoteRef, remoteBranch });
     if ('error' in spec) {
       setError({ msg: spec.error, retry: false });
       return;
@@ -131,7 +143,7 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
         } catch {
           /* 缺 mark：略過 */
         }
-        appStore.setActiveWorkspace(r.wsId);
+        if (appStore.getState().activeWorkspaceId === wsId) appStore.setActiveWorkspace(r.wsId);
         onResult(r.wsId);
         return;
       }
@@ -154,6 +166,8 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
   const canSubmit =
     !submitting &&
     !loading &&
+    supportChecked &&
+    !loadFailed &&
     !unsupported &&
     pathValue.trim() !== '' &&
     (kind === 'existing' ? existing !== '' : kind === 'new' ? !!newName && !newNameErr : remoteRef !== '');
@@ -254,8 +268,8 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
           >
             <option value="">（請選擇）</option>
             {remotes.map((r) => (
-              <option key={r} value={r}>
-                {r}
+              <option key={r.ref} value={r.ref}>
+                {r.ref}
               </option>
             ))}
           </select>

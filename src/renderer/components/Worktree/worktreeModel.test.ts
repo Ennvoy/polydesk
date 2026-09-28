@@ -71,6 +71,12 @@ describe('buildBranchSpec（三來源）', () => {
     });
     expect('error' in buildBranchSpec('remote', {})).toBe(true);
   });
+  it('remote 名含斜線時使用結構化 name，保留完整 ref 作為起點', () => {
+    expect(buildBranchSpec('remote', { remoteRef: 'team/upstream/feat/z', remoteBranch: { remote: 'team/upstream', name: 'feat/z', ref: 'team/upstream/feat/z' } })).toEqual({
+      branch: { kind: 'remote', name: 'feat/z', base: 'team/upstream/feat/z' },
+      slugSource: 'feat/z',
+    });
+  });
 });
 
 describe('previewTargetPath（sibling + slug）', () => {

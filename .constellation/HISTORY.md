@@ -1,3 +1,9 @@
+## 2026-09-28 Git 操作完整檢查
+- 稽核 GitService、shared Git 契約、repository 序列佇列、SCM 非同步結果與 worktree 建立流程；起點提交 `552d0d6`。
+- 修正取消暫存／放棄變更、分支與標籤同名列表身分、合併提交檔案清單、linked worktree 操作排序、外部 diff，以及工作區切換與失敗刷新問題。
+- 發布目標 v0.34.0；完整指南、短導覽與 README 同步，導覽 selector 及版本契約不變。
+- Git 真實回歸、Electron 新增 7 案與既有 29 案均有分批通過證據；原批 timeout 與多段清理耗時如實記在 `specs/git-audit-2026-09-28.md`。Portable 證據待推送後打包驗證。
+
 ## 2026-08-17 可恢復的分支、worktree 與遠端完整清理
 - 完成 5 張票：共用 preview／lease／journal 基礎、本機與遠端清理引擎、兩階段 SCM 操作，以及側欄頂部工具列降噪。
 - 影響 main Git／cleanup／journal、shared IPC、renderer SCM／Dock 版面、完整指南與真 Git／Electron 測試；舊名稱式破壞性刪除入口停用。

@@ -171,7 +171,7 @@ test('REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅
 });
 
 test('worktree 移除相容舊資料：一般工作區加入時兩種移除都有效', async () => {
-  test.setTimeout(120_000);
+  test.setTimeout(300_000);
   const { root, repo } = seedRepo();
   const legacyPath = join(root, 'profile');
   git(repo, 'worktree', 'add', legacyPath, 'dev');
@@ -200,8 +200,17 @@ test('worktree 移除相容舊資料：一般工作區加入時兩種移除都�
   await expect(discard).toBeVisible({ timeout: 8000 });
   await page.locator('input[aria-label="確定丟棄未提交變更"]').check();
   await discard.click();
-  await page.getByRole('button', { name: '了解風險並刪除' }).click();
-  await expect.poll(() => existsSync(legacyPath), { timeout: 30_000 }).toBe(false);
+  const acceptExternalWriteRisk = page.getByRole('button', { name: '了解風險並刪除' });
+  await expect(acceptExternalWriteRisk).toBeVisible({ timeout: 90_000 }); // 兩次完整清理預檢各有 30 秒的真 Git 讀取上限。
+  await acceptExternalWriteRisk.click();
+  try {
+    await expect.poll(() => existsSync(legacyPath), { timeout: cleanupTimeout }).toBe(false);
+  } catch (error) {
+    const alert = await page.locator('.pd-scm-error').allTextContents();
+    const feedback = await page.getByTestId('cleanup-feedback').allTextContents();
+    console.info('WORKTREE_CLEANUP_DIAGNOSTIC', JSON.stringify({ alert, feedback, registered: git(repo, 'worktree', 'list', '--porcelain').includes(legacyPath.replace(/\\/g, '/')) }));
+    throw error;
+  }
   await expect(page.locator('.pd-scm-error')).toHaveCount(0);
   expect(git(repo, 'worktree', 'list', '--porcelain')).not.toContain(legacyPath.replace(/\\/g, '/'));
 
