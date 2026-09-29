@@ -7,6 +7,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync, symlinkS
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
+import { execFileSync } from 'node:child_process';
 import chokidar, { type FSWatcher } from 'chokidar';
 import { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
@@ -163,13 +164,14 @@ describe('F-2-A2 symlink 逃逸：realpath containment + followSymlinks:false', 
   });
 });
 
-describe('F-2-A3 ignored 路徑分段比對（chokidar v5 無 glob）', () => {
-  it('node_modules / .git 內變動不觸發；src 內變動會觸發', async () => {
+describe('F-2-A3 ignored 路徑分段比對', () => {
+  it('node_modules / .git / .next 內變動不觸發；src 內變動會觸發', async () => {
     const ws = mkTmp();
     mkdirSync(path.join(ws, 'node_modules', 'pkg'), { recursive: true });
     writeFileSync(path.join(ws, 'node_modules', 'pkg', 'index.js'), 'x');
     mkdirSync(path.join(ws, '.git', 'objects', 'aa'), { recursive: true });
     writeFileSync(path.join(ws, '.git', 'objects', 'aa', 'bb'), 'x');
+    mkdirSync(path.join(ws, '.next', 'cache'), { recursive: true });
     mkdirSync(path.join(ws, 'src'), { recursive: true });
 
     const events: FsChange[] = [];
@@ -181,15 +183,61 @@ describe('F-2-A3 ignored 路徑分段比對（chokidar v5 無 glob）', () => {
 
     writeFileSync(path.join(ws, 'node_modules', 'pkg', 'added.js'), 'x');
     writeFileSync(path.join(ws, '.git', 'objects', 'aa', 'cc'), 'x');
+    writeFileSync(path.join(ws, '.next', 'cache', 'artifact'), 'x');
     writeFileSync(path.join(ws, 'src', 'a.ts'), 'x');
     await delay(350);
 
     // node_modules / .git 內變動完全不觸發（watcher 層即排除）
     expect(events.some((e) => e.path.includes('node_modules'))).toBe(false);
     expect(events.some((e) => e.path.startsWith('.git'))).toBe(false);
+    expect(events.some((e) => e.path.startsWith('.next'))).toBe(false);
     // src 內新增 → 逐檔推送該檔（path＝工作區相對 POSIX、kind=add）
     expect(events.some((e) => e.path === 'src/a.ts')).toBe(true);
   });
+});
+
+describe('Windows 大型工作區監看資源', () => {
+  it.skipIf(process.platform !== 'win32')('600 個檔案只建立少量 handle，監看仍收到新增事件', async () => {
+    const ws = mkTmp();
+    for (let i = 0; i < 600; i++) writeFileSync(path.join(ws, `existing-${i}.txt`), 'x');
+    const countHandles = (): number => Number(execFileSync('powershell.exe', [
+      '-NoProfile', '-Command', `(Get-Process -Id ${process.pid}).HandleCount`,
+    ], { encoding: 'utf8', timeout: 20_000 }).trim());
+    const before = countHandles();
+    const events: FsChange[] = [];
+    const fw = track(new FileWatcher(() => ws, { emit: (p) => events.push(p), coalesceMs: 30, awaitWriteFinishMs: 20 }));
+    fw.ensureWatch(WS);
+    await fw.whenReady(WS);
+    const after = countHandles();
+    expect(after - before).toBeLessThan(50);
+
+    writeFileSync(path.join(ws, 'new.txt'), 'hello');
+    await delay(300);
+    expect(events.some((event) => event.path === 'new.txt')).toBe(true);
+  }, 45_000);
+
+  it.skipIf(process.platform !== 'win32')('新增、修改與刪除維持逐檔事件種類', async () => {
+    const ws = mkTmp();
+    const events: FsChange[] = [];
+    const fw = track(new FileWatcher(() => ws, { emit: (p) => events.push(p), coalesceMs: 30, awaitWriteFinishMs: 20 }));
+    fw.ensureWatch(WS);
+    await fw.whenReady(WS);
+    const file = path.join(ws, 'tracked.txt');
+
+    writeFileSync(file, 'first');
+    await delay(200);
+    expect(events.some((event) => event.path === 'tracked.txt' && event.kind === 'add')).toBe(true);
+    events.length = 0;
+
+    appendFileSync(file, ' second');
+    await delay(200);
+    expect(events.some((event) => event.path === 'tracked.txt' && event.kind === 'change')).toBe(true);
+    events.length = 0;
+
+    rmSync(file);
+    await delay(200);
+    expect(events.some((event) => event.path === 'tracked.txt' && event.kind === 'unlink')).toBe(true);
+  }, 10_000);
 });
 
 describe('F-2-A4 lazy-start 冪等 + teardown 無殭屍', () => {

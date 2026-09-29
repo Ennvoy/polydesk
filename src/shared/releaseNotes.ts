@@ -15,6 +15,14 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.35.0',
+    date: '2026-09-29',
+    highlights: [
+      '大型工作區改用較省資源的 Windows 檔案監看方式，降低長時間開啟後整個視窗卡住的風險',
+      '檔案總管、外部修改自動更新與原始碼控制仍保留原有操作；不再監看 .next 產物目錄',
+    ],
+  },
+  {
     version: '0.34.0',
     date: '2026-09-28',
     highlights: [

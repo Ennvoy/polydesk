@@ -4,8 +4,8 @@
 // 故 fs:tree 的 dir 一律約束在 workspace.path 內：
 //   - 字串層：path.resolve 後做 containment（擋 ../ 穿越、絕對路徑、跨磁碟/UNC/device 前綴）。
 //   - symlink 層：以 fs.realpath 解析後再比對 realRoot（擋 repo 內 symlink/junction 逃逸）。
-// watcher 走 followSymlinks:false（不跟 symlink 出界）+ ignored 以「路徑分段」比對（chokidar v5
-// 已無 glob，子字串/glob 寫法會漏放 node_modules/.git）+ awaitWriteFinish 去半寫多發 +
+// Windows 以單一原生遞迴 handle 監看工作區，其餘平台沿用 chokidar；兩者都拒絕 symlink 逃逸，
+// ignored 以「路徑分段」比對（子字串/glob 寫法會漏放 node_modules/.git）+ 寫入穩定窗去半寫多發 +
 // 時間窗 coalesce（同窗同檔去重）。fs:change 為「逐檔」語意，path＝「workspace 相對 POSIX 路徑」
 // （與 editorBus.openFile / fs:read 同一路徑約定，'' 代表工作區根），kind＝add/change/unlink；
 // 編輯器（F-4）以此 path 字串比對開啟分頁、偵測外部修改，檔案總管據此重抓父目錄——故 watcher
@@ -25,17 +25,18 @@ import type { WorkspaceLifecycle } from '../workspace/workspaceLifecycle';
 import type { InvokeReq, EventChannels } from '../../shared/ipc';
 import { IGNORED_DIRS } from '../../shared/constants';
 import { emit } from '../ipc/broadcast';
+import { WindowsRecursiveWatcher } from './windowsRecursiveWatcher';
 
 export type TreeEntry = { name: string; dir: boolean };
 type FsKind = EventChannels['fs:change']['kind'];
 
-/** chokidar.watch 注入點（測試以 spy/假 watcher 取代真實檔案系統監看）。 */
+/** 檔案監看器注入點（測試以假 watcher 取代真實檔案系統監看）。 */
 export type WatchFactory = (root: string, options: ChokidarOptions) => FSWatcher;
 
 export interface FileWatcherOptions {
   /** fs:change 推送函式（預設經 broadcast.emit 推給 renderer）。 */
   emit?: (payload: EventChannels['fs:change']) => void;
-  /** watcher 建構工廠（預設 chokidar.watch）。 */
+  /** watcher 建構工廠（預設 Windows 原生監看，其餘平台用 chokidar）。 */
   watchFactory?: WatchFactory;
   /** 事件聚合時間窗（ms）。 */
   coalesceMs?: number;
@@ -53,7 +54,7 @@ const WATCH_DEPTH = 16;
 const IDLE_FACTOR = 3;
 const MIN_IDLE_MS = 250;
 
-const IGNORED_SET: ReadonlySet<string> = new Set<string>(IGNORED_DIRS);
+const IGNORED_SET: ReadonlySet<string> = new Set<string>([...IGNORED_DIRS, '.next']);
 
 /** UNC（\\server\share）/ device（\\.\）/ extended-length（\\?\）前綴：一律拒絕，避免 NTLM 外洩與卡死。 */
 function hasDangerousPrefix(dir: string): boolean {
@@ -115,7 +116,7 @@ export async function listTree(root: string, dir: string): Promise<{ entries: Tr
   return { entries };
 }
 
-/** 多工作區檔案監看管理（每工作區一個 chokidar watcher，lazy 建、teardown 收）。 */
+/** 多工作區檔案監看管理（每工作區一個 watcher，lazy 建、teardown 收）。 */
 export class FileWatcher {
   private readonly watchers = new Map<string, FSWatcher>();
   private readonly ready = new Map<string, Promise<void>>();
@@ -169,7 +170,21 @@ export class FileWatcher {
     if (this.watchers.has(wsId)) return; // 同步 check-set，無 await 隙縫＝race-safe（A4）
     const root = this.resolveRoot(wsId);
     if (!root) return;
-    const factory = this.opts.watchFactory ?? ((r, o) => chokidar.watch(r, o));
+    const factory = this.opts.watchFactory ?? ((r: string, o: ChokidarOptions): FSWatcher => {
+      if (process.platform === 'win32') {
+        try {
+          return new WindowsRecursiveWatcher(
+            r,
+            (full) => this.isIgnored(r, full),
+            this.maxBatch,
+            this.opts.awaitWriteFinishMs ?? DEFAULT_AWF_MS,
+          ) as unknown as FSWatcher;
+        } catch {
+          // 網路磁碟等不支援原生監看的路徑，保留既有 chokidar 路徑。
+        }
+      }
+      return chokidar.watch(r, o);
+    });
     const w = factory(root, this.buildOptions(root));
     this.watchers.set(wsId, w);
     this.ready.set(wsId, new Promise<void>((res) => w.once('ready', () => res())));

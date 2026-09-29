@@ -1,6 +1,6 @@
 # Polydesk
 
-![version](https://img.shields.io/badge/version-v0.34.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+![version](https://img.shields.io/badge/version-v0.35.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
 
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
@@ -74,6 +74,8 @@ v0.34.0 同時修正改名檔案取消暫存、新增檔案放棄變更、同名
 在截圖工具、瀏覽器或通訊軟體複製圖片後，先點一下檔案總管中的目標資料夾，再按 `Ctrl+V`，圖片會存成 `貼上圖片.png`；若檔名已存在會自動建立 `貼上圖片 copy.png`，不會覆蓋舊檔。此流程同時支援某些軟體用「無磁碟路徑、通用 MIME 虛擬檔案」提供的圖片，且不依賴系統 `PATH`。從 Windows 檔案總管複製既有圖片檔時，仍會保留原始檔名與格式。
 
 ### 終端機與多工作區效能
+
+v0.35.0 將 Windows 工作區檔案監看改為每個工作區一個原生遞迴監看器，避免大型目錄讓主程序同時開啟數萬個檔案控制代碼。`.next` 建置產物不再觸發檔案總管的背景更新；一般檔案的新增、修改、刪除以及編輯器外部修改提示維持原有操作。安裝新版後需重新啟動 Polydesk，既有視窗不會自動切換到新版監看方式。
 
 同時開啟多個工作區時，背景終端仍會保留 PTY 與完整輸出，但純背景串流的 IPC 合併週期由 16ms 放寬為 100ms；renderer 使用單一 PTY 事件入口分流，不再讓每個終端重複接收所有資料事件，WebGL 也只配置給目前可見的終端。任何終端收到鍵盤輸入後 250ms 內的回應會優先以 4ms flush，避免節流拖慢互動；重新切回工作區時也會立即補送累積輸出並重新 fit，不需犧牲內容正確性。
 

@@ -3,7 +3,7 @@
 
 ## 模組索引
 
-- `src/main/`：Electron 特權層。`ipc/router.ts` 註冊服務；`git/GitService.ts` 執行系統 Git；`git/gitSafeArgs.ts` 驗證 ref 與參數；`git/gitSerialQueue.ts` 序列化同 repository 操作；`git/cleanup/core/`、`git/cleanup/local/`、`git/cleanup/remote/` 與 `store/cleanup/` 提供零副作用 preview、完整 retained-ref/worktree/endpoint lease、本機 CAS、遠端 compare-and-delete、refspec producer 清理、repository instance identity、write-ahead journal、claim 重建及 quarantine。其餘模組負責 workspace、PTY、檔案、搜尋、LSP、AI 監控、狀態儲存與更新。
+- `src/main/`：Electron 特權層。`ipc/router.ts` 註冊服務；`git/GitService.ts` 執行系統 Git；`git/gitSafeArgs.ts` 驗證 ref 與參數；`git/gitSerialQueue.ts` 序列化同 repository 操作；`git/cleanup/core/`、`git/cleanup/local/`、`git/cleanup/remote/` 與 `store/cleanup/` 提供零副作用 preview、完整 retained-ref/worktree/endpoint lease、本機 CAS、遠端 compare-and-delete、refspec producer 清理、repository instance identity、write-ahead journal、claim 重建及 quarantine。`fs/FileWatcher.ts` 在 Windows 使用單一原生遞迴監看器，在其他平台或原生監看無法建立時沿用 chokidar。其餘模組負責 workspace、PTY、檔案、搜尋、LSP、AI 監控、狀態儲存與更新。
 - `src/preload/`：固定白名單 IPC bridge，只暴露 namespaced API，不暴露 raw `ipcRenderer` 或 Node API。
 - `src/shared/`：跨程序契約單一來源。`channels.ts` 定義 channel 白名單，`ipc.ts` 定義 request/response，`types.ts` 定義 Workspace、GitStatus、GitLogRef、GitWorktree 等模型。
 - `src/renderer/`：React UI。`components/ActivityBar.tsx` 匯出水平 `WorkspaceToolbar`，由側欄 host 放在內容頂部提供檔案總管／搜尋／SCM／設定入口；`WorkspaceRail.tsx` 只管理工作區。`components/Help/` 提供 7 步首次導覽與可搜尋完整指南，`TitleBar.tsx` 與設定共用重開入口。`components/SourceControl/SourceControlPanel.tsx` 負責 SCM 的變更、歷史、分支、stash 與清理恢復卡；`scm.css` 保證窄側欄直向呈現，`layout/DockLayout.css` 提供低彩度版面顯隱工具列。`components/Worktree/` 已有本地／遠端分支來源分流；`state/` 管理工作區、Git snapshot 與導覽匯流排；`theme/compactButtons.css` 提供無框小圖示按鈕樣式。
@@ -19,6 +19,7 @@
 - Worktree：SCM／建立對話框 → `git:worktree*` → `GitService` → `WorkspaceManager` 納管；分支互斥以 `git worktree list` 的即時結果為準。
 - Terminal：xterm → `pty:*` → `PtyManager` → ConPTY；main 主動推播輸出。Windows 一律用 node-pty 內附 conpty.dll（`USE_CONPTY_DLL`，decision 116——內建 ConPTY 吞滑鼠追蹤序列、重繪吃字；逃生口 `POLYDESK_CONPTY_DLL=0`）。
 - 檔案／搜尋／LSP：renderer 元件 → 對應固定 IPC → main service；檔案 watcher 再推事件回 renderer。
+- Windows 檔案監看：每個已載入工作區各持有一個原生遞迴監看器；事件保留工作區 containment、junction 檢查、短暫寫入合併與洪水時根目錄對帳。`.next` 僅自檔案監看排除，搜尋範圍不變（decision 117）。
 
 ## Git 分支現況
 
