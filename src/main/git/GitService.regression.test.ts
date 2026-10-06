@@ -202,4 +202,73 @@ describe('GitService 操作回歸（真 Git）', () => {
       keySpy.mockRestore();
     }
   }));
+
+  it('同一真 repository 的歷史、分支與 worktree 讀取不等慢狀態掃描', async () => repository(async (_svc, dir) => {
+    const mgr = { get: () => ({ path: dir }), list: () => [{ id: 'ws', path: dir }] } as unknown as WorkspaceManager;
+    type Handler = (event: unknown, request: unknown) => Promise<unknown>;
+    const handlers = new Map<string, Handler>();
+    const ipc = { handle: (channel: string, handler: Handler) => { handlers.set(channel, handler); } } as unknown as IpcMain;
+    let release!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const entered = new Promise<void>((resolve) => { started = resolve; });
+    const original = GitService.prototype.snapshot;
+    const spy = vi.spyOn(GitService.prototype, 'snapshot').mockImplementation(async function (this: GitService, id: string) {
+      const result = await original.call(this, id); // 實際 Git status 完成後保持 reader 佔位。
+      started();
+      await gate;
+      return result;
+    });
+    let writerEntered = false;
+    const originalBranch = GitService.prototype.branch;
+    const branchSpy = vi.spyOn(GitService.prototype, 'branch').mockImplementation(async function (this: GitService, ...args: Parameters<GitService['branch']>) {
+      if (args[1] === 'create') writerEntered = true;
+      return originalBranch.apply(this, args);
+    });
+    let keyCallCount = 0;
+    let writerKeyReady!: () => void;
+    const writerKey = new Promise<void>((resolve) => { writerKeyReady = resolve; });
+    const originalKey = GitService.prototype.repositoryQueueKey;
+    const keySpy = vi.spyOn(GitService.prototype, 'repositoryQueueKey').mockImplementation(async function (this: GitService, id: string) {
+      const ordinal = ++keyCallCount;
+      const key = await originalKey.call(this, id);
+      if (ordinal === 5) writerKeyReady();
+      return key;
+    });
+    registerGitHandlers(ipc, mgr, join(dir, 'userdata'));
+    const snapshot = handlers.get('git:snapshot')!({}, { wsId: 'ws' });
+    let requests: Promise<unknown[]> | undefined;
+    let writer: Promise<unknown> | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await entered;
+      requests = Promise.all([
+        handlers.get('git:log')!({}, { wsId: 'ws', limit: 50 }),
+        handlers.get('git:branch')!({}, { wsId: 'ws', op: 'list' }),
+        handlers.get('git:worktreeList')!({}, { wsId: 'ws' }),
+      ]);
+      const results = await Promise.race([
+        requests,
+        new Promise<never>((_resolve, reject) => { timeout = setTimeout(() => reject(new Error('metadata blocked by snapshot')), 15_000); }),
+      ]);
+      expect(results[0]).toHaveLength(1);
+      expect(results[1]).toHaveProperty('branches', ['main']);
+      expect(results[2]).toHaveProperty('list');
+      writer = handlers.get('git:branch')!({}, { wsId: 'ws', op: 'create', name: 'after-snapshot' });
+      await writerKey;
+      await Promise.resolve();
+      expect(writerEntered).toBe(false);
+      release();
+      await expect(writer).resolves.toEqual({ ok: true });
+      expect(writerEntered).toBe(true);
+      expect(existsSync(join(dir, '.git', 'refs', 'heads', 'after-snapshot'))).toBe(true);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+      release();
+      await Promise.allSettled([snapshot, ...(requests ? [requests] : []), ...(writer ? [writer] : [])]);
+      spy.mockRestore();
+      branchSpy.mockRestore();
+      keySpy.mockRestore();
+    }
+  }));
 });

@@ -23,6 +23,7 @@ import { confirmCloseWorkspace } from './Dialogs/CloseConfirm';
 import { CreateWorktreeDialog } from './Worktree/CreateWorktreeDialog';
 import { CloneRepositoryDialog } from './CloneRepositoryDialog';
 import { worktreeBranchDisplay } from './Worktree/worktreeModel';
+import { loadWorktreeBranch, subscribeWorktreeBranches } from '../state/worktreeBranches';
 import type { Workspace } from '../../shared/types';
 
 // ── 一次性注入本 feature 的 rail 樣式（不改 P-2 的 components.css；全用 var(--*) token）──
@@ -128,26 +129,30 @@ export async function cloneRepositoryFlow(): Promise<void> {
 }
 
 /**
- * worktree 工作區的即時分支徽章（REQ-WT-004＋紅軍 A1）：分支名經 git status 即時查、
+ * worktree 工作區的即時分支徽章（REQ-WT-004＋紅軍 A1）：同 repo 共用 git worktree list、
  * 一律走 React 文字節點＋neutralizeBidi（禁 innerHTML，防惡意分支名 XSS/RLO 偽裝）；
  * detached HEAD 顯示明確文字、不渲染 'null'、不由資料夾名回推。
  */
-function WorktreeBranchTag({ wsId }: { wsId: string }): React.JSX.Element {
+function WorktreeBranchTag({ wsId, path, mainPath }: { wsId: string; path: string; mainPath: string }): React.JSX.Element {
   const [branch, setBranch] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     let alive = true;
-    void (async () => {
-      try {
-        const s = await ipc.git.status({ wsId });
-        if (alive) setBranch(s.isRepo ? s.branch : null);
-      } catch {
-        if (alive) setBranch(null);
-      }
-    })();
+    let requestVersion = 0;
+    const reload = (): void => {
+      const version = ++requestVersion;
+      void loadWorktreeBranch({ wsId, path, mainPath }).then((value) => {
+        if (alive && version === requestVersion) setBranch(value);
+      }).catch(() => {
+        if (alive && version === requestVersion) setBranch(undefined);
+      });
+    };
+    const unsubscribe = subscribeWorktreeBranches(mainPath, reload);
+    reload();
     return () => {
       alive = false;
+      unsubscribe();
     };
-  }, [wsId]);
+  }, [wsId, path, mainPath]);
   const text = worktreeBranchDisplay(branch);
   return (
     <span
@@ -511,7 +516,7 @@ export function WorkspaceRail(): React.JSX.Element {
                   </button>
                 )}
 
-                {!isEditing && isWorktree && !isMissing && <WorktreeBranchTag wsId={w.id} />}
+                {!isEditing && isWorktree && !isMissing && <WorktreeBranchTag wsId={w.id} path={w.path} mainPath={w.worktree!.mainPath} />}
 
                 {!isEditing && (
                   <span className="pdws-actions">

@@ -5,6 +5,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ipc } from '../../ipc/client';
 import { appStore } from '../../state/appStore';
+import { invalidateWorktreeBranches } from '../../state/worktreeBranches';
 import { dialog } from '../Dialogs/host';
 import { neutralizeBidi } from '../Dialogs/TrustConfirm';
 import { CreateWorktreeDialog } from './CreateWorktreeDialog';
@@ -72,6 +73,7 @@ export function WorktreePanel({ wsId, wsPath, cleanup }: {
     try {
       const r = await ipc.git.worktreeAdopt({ wsId, path: wt.path });
       if ('wsId' in r) {
+        invalidateWorktreeBranches(wsPath);
         await appStore.loadWorkspaces();
         if (isCurrent()) appStore.setActiveWorkspace(r.wsId);
         await reload();

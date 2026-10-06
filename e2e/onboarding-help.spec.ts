@@ -135,6 +135,10 @@ test('說明與設定共用入口可搜尋完整指南，手動導覽不改寫�
     await expect(page.getByText('Agy CLI 目前不提供用量資料', { exact: false })).toBeVisible();
     await page.getByLabel('搜尋使用說明').fill('等待確認');
     await expect(page.getByText('等待確認', { exact: true }).first()).toBeVisible();
+    await page.getByLabel('搜尋使用說明').fill('正在讀取狀態');
+    await expect(page.getByRole('heading', { name: '檢視、暫存與提交變更', exact: true })).toBeVisible();
+    await expect(page.getByText('可先切到「歷史」、「分支」或 worktree', { exact: false })).toBeVisible();
+    await page.getByLabel('搜尋使用說明').fill('');
     await page.getByLabel('使用說明分類').getByRole('button', { name: /問題排除/ }).click();
     await expect(page.getByText('信任、確認與安全限制', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: '關閉使用說明' }).click();

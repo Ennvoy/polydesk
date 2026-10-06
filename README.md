@@ -1,6 +1,6 @@
 # Polydesk
 
-![version](https://img.shields.io/badge/version-v0.37.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+![version](https://img.shields.io/badge/version-v0.38.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
 
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
@@ -53,7 +53,7 @@ Git 操作失敗時，SCM 會顯示原因、可行的處理方式與可展開的
 
 若提示本機檔案會被覆蓋，先提交要保留的內容，或用 stash 保存後再重試。未追蹤新檔也必須一併保存，例如在終端機使用 `git stash push -u`，再確認 stash 內容。Polydesk 不會自動丟棄檔案或強制拉取。若拉取已產生合併衝突，處理衝突標記、重新暫存並完成合併提交；決定取消時可用 `git merge --abort`，先確認合併前的工作已有保存。`stash pop` 發生衝突時，Git 會保留該筆 stash，確認還原結果完整後再決定是否刪除。
 
-v0.34.0 同時修正改名檔案取消暫存、新增檔案放棄變更、同名分支與標籤的分支列表身分，以及合併提交的檔案清單；主工作樹與 linked worktree 共用 repository 序列佇列，diff 不執行外部 diff 程式。大型工作樹的狀態讀取最多等待 30 秒，其他本機 Git 操作仍維持原有的 10 秒限制；若讀取仍失敗，畫面會保留錯誤供展開查看。檢查範圍、回歸案例與驗證結果見 [Git 完整檢查紀錄](specs/git-audit-2026-09-28.md)。
+v0.34.0 同時修正改名檔案取消暫存、新增檔案放棄變更、同名分支與標籤的分支列表身分，以及合併提交的檔案清單；主工作樹與 linked worktree 共用 repository 排程，diff 不執行外部 diff 程式。大型工作樹的狀態讀取最多等待 30 秒，其他本機 Git 操作仍維持原有的 10 秒限制；若讀取仍失敗，畫面會保留錯誤供展開查看。檢查範圍、回歸案例與驗證結果見 [Git 完整檢查紀錄](specs/git-audit-2026-09-28.md)。
 
 ### Git worktree 管理
 
@@ -135,7 +135,15 @@ npm run pack:dir     # 未壓縮 app 目錄 → ../polydesk-dist/win-unpacked（
 
 原始碼控制面板開啟期間，Polydesk 會以低頻、僅讀取狀態的方式檢查目前 `HEAD`、分支及 ahead / behind。即使 commit 或 push 是在整合終端機、外部終端機或其他 Git 工具完成，面板也會自動更新，不必手動重新整理。
 
-狀態、變更清單、側欄頂部角標與底部狀態列會共用同工作區的一次 Git 快照；同時發生的讀取只啟動一個查詢。分支清單也以單一 Git 指令取得本地分支、遠端分支與目前分支，降低 Windows 上 Git 程序啟動較慢時的累積等待。
+狀態、變更清單、側欄頂部角標與底部狀態列會共用同工作區的一次 Git 快照；同時發生的讀取只啟動一個查詢。分支清單以 `for-each-ref` 取得本地、遠端與目前分支，再依實際 remote 名稱辨識遠端分支，支援名稱含斜線的 remote。
+
+v0.38.0 起，初次狀態仍在讀取時就能切到「歷史」、「分支」或 `worktree`；載入骨架只留在「變更」頁內容，頁籤保持可操作。同一 repository 的主工作樹與 linked worktree 共用 common-dir 排程，`snapshot`、`status` 與 `changes` 掃描合計最多同時執行兩個；歷史、分支與 worktree 清單讀取可獨立執行，不必等候掃描名額。Git 寫入操作進行中或已排隊時，後續讀取仍會等待，以維持一致性。
+
+歷史與分支頁在同一工作區、HEAD、分支及重新整理狀態相同時，會沿用 3 秒內已讀到的結果；讀取途中反覆切頁也共用同一查詢。超過期限後再次切入會重讀，手動重新整理與成功取回遠端後會讓快取失效。外部工具新增其他分支時，可重新整理或稍後再切入分支頁查看。
+
+取回遠端時會一併建立 Git 歷史索引（commit-graph），供後續歷史讀取使用；設定只套用當次取回。首次讀取大型歷史仍可能需要遍歷超過畫面顯示的 50 筆提交，載入時間會受 repository 大小與本機環境影響。
+
+工作區列的 worktree 分支標籤會共用同一主工作樹的一次清單讀取，結果短時保留 600ms；重新整理、建立或納管 worktree 成功後會明確失效，舊讀取結果也不會覆蓋新結果。標籤只從 worktree metadata 取得分支，不再為每個 worktree 掃描完整變更狀態；detached 與無法辨識分支時保留原有顯示。
 
 歷史頁的遠端分支使用固定寬度雲端圖示，避免長名稱壓縮 commit 主旨；將滑鼠停留在圖示上仍可查看完整遠端分支名稱。
 

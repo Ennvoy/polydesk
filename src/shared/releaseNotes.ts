@@ -15,6 +15,18 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.38.0',
+    date: '2026-10-06',
+    highlights: [
+      '原始碼控制初次讀取狀態時，可直接切到歷史、分支與 worktree',
+      '歷史、分支與 worktree 清單獨立於變更掃描讀取，減少大型工作樹造成的排隊等待',
+      '工作區列的 worktree 分支標籤共用清單讀取，減少多個 worktree 各自掃描變更狀態的負擔',
+      '同工作區切換歷史與分支頁時沿用 3 秒內的讀取結果，重新整理與成功取回遠端後重讀',
+      '取回遠端時一併建立 Git 歷史索引，供後續歷史讀取使用；大型歷史首次載入仍可能需要等待',
+      'Git 寫入操作仍依序執行，後續讀取等待寫入完成，保留主工作樹與 worktree 的一致性',
+    ],
+  },
+  {
     version: '0.37.0',
     date: '2026-10-06',
     highlights: [

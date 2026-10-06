@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ipc } from '../../ipc/client';
 import { appStore } from '../../state/appStore';
+import { invalidateWorktreeBranches } from '../../state/worktreeBranches';
 import { neutralizeBidi } from '../Dialogs/TrustConfirm';
 import {
   branchNameError,
@@ -137,6 +138,7 @@ export function CreateWorktreeDialog({ wsId, wsPath, presetBranch, onResult }: P
       const r = await createRef.current({ wsId, branch: spec.branch, path: pathValue });
       if (r.kind === 'ignored') return; // 併發重複點擊：忽略
       if (r.kind === 'ok') {
+        invalidateWorktreeBranches(mainPath);
         await appStore.loadWorkspaces();
         try {
           measure('worktreeCreate', 'worktreeCreate:start');

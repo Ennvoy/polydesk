@@ -74,9 +74,15 @@ describe('GitService.fetch（真 git＋真 bare remote）', () => {
 
       const before = await svc.status(added.id);
       expect(before.behind).toBe(0); // remote-tracking ref 過期 → 本地看不到落後
+      const configBefore = readFileSync(join(work, '.git', 'config'), 'utf8');
 
       const r = await svc.fetch(added.id);
       expect(r).toEqual({ ok: true });
+      expect(readFileSync(join(work, '.git', 'config'), 'utf8')).toBe(configBefore);
+      expect(
+        existsSync(join(work, '.git', 'objects', 'info', 'commit-graph'))
+        || existsSync(join(work, '.git', 'objects', 'info', 'commit-graphs', 'commit-graph-chain')),
+      ).toBe(true);
 
       const after = await svc.status(added.id);
       expect(after.behind).toBe(1); // ↓N 未拉取的資料來源

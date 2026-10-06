@@ -210,3 +210,55 @@ test('切換工作區：A 真 Git 歷史延遲回包不污染 B，提交草稿�
     await expect(page.getByLabel('commit 訊息', { exact: true })).toHaveValue('B draft');
   } finally { await app.close(); rmSync(root, { recursive: true, force: true }); rmSync(userData, { recursive: true, force: true }); }
 });
+
+test('SCM 初次狀態掃描未完成時可讀歷史、分支與 worktree', async ({}, testInfo) => {
+  test.setTimeout(180_000);
+  const root = mkdtempSync(join(tmpdir(), 'pd-scm-metadata-'));
+  const repo = join(root, 'work');
+  mkdirSync(repo);
+  git(repo, 'init', '-b', 'main');
+  git(repo, '-c', 'user.name=E2E', '-c', 'user.email=e2e@test', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'base');
+  console.log('SCM metadata test: fixture ready');
+  const { app, page, userData } = await launchApp();
+  console.log('SCM metadata test: Electron ready');
+  try {
+    await app.evaluate(({ ipcMain }) => {
+      const handlers = (ipcMain as unknown as { _invokeHandlers: Map<string, (event: Electron.IpcMainInvokeEvent, request: unknown) => Promise<unknown>> })._invokeHandlers;
+      const original = handlers.get('git:snapshot');
+      if (!original) throw new Error('git:snapshot handler missing');
+      const state = globalThis as typeof globalThis & { pdSlowSnapshot?: { started: boolean; release?: () => void } };
+      state.pdSlowSnapshot = { started: false };
+      ipcMain.removeHandler('git:snapshot');
+      ipcMain.handle('git:snapshot', async (event, request: unknown) => {
+        const result = await original(event, request); // 真 Git 掃描已完成，只延後回 renderer。
+        if (!state.pdSlowSnapshot?.started) {
+          state.pdSlowSnapshot = { started: true };
+          await new Promise<void>((resolve) => { if (state.pdSlowSnapshot) state.pdSlowSnapshot.release = resolve; });
+        }
+        return result;
+      });
+    });
+    await stubFolderPicker(app, [repo]);
+    await addWorkspaceViaUI(page);
+    console.log('SCM metadata test: workspace ready');
+    await page.getByLabel('原始碼控制', { exact: true }).click();
+    await expect(page.getByRole('tab', { name: '歷史', exact: true })).toBeVisible();
+    await expect.poll(() => app.evaluate(() => (globalThis as typeof globalThis & { pdSlowSnapshot?: { started: boolean } }).pdSlowSnapshot?.started).catch(() => false), { timeout: 30_000 }).toBe(true);
+    console.log('SCM metadata test: snapshot gated');
+    await page.getByRole('tab', { name: '歷史', exact: true }).click();
+    await expect(page.locator('.pd-scm-logrow')).toContainText('base');
+    console.log('SCM metadata test: history ready');
+    await page.getByRole('tab', { name: '分支', exact: true }).click();
+    await expect(page.locator('.pd-scm-branchrow', { hasText: 'main' }).first()).toBeVisible();
+    console.log('SCM metadata test: branches ready');
+    await page.getByRole('tab', { name: 'worktree', exact: true }).click();
+    await expect(page.locator('.pd-scm-branchrow', { hasText: 'main' }).first()).toBeVisible();
+    console.log('SCM metadata test: worktrees ready');
+    await page.screenshot({ path: testInfo.outputPath('scm-metadata-before-status.png') });
+    await app.evaluate(() => (globalThis as typeof globalThis & { pdSlowSnapshot?: { release?: () => void } }).pdSlowSnapshot?.release?.());
+    await expect(page.locator('.pd-scm-branch')).toContainText('main');
+  } finally {
+    await app.evaluate(() => (globalThis as typeof globalThis & { pdSlowSnapshot?: { release?: () => void } }).pdSlowSnapshot?.release?.()).catch(() => undefined);
+    await app.close(); rmSync(root, { recursive: true, force: true }); rmSync(userData, { recursive: true, force: true });
+  }
+});

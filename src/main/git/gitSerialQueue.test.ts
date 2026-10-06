@@ -1,7 +1,7 @@
 // F-7 紅軍 A5：序列化佇列 fail-safe（rejection 不毒化鏈 / 不冒泡 unhandledRejection / 不洩漏 / 真序列）。
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { enqueue, activeWorkspaceCount, _resetSerialQueue } from './gitSerialQueue';
+import { enqueue, enqueueRead, enqueueScan, activeWorkspaceCount, _resetSerialQueue } from './gitSerialQueue';
 
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -81,5 +81,81 @@ describe('gitSerialQueue（A5）', () => {
       });
     await Promise.all([job('a'), job('b'), job('c')]);
     expect(maxActive).toBeGreaterThan(1);
+  });
+
+  it('同 repository 讀取並行，寫入等待全部讀取，後續讀取不越過寫入', async () => {
+    const order: string[] = [];
+    let releaseReads!: () => void;
+    let releaseWrite!: () => void;
+    const readsDone = new Promise<void>((resolve) => { releaseReads = resolve; });
+    const writeDone = new Promise<void>((resolve) => { releaseWrite = resolve; });
+    const first = enqueueRead('repo', async () => { order.push('read-1'); await readsDone; });
+    const second = enqueueRead('repo', async () => { order.push('read-2'); await readsDone; });
+    const write = enqueue('repo', async () => { order.push('write'); await writeDone; });
+    const last = enqueueRead('repo', async () => { order.push('read-3'); });
+    await tick();
+    expect(order).toEqual(['read-1', 'read-2']);
+    releaseReads();
+    await Promise.all([first, second]);
+    await tick();
+    expect(order).toEqual(['read-1', 'read-2', 'write']);
+    releaseWrite();
+    await Promise.all([write, last]);
+    expect(order).toEqual(['read-1', 'read-2', 'write', 'read-3']);
+    await tick();
+    expect(activeWorkspaceCount()).toBe(0);
+  });
+
+  it('讀取失敗後寫入仍執行並清掉鏈尾', async () => {
+    const read = enqueueRead('repo', async () => { throw new Error('read failed'); });
+    const write = enqueue('repo', async () => 'written');
+    await expect(read).rejects.toThrow('read failed');
+    await expect(write).resolves.toBe('written');
+    await tick();
+    expect(activeWorkspaceCount()).toBe(0);
+  });
+
+  it('大量狀態掃描最多兩個並行，metadata 讀取不等掃描 permit', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let active = 0;
+    let maxActive = 0;
+    const scans = Array.from({ length: 8 }, () => enqueueScan('repo', async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await gate;
+      active -= 1;
+    }));
+    const metadata = enqueueRead('repo', () => 'metadata');
+    await expect(metadata).resolves.toBe('metadata');
+    expect(maxActive).toBe(2);
+    release();
+    await Promise.all(scans);
+    expect(maxActive).toBe(2);
+    await tick();
+    expect(activeWorkspaceCount()).toBe(0);
+  });
+
+  it('寫入等待所有已排掃描，失敗掃描歸還 permit', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let started = 0;
+    let written = false;
+    const scans = Array.from({ length: 4 }, (_, index) => enqueueScan('repo', async () => {
+      started += 1;
+      await gate;
+      if (index === 0) throw new Error('scan failed');
+    }));
+    const writer = enqueue('repo', () => { written = true; });
+    await tick();
+    expect(started).toBe(2);
+    expect(written).toBe(false);
+    release();
+    await Promise.allSettled(scans);
+    await writer;
+    expect(started).toBe(4);
+    expect(written).toBe(true);
+    const next = await enqueueScan('repo', () => 'reused');
+    expect(next).toBe('reused');
   });
 });

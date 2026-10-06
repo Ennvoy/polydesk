@@ -10,6 +10,7 @@ import { dialog } from '../Dialogs/host';
 import { editorBus } from '../../state/editorBus';
 import { appStore } from '../../state/appStore';
 import { invalidateGitSnapshot, loadGitSnapshot, refreshGitSnapshot } from '../../state/gitSnapshot';
+import { invalidateWorktreeBranches } from '../../state/worktreeBranches';
 import { WorktreePanel } from '../Worktree/WorktreePanel';
 import { PublishGitHubDialog } from './PublishGitHubDialog';
 import { BranchCleanupDialog, type BranchCleanupDraft } from './BranchCleanupDialog';
@@ -34,9 +35,12 @@ import { DEFAULT_BACKGROUND_POLL_MS, FETCH_COOLDOWN_MS } from '../../../shared/c
 import { shouldAutoFetch } from './fetchCooldown';
 import { gitErrorDetail, gitErrorFeedback } from './gitErrorFeedback';
 import { computeGitGraph, type GitGraphRow } from './gitGraph';
+import { reuseMetadataRead, type MetadataRead } from './metadataReadCache';
 import { record } from '../../../shared/perf';
 
 type Tab = 'changes' | 'history' | 'branches' | 'worktree';
+type MetadataTab = 'history' | 'branches';
+const METADATA_CACHE_MS = 3_000;
 type BranchKind = 'local' | 'remote';
 
 interface BranchState {
@@ -255,6 +259,9 @@ export function SourceControlPanel(): React.JSX.Element {
   const [changeMenu, setChangeMenu] = useState<{ c: GitChange; x: number; y: number } | null>(null); // 變更檔右鍵選單
   const [expanded, setExpanded] = useState<string | null>(null); // PE-1 展開檔案清單的 commit hash
   const [auxRevision, setAuxRevision] = useState(0); // 只有 refs／使用者操作才重讀歷史與分支，不跟著每次 worktree 變更重跑
+  const metadataReads = useRef<Partial<Record<MetadataTab, MetadataRead>>>({});
+  const branchLoadGen = useRef(0);
+  const branchStateWsId = useRef<string | null>(null);
   const [cFiles, setCFiles] = useState<Record<string, { path: string; status: string }[]>>({}); // commit→檔案清單快取
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null); // hover 延遲關閉計時器（滑入卡片可取消）
   const statusRef = useRef<GitStatus | null>(null);
@@ -281,13 +288,16 @@ export function SourceControlPanel(): React.JSX.Element {
       setStatus(snapshot.status);
       setChanges(snapshot.status.isRepo ? snapshot.changes : []);
       changesRef.current = snapshot.status.isRepo ? snapshot.changes : [];
-      if (fresh) setAuxRevision((value) => value + 1);
+      if (fresh) {
+        setAuxRevision((value) => value + 1);
+        invalidateWorktreeBranches(wsPath);
+      }
     } catch (e) {
       if (gen === loadGen.current && isCurrent()) setError(errText(e));
     } finally {
       if (gen === loadGen.current && isCurrent()) setLoading(false);
     }
-  }, [wsId, isCurrent]);
+  }, [wsId, wsPath, isCurrent]);
 
   useEffect(() => {
     statusRef.current = status;
@@ -325,7 +335,17 @@ export function SourceControlPanel(): React.JSX.Element {
   // 不發 git 載入 → 不堆積 serial queue（實測連切 5 個大 repo 的 git status 會累積到 ~10s）。
   // 刷新後順帶自動 fetch（PE-4；同 wsId 60s 冷卻，連切不狂觸網）。
   useLayoutEffect(() => {
+    loadGen.current += 1;
     setTab('changes');
+    setStatus(null);
+    statusRef.current = null;
+    setChanges([]);
+    changesRef.current = [];
+    setLog([]);
+    setBranches(EMPTY_BRANCH_STATE);
+    metadataReads.current = {};
+    branchStateWsId.current = null;
+    branchLoadGen.current += 1;
     const t = setTimeout(() => void refresh(false).then(() => fetchRemote(false)), 120);
     return () => clearTimeout(t);
   }, [refresh, fetchRemote]);
@@ -432,44 +452,78 @@ export function SourceControlPanel(): React.JSX.Element {
     };
   }, [commitMenu, changeMenu, branchMenu]);
 
-  const loadBranches = useCallback(async (): Promise<void> => {
+  const loadBranches = useCallback(async (): Promise<boolean> => {
+    const gen = ++branchLoadGen.current;
     if (!wsId) {
       setBranches(EMPTY_BRANCH_STATE);
-      return;
+      branchStateWsId.current = null;
+      return false;
     }
     const [branchResult, worktreeResult] = await Promise.all([
       ipc.git.branch({ wsId, op: 'list' }),
       ipc.git.worktreeList({ wsId }),
     ]);
-    if (!isCurrent()) return;
-    if (!('branches' in branchResult)) return;
+    if (!isCurrent() || gen !== branchLoadGen.current) return false;
+    if (!('branches' in branchResult)) throw new Error('error' in branchResult ? branchResult.error : '無法載入分支清單');
     const worktreePaths: Record<string, string> = {};
     if ('list' in worktreeResult) {
       for (const worktree of worktreeResult.list) {
         if (worktree.branch) worktreePaths[worktree.branch] = worktree.path;
       }
     }
-    setBranches({
+    const preserveWorktreePaths = branchStateWsId.current === wsId;
+    setBranches((previous) => ({
       local: branchResult.branches,
       remote: branchResult.remoteBranches ?? [],
       current: branchResult.current,
-      worktreePaths,
+      worktreePaths: 'list' in worktreeResult ? worktreePaths : (preserveWorktreePaths ? previous.worktreePaths : {}),
       upstreams: branchResult.localUpstreams ?? {},
-    });
+    }));
+    branchStateWsId.current = wsId;
+    if (!('list' in worktreeResult)) {
+      setError(worktreeResult.error);
+      return false;
+    }
+    return true;
   }, [wsId]);
 
   // 切到歷史/分支頁時載入對應資料。
   useEffect(() => {
-    if (!wsId || !status?.isRepo) return;
+    if (!wsId || status?.isRepo === false) return;
+    if (tab !== 'history' && tab !== 'branches') return;
+    const previous = metadataReads.current[tab];
+    if (reuseMetadataRead(previous, wsId, auxRevision, status, Date.now())) return;
+    const request: MetadataRead = {
+      wsId,
+      revision: auxRevision,
+      head: status?.head,
+      branch: status?.branch,
+      expiresAt: Number.POSITIVE_INFINITY, // in-flight 即使切頁也共用同一次讀取。
+    };
+    metadataReads.current[tab] = request;
+    const complete = (): void => {
+      if (metadataReads.current[tab] === request) request.expiresAt = Date.now() + METADATA_CACHE_MS;
+    };
+    const fail = (e: unknown): void => {
+      if (metadataReads.current[tab] !== request) return;
+      delete metadataReads.current[tab];
+      if (isCurrent()) setError(errText(e));
+    };
     if (tab === 'history') {
       record('gitLogRequest', 1);
       void ipc.git
         .log({ wsId, limit: 50 })
-        .then((entries) => { if (isCurrent()) setLog(entries); })
-        .catch((e) => { if (isCurrent()) setError(errText(e)); });
-    } else if (tab === 'branches') {
+        .then((entries) => {
+          if (metadataReads.current.history === request && isCurrent()) setLog(entries);
+          complete();
+        })
+        .catch(fail);
+    } else {
       record('gitBranchListRequest', 1);
-      void loadBranches().catch((e) => setError(errText(e)));
+      void loadBranches().then((completeResult) => {
+        if (completeResult) complete();
+        else if (metadataReads.current.branches === request) delete metadataReads.current.branches;
+      }).catch(fail);
     }
   }, [tab, wsId, status?.isRepo, status?.head, status?.branch, auxRevision, loadBranches]);
 
@@ -741,6 +795,7 @@ export function SourceControlPanel(): React.JSX.Element {
     if (!ok) return;
     const r = await ipc.git.worktreeAdopt({ wsId, path });
     if ('wsId' in r) {
+      invalidateWorktreeBranches(wsPath);
       await appStore.loadWorkspaces();
       appStore.setActiveWorkspace(r.wsId);
     } else {
@@ -1037,35 +1092,6 @@ export function SourceControlPanel(): React.JSX.Element {
     );
   }
 
-  if (loading && !status) {
-    return (
-      <section className="pd-scm">
-        <div className="pd-panel-header">
-          <span>原始碼控制</span>
-          <span className="pd-scm-hdr-actions">
-            <span className="pd-scm-icon is-loading" aria-hidden="true">
-              ⟳
-            </span>
-          </span>
-        </div>
-        <div className="pd-scm-loadbar" role="progressbar" aria-label="讀取中" aria-busy="true">
-          <span />
-        </div>
-        {/* 讀取中骨架（shimmer）＝動態回饋，取代靜態「載入中…」的呆滯感。 */}
-        <div className="pd-scm-skeleton" aria-hidden="true">
-          <div className="pd-scm-skel-line pd-scm-skel-head" />
-          <div className="pd-scm-skel-row" />
-          <div className="pd-scm-skel-row" />
-          <div className="pd-scm-skel-row" />
-          <div className="pd-scm-skel-row short" />
-        </div>
-        <span role="status" aria-live="polite" className="pd-scm-sr">
-          讀取中…
-        </span>
-      </section>
-    );
-  }
-
   if (status && !status.isRepo) {
     return (
       <section className="pd-scm">
@@ -1295,7 +1321,16 @@ export function SourceControlPanel(): React.JSX.Element {
         </div>
       )}
 
-      {tab === 'changes' && (
+      {tab === 'changes' && (loading && !status ? (
+        <div className="pd-scm-body pd-scm-skeleton" aria-label="變更讀取中">
+          <div className="pd-scm-skel-line pd-scm-skel-head" />
+          <div className="pd-scm-skel-row" />
+          <div className="pd-scm-skel-row" />
+          <div className="pd-scm-skel-row" />
+          <div className="pd-scm-skel-row short" />
+          <span role="status" aria-live="polite" className="pd-scm-sr">讀取中…</span>
+        </div>
+      ) : (
         <div className="pd-scm-body pd-scroll">
           <div className="pd-scm-commit">
             <textarea
@@ -1391,7 +1426,7 @@ export function SourceControlPanel(): React.JSX.Element {
             </button>
           </div>
         </div>
-      )}
+      ))}
 
       {tab === 'history' && (
         <div className="pd-scm-body pd-scroll">

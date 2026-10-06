@@ -7,7 +7,7 @@
 // - commit message 走 `-F -`（stdin），完全不落地暫存檔（杜絕 A3：可預測路徑竄改 / symlink 任意覆寫 / 殘留）。
 // - 分支/checkout 名先 validateRef，未過則「永不執行 git」並 throw invalid（A1：注入字串不進 argv）。
 // - push/pull 不接受使用者 refspec（程式組 `git push`），逾時/失敗回明確 error（不假裝成功，REQ-SCM-007）。
-// 序列化由 registerGitHandlers 經 gitSerialQueue 包覆（每工作區序列，REQ-SCM-008）。
+// registerGitHandlers 以 common-dir 排程：唯讀並行、狀態掃描限流、寫入排他（REQ-SCM-008）。
 
 import {
   execFile as nodeExecFile,
@@ -28,7 +28,7 @@ import {
   networkEnv,
   withPathspecs,
 } from './gitSafeArgs';
-import { enqueue } from './gitSerialQueue';
+import { enqueue, enqueueRead, enqueueScan } from './gitSerialQueue';
 import { buildSpawnEnv } from '../security/spawnEnv';
 import { readFile, writeFile, stat } from 'node:fs/promises';
 import { realpathSync, existsSync, rmSync, statSync } from 'node:fs';
@@ -655,7 +655,8 @@ export class GitService {
 
   /** PE-4：fetch——只更新 remote-tracking ref（不動工作樹、不合併），讓 behind（未拉取數）跟上遠端。 */
   async fetch(wsId: string): Promise<{ ok: true } | { error: string }> {
-    return this.network(wsId, ['fetch'], '取回');
+    // 只對本次 fetch 啟用 Git 原生 commit-graph；往後 --all --topo-order 歷史可讀 generation index。
+    return this.network(wsId, ['-c', 'fetch.writeCommitGraph=true', '-c', 'commitGraph.changedPaths=false', 'fetch'], '取回');
   }
 
   private async network(
@@ -1140,7 +1141,7 @@ function errMsg(e: unknown, fallback: string): string {
 }
 
 /**
- * 註冊 git:* handlers。一般操作與清理以即時 canonical common-dir 共用序列佇列。
+ * 註冊 git:* handlers。讀取與寫入以即時 canonical common-dir 共用排程屏障。
  * router.ts：registerGitHandlers(ipcMain, services.workspaces)。
  */
 export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, userDataDir: string): void {
@@ -1148,15 +1149,19 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, 
   const cleanup = new CleanupService(workspaces, userDataDir);
   const enqueueRepo = async <T>(wsId: string, task: () => Promise<T>): Promise<T> =>
     enqueue(await svc.repositoryQueueKey(wsId), task);
+  const enqueueRepoRead = async <T>(wsId: string, task: () => Promise<T>): Promise<T> =>
+    enqueueRead(await svc.repositoryQueueKey(wsId), task);
+  const enqueueRepoScan = async <T>(wsId: string, task: () => Promise<T>): Promise<T> =>
+    enqueueScan(await svc.repositoryQueueKey(wsId), task);
 
   ipc.handle('git:snapshot', (_e, req: InvokeReq<'git:snapshot'>) =>
-    enqueueRepo(req.wsId, () => svc.snapshot(req.wsId)),
+    enqueueRepoScan(req.wsId, () => svc.snapshot(req.wsId)),
   );
   ipc.handle('git:status', (_e, req: InvokeReq<'git:status'>) =>
-    enqueueRepo(req.wsId, () => svc.status(req.wsId)),
+    enqueueRepoScan(req.wsId, () => svc.status(req.wsId)),
   );
   ipc.handle('git:changes', (_e, req: InvokeReq<'git:changes'>) =>
-    enqueueRepo(req.wsId, () => svc.changes(req.wsId)),
+    enqueueRepoScan(req.wsId, () => svc.changes(req.wsId)),
   );
   ipc.handle('git:diff', (_e, req: InvokeReq<'git:diff'>) =>
     enqueueRepo(req.wsId, () => svc.diff(req.wsId, req.path, req.staged)),
@@ -1183,10 +1188,10 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, 
     enqueueRepo(req.wsId, () => svc.fetch(req.wsId)),
   );
   ipc.handle('git:branch', (_e, req: InvokeReq<'git:branch'>) =>
-    enqueueRepo(req.wsId, () => svc.branch(req.wsId, req.op, req.name, req.startPoint, req.remote)),
+    (req.op === 'list' ? enqueueRepoRead : enqueueRepo)(req.wsId, () => svc.branch(req.wsId, req.op, req.name, req.startPoint, req.remote)),
   );
   ipc.handle('git:log', (_e, req: InvokeReq<'git:log'>) =>
-    enqueueRepo(req.wsId, () => svc.log(req.wsId, req.limit)),
+    enqueueRepoRead(req.wsId, () => svc.log(req.wsId, req.limit)),
   );
   ipc.handle('git:show', (_e, req: InvokeReq<'git:show'>) =>
     enqueueRepo(req.wsId, () => svc.show(req.wsId, req.ref, req.path)),
@@ -1233,7 +1238,7 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, 
   );
 
   ipc.handle('git:worktreeList', (_e, req: InvokeReq<'git:worktreeList'>) =>
-    enqueueRepo(req.wsId, async () => {
+    enqueueRepoRead(req.wsId, async () => {
       try {
         const list = await svc.worktreeList(req.wsId);
         // 附 managedWsId：worktree 路徑已納管者標記，供 UI「切換到此」判斷。
