@@ -131,6 +131,8 @@ npm run pack:dir     # 未壓縮 app 目錄 → ../polydesk-dist/win-unpacked（
 
 每次完成調整並通過驗證後，先同步 `CHANGELOG.md` 與本 README，再依序 commit、push、執行 `npm run dist`。正式交付時應核對 portable exe 的路徑、檔案大小與 SHA-256，確保程式碼、文件與可執行產物屬於同一版歷程。
 
+v0.38.0 的 SCM 修正提交為 `8deb288`。第三輪正式驗證共 20 項指令通過：typecheck、84 個 Vitest 檔 679 案、正式 build，以及 Electron E2E 126 通過、3 案依條件跳過，包含導覽／完整指南 4 案。E2E 沿用既有 `REQ-PERF-001` 排除範圍；大型歷史首次讀取仍受 repository 與本機環境影響。新版需重建並重新打包 portable，成品另行核對版本、大小與 SHA-256。
+
 ### Git 狀態同步
 
 原始碼控制面板開啟期間，Polydesk 會以低頻、僅讀取狀態的方式檢查目前 `HEAD`、分支及 ahead / behind。即使 commit 或 push 是在整合終端機、外部終端機或其他 Git 工具完成，面板也會自動更新，不必手動重新整理。
