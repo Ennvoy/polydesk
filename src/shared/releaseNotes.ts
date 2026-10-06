@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.36.0',
+    date: '2026-10-06',
+    highlights: [
+      '雙擊 portable 程式後，自解壓期間即顯示靜態開啟畫面，讓等待啟動有立即回饋',
+      'Electron 啟動後以同尺寸的靜態畫面接續顯示，直到工作區與主畫面可操作',
+      '啟動失敗時仍可在開啟畫面重試或退出',
+    ],
+  },
+  {
     version: '0.35.0',
     date: '2026-09-29',
     highlights: [

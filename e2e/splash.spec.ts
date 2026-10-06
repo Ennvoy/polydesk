@@ -33,6 +33,7 @@ test('splash 原生 show 事件在視窗建立後立即發生，主視窗就緒�
   const { app } = await launchSplashApp({ POLYDESK_E2E_RENDERER_READY_DELAY_MS: '900' });
   const splash = await waitForWindow(app, isSplash);
   await expect(splash.getByText('正在準備工作區…')).toBeVisible();
+  await expect(splash.locator('.spinner')).toHaveCSS('animation-name', 'none');
 
   const native = await app.evaluate(({ BrowserWindow }) => {
     const win = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().startsWith('data:text/html'));
