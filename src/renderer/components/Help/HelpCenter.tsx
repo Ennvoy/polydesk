@@ -22,13 +22,13 @@ interface HelpArticle {
 const ARTICLES: HelpArticle[] = [
   {
     id: 'startup', category: '開始使用', title: '啟動與開啟畫面',
-    summary: '雙擊 portable 程式後，開啟畫面會提示程式正在啟動。',
-    steps: ['雙擊 Polydesk portable EXE。', '自解壓期間先顯示靜態開啟畫面；Electron 接手後繼續顯示啟動狀態。', '工作區與主畫面可操作後，開啟畫面會自動關閉。'],
+    summary: '雙擊 portable 程式後，無轉圈的靜態畫面會提示程式正在啟動。',
+    steps: ['雙擊 Polydesk portable EXE。', '靜態開啟畫面會在自解壓與工作區準備期間持續顯示。', '主畫面可操作後，開啟畫面會自動關閉。'],
     states: [
       { label: '正在準備工作區', detail: '程式仍在載入；請等主畫面出現，不需要重複雙擊。' },
       { label: '無法完成啟動', detail: '開啟畫面會顯示原因，可按「重試」重新載入主畫面，或按「退出」關閉程式。' },
     ],
-    tips: ['自解壓與 Electron 兩段畫面交接時可能短暫切換；Windows 執行前的安全檢查與系統排程也可能讓第一個畫面稍晚出現。'],
+    tips: ['Windows 執行前的安全檢查與系統排程仍可能讓第一個畫面稍晚出現。'],
   },
   {
     id: 'workspace', category: '開始使用', title: '新增與切換工作區',

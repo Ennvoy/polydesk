@@ -7,12 +7,12 @@ function escapeHtml(value: string): string {
 
 function shell(body: string): string {
   return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
-  *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{font-family:"Segoe UI",Arial,sans-serif;background:#141414;color:#ededed;border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center}.card{width:100%;height:100%;padding:30px 34px;display:flex;flex-direction:column;justify-content:space-between;background:radial-gradient(circle at 18% 0%,rgba(0,112,243,.18),transparent 44%),#141414}.brand{display:flex;align-items:center;gap:10px}.mark{width:28px;height:28px;color:#3291ff}.name{font-size:18px;font-weight:650;letter-spacing:.01em}.version{font-size:10px;color:#6b6b6b;letter-spacing:.12em;text-transform:uppercase}.status{display:flex;align-items:center;gap:10px;color:#a1a1a1;font-size:12px}.spinner{width:15px;height:15px;border:2px solid rgba(255,255,255,.12);border-top-color:#3291ff;border-radius:50%}.error{color:#ededed;font-size:14px;font-weight:600;margin:0 0 7px}.detail{color:#808080;font-size:11px;line-height:1.45;max-height:48px;overflow:hidden}.actions{display:flex;gap:8px;margin-top:15px}.actions a{display:inline-flex;align-items:center;justify-content:center;min-width:76px;padding:7px 12px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600;color:#ededed;border:1px solid rgba(255,255,255,.12);background:#1c1c1c}.actions a.primary{color:#fff;background:#0070f3;border-color:#0070f3}
+  *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{font-family:"Segoe UI",Arial,sans-serif;background:#141414;color:#ededed;border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center}.card{width:100%;height:100%;padding:30px 34px;display:flex;flex-direction:column;justify-content:space-between;background:radial-gradient(circle at 18% 0%,rgba(0,112,243,.18),transparent 44%),#141414}.brand{display:flex;align-items:center;gap:10px}.mark{width:28px;height:28px;color:#3291ff}.name{font-size:18px;font-weight:650;letter-spacing:.01em}.version{font-size:10px;color:#6b6b6b;letter-spacing:.12em;text-transform:uppercase}.status{display:flex;align-items:center;gap:10px;color:#a1a1a1;font-size:12px}.error{color:#ededed;font-size:14px;font-weight:600;margin:0 0 7px}.detail{color:#808080;font-size:11px;line-height:1.45;max-height:48px;overflow:hidden}.actions{display:flex;gap:8px;margin-top:15px}.actions a{display:inline-flex;align-items:center;justify-content:center;min-width:76px;padding:7px 12px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600;color:#ededed;border:1px solid rgba(255,255,255,.12);background:#1c1c1c}.actions a.primary{color:#fff;background:#0070f3;border-color:#0070f3}
   </style></head><body>${body}</body></html>`;
 }
 
 function loadingHtml(): string {
-  return shell(`<main class="card"><div class="brand"><svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><polygon points="50,20 22,72 78,72" fill="currentColor" opacity=".95"/><polygon points="24,28 80,44 44,80" fill="currentColor" opacity=".6"/><polygon points="76,30 56,80 20,50" fill="currentColor" opacity=".45"/></svg><div><div class="name">Polydesk</div><div class="version">Workspace · Editor · Terminal</div></div></div><div class="status"><span class="spinner"></span><span>正在準備工作區…</span></div></main>`);
+  return shell(`<main class="card"><div class="brand"><svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><polygon points="50,20 22,72 78,72" fill="currentColor" opacity=".95"/><polygon points="24,28 80,44 44,80" fill="currentColor" opacity=".6"/><polygon points="76,30 56,80 20,50" fill="currentColor" opacity=".45"/></svg><div><div class="name">Polydesk</div><div class="version">Workspace · Editor · Terminal</div></div></div><div class="status"><span>正在準備工作區…</span></div></main>`);
 }
 
 function failureHtml(reason: string): string {
@@ -30,7 +30,7 @@ export interface SplashController {
   retrying(): void;
 }
 
-export function createSplashWindow(actions: { retry: () => void; exit: () => void }): SplashController {
+export function createSplashWindow(actions: { retry: () => void; exit: () => void }, reason: string): SplashController {
   const win = new BrowserWindow({
     width: 420,
     height: 230,
@@ -65,8 +65,7 @@ export function createSplashWindow(actions: { retry: () => void; exit: () => voi
       resolve();
     });
   });
-  showSplash();
-  void win.loadURL(asDataUrl(loadingHtml())).catch(() => undefined);
+  void win.loadURL(asDataUrl(failureHtml(reason))).finally(showSplash);
   win.webContents.on('will-navigate', (event, url) => {
     if (url === 'polydesk-splash://retry') {
       event.preventDefault();

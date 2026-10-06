@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.37.0',
+    date: '2026-10-06',
+    highlights: [
+      '啟動中的靜態畫面移除容易讓人誤以為卡住的圓圈，保留清楚的文字提示',
+      'portable 開啟畫面從解壓持續顯示到主畫面可操作，不再跳出第二個開啟畫面',
+      '啟動失敗時仍可查看原因、重試或退出',
+    ],
+  },
+  {
     version: '0.36.0',
     date: '2026-10-06',
     highlights: [

@@ -15,6 +15,7 @@ import type { WindowBounds } from '../shared/types';
 import { isEditorPasteShortcut } from './window/pasteShortcut';
 import { normalizeExternalHttpUrl } from '../shared/externalUrl';
 import { createSplashWindow, type SplashController } from './window/splashWindow';
+import { markPortableStartupReady } from './window/portableStartup';
 
 mark('main:start'); // 冷啟動量測起點（REQ-PERF-001）
 // 診斷 seam（X-1 perf harness 經 electronApp.evaluate 讀 main 埋點；非 IPC、不影響執行期）。
@@ -29,7 +30,7 @@ if (userDataOverride) app.setPath('userData', userDataOverride);
 const isDev = !app.isPackaged && !!process.env['ELECTRON_RENDERER_URL'];
 
 // 真 Electron E2E seam：只在未打包程序生效，正式 portable 永遠忽略。
-// 用來穩定重現超過 splash 門檻，以及首次主畫面載入失敗後重試。
+// 用來穩定重現 renderer 握手延遲、初始化及主畫面首次失敗後重試。
 const e2eMainLoadDelayMs = !app.isPackaged
   ? Math.min(5_000, Math.max(0, Number(process.env['POLYDESK_E2E_MAIN_LOAD_DELAY_MS']) || 0))
   : 0;
@@ -37,6 +38,7 @@ const e2eRendererReadyDelayMs = !app.isPackaged
   ? Math.min(5_000, Math.max(0, Number(process.env['POLYDESK_E2E_RENDERER_READY_DELAY_MS']) || 0))
   : 0;
 let e2eFailFirstMainLoad = !app.isPackaged && process.env['POLYDESK_E2E_MAIN_LOAD_MODE'] === 'fail-once';
+let e2eFailFirstInitialization = !app.isPackaged && process.env['POLYDESK_E2E_INIT_MODE'] === 'fail-once';
 
 let mainWindow: BrowserWindow | null = null;
 let store: StateStore;
@@ -148,9 +150,10 @@ function createWindow(): void {
     if (interactive || !readyToShow || !rendererReady || !mainWindow) return;
     interactive = true;
     mainInteractive = true;
+    mainWindow.show();
+    markPortableStartupReady();
     splash?.complete();
     splash = null;
-    mainWindow.show();
     mark('window:interactive');
     const coldMs = measure('coldStart', 'main:start', 'window:interactive');
     // eslint-disable-next-line no-console
@@ -183,7 +186,7 @@ function createWindow(): void {
   });
 
   mainWindow.webContents.on('did-fail-load', (_event, _code, description, _url, isMainFrame) => {
-    if (isMainFrame) splash?.fail(description || '主畫面載入失敗，請重試或退出程式。');
+    if (isMainFrame) showStartupFailure(description || '主畫面載入失敗，請重試或退出程式。');
   });
 
   // 外開連結一律拒絕 app 內導航，改丟系統瀏覽器（REQ-SEC-001）
@@ -229,6 +232,45 @@ function createWindow(): void {
   loadMainContent(mainWindow);
 }
 
+function showStartupFailure(reason: string): void {
+  if (splash) {
+    splash.fail(reason);
+    return;
+  }
+  splash = createSplashWindow({
+    retry: () => {
+      const wc = mainWindow?.webContents;
+      if (!wc || wc.isDestroyed()) {
+        splash?.retrying();
+        void Promise.resolve().then(initializeApp)
+          .catch(() => showStartupFailure('Polydesk 初始化失敗，請重試或退出程式。'));
+        return;
+      }
+      splash?.retrying();
+      loadMainContent(mainWindow!, false);
+    },
+    exit: () => app.quit(),
+  }, reason);
+  void splash.whenShown.then(markPortableStartupReady);
+}
+
+function initializeApp(): void {
+  Menu.setApplicationMenu(null); // 無框：移除預設原生 File/Edit 選單列
+  if (!store) store = new StateStore(stateFilePath());
+  store.load();
+  if (e2eFailFirstInitialization) {
+    e2eFailFirstInitialization = false;
+    throw new Error('E2E first initialization failure');
+  }
+  applyContentSecurityPolicy();
+  if (!services) services = registerIpcHandlers(store, app.getPath('userData'));
+  createWindow();
+  // F-8：注入 Claude Code 狀態 hooks（merge-safe、冪等、壞檔不覆寫）。
+  void installClaudeStatusHooks().catch(() => undefined);
+  void installStatuslineUsage().catch(() => undefined);
+  if (app.isPackaged) checkForUpdatesOnStartup();
+}
+
 // 單一實例（REQ-PERSIST-002）：第二實例把現有視窗帶到前景。
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -245,38 +287,13 @@ if (!gotTheLock) {
   // Windows 通知點擊回喚靠 AppUserModelID 路由；不設的話 toast 來源名稱錯誤、點擊回喚不可靠。
   app.setAppUserModelId('com.polydesk.app');
 
-  app.whenReady().then(async () => {
-    splash = createSplashWindow({
-      retry: () => {
-        const wc = mainWindow?.webContents;
-        if (!wc || wc.isDestroyed()) {
-          app.relaunch();
-          app.exit(0);
-          return;
-        }
-        splash?.retrying();
-        loadMainContent(mainWindow!, false);
-      },
-      exit: () => app.quit(),
-    });
-    await splash.whenShown;
-    Menu.setApplicationMenu(null); // 無框：移除預設原生 File/Edit 選單列（改由自訂標題列提供）
-    store = new StateStore(stateFilePath());
-    store.load();
-    applyContentSecurityPolicy();
-    services = registerIpcHandlers(store, app.getPath('userData'));
-    createWindow();
-    // F-8：注入 Claude Code 狀態 hooks（merge-safe、冪等、壞檔不覆寫）→ 精準三態靠 hook 真實信號。
-    void installClaudeStatusHooks().catch(() => undefined);
-    void installStatuslineUsage().catch(() => undefined);
-    // REQ-NFR-004：啟動觸發一次更新檢查（electron-updater 不自輪詢）；僅打包正式版（dev 無 provider）。
-    if (app.isPackaged) checkForUpdatesOnStartup();
-
+  app.whenReady().then(() => {
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
+    initializeApp();
   }).catch(() => {
-    splash?.fail('Polydesk 初始化失敗，請重試或退出程式。');
+    showStartupFailure('Polydesk 初始化失敗，請重試或退出程式。');
   });
 
   app.on('window-all-closed', () => {

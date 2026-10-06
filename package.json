@@ -1,6 +1,6 @@
 {
   "name": "polydesk",
-  "version": "0.36.0",
+  "version": "0.37.0",
   "description": "Polydesk — 多工作區開發終端機（Electron skeleton）",
   "author": "Polydesk",
   "license": "MIT",
@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test",
-    "dist": "electron-vite build && electron-builder --win",
+    "dist": "electron-vite build && node build/portableBuilder.js",
     "pack:dir": "electron-vite build && electron-builder --win --dir"
   },
   "dependencies": {
@@ -86,7 +86,8 @@
     },
     "portable": {
       "artifactName": "Polydesk-${version}-portable.exe",
-      "splashImage": "build/portable-splash.bmp"
+      "splashImage": "build/portable-splash.bmp",
+      "unpackDirName": false
     }
   }
 }
