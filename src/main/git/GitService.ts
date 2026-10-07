@@ -16,8 +16,9 @@ import {
   type ExecFileOptionsWithBufferEncoding,
 } from 'node:child_process';
 import { shell, type IpcMain } from 'electron';
+import { createHash } from 'node:crypto';
 import type { WorkspaceManager } from '../workspace/WorkspaceManager';
-import type { GitStatus, GitChange, GitSnapshot, GitLogEntry, GitLogRef, GitWorktree, GitCloneInput, GitCloneResult, GitCloneErrorCode, GitHubLoginResult, GitPublishInput, GitPublishResult, GitPushErrorCode, GitRemoteBranch, GitBranchDeleteResult, GitBranchUpstream } from '../../shared/types';
+import type { GitStatus, GitChange, GitSnapshot, GitLogEntry, GitLogRef, GitLogPageRequest, GitLogPageResult, GitWorktree, GitCloneInput, GitCloneResult, GitCloneErrorCode, GitHubLoginResult, GitPublishInput, GitPublishResult, GitPushErrorCode, GitRemoteBranch, GitBranchDeleteResult, GitBranchUpstream } from '../../shared/types';
 import type { InvokeReq } from '../../shared/ipc';
 import { GIT_CLONE_TIMEOUT_MS, GIT_LOCAL_TIMEOUT_MS, GIT_NETWORK_TIMEOUT_MS, GIT_STATUS_TIMEOUT_MS } from '../../shared/constants';
 import {
@@ -792,33 +793,16 @@ export class GitService {
     const cwd = this.path(wsId);
     if (!cwd) return [];
     const n = Math.max(1, Math.min(1000, Math.floor(limit) || 50));
-    // 欄位以 unit-separator(\x1f) 分隔；%P=parents（空白分隔）；%D=refs（本地/遠端分支位置徽章用）；
-    // %s=subject、%b=body（hover 完整訊息用）放最後。
-    const fmt = '%H%x1f%an%x1f%at%x1f%P%x1f%D%x1f%s%x1f%b';
     try {
       const { stdout } = await this.run(
         // --topo-order：保證任何父都不早於其子出現（rebase/cherry-pick/時鐘偏移下，預設 date order 會讓
         // 父排在子前，破壞線圖 swimlane「子先於父」前提 → 畫出 dangling 錯誤線）。
         // --all：同時走訪本地與 remote-tracking refs，fetch 後尚未 pull 的同事提交也能出現在歷史線圖。
         // --decorate=full：%D 輸出全名（refs/heads/、refs/remotes/），短名分不出本地 foo/bar 與遠端 origin/bar。
-        [...readHardeningArgs(), 'log', '--all', '--topo-order', '--decorate=full', '-n', String(n), `--pretty=format:${fmt}`, '-z'],
+        [...readHardeningArgs(), 'log', '--all', '--topo-order', '--decorate=full', '-n', String(n), `--pretty=format:${LOG_FORMAT}`, '-z'],
         { cwd, env: readEnv() },
       );
-      return stdout
-        .split('\0')
-        .filter((r) => r.length > 0)
-        .map((rec) => {
-          const [hash, author, at, parents, refs, subject, body] = rec.split('\x1f');
-          return {
-            hash: hash ?? '',
-            author: author ?? '',
-            date: (parseInt(at ?? '0', 10) || 0) * 1000,
-            subject: subject ?? '',
-            parents: (parents ?? '').trim().split(/\s+/).filter((p) => p.length > 0),
-            body: (body ?? '').trim(),
-            refs: parseLogRefs(refs ?? ''),
-          };
-        });
+      return parseLogEntries(stdout);
     } catch (e) {
       if (isNotARepo(e)) return [];
       throw e;
@@ -949,6 +933,46 @@ export class GitService {
     return this.gitCommonDirAt(cwd);
   }
 
+  /** 同一組 --all roots 的真分頁；refs/HEAD 變動或邊界重排時拒絕混接兩頁。 */
+  async logPage(request: GitLogPageRequest): Promise<GitLogPageResult> {
+    const { wsId, offset, limit, rootsVersion, previousHash } = request;
+    if (!Number.isSafeInteger(offset) || offset < 0
+      || !Number.isSafeInteger(limit) || limit < 1 || limit > 100
+      || offset > Number.MAX_SAFE_INTEGER - limit - 2
+      || (offset > 0 && (!/^[a-f0-9]{64}$/.test(rootsVersion ?? '')
+        || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(previousHash ?? '')))) {
+      throw new Error('invalid history page request');
+    }
+    const cwd = this.path(wsId);
+    if (!cwd) return { ok: true, entries: [], hasMore: false, rootsVersion: '' };
+    const rootsArgs = [...readHardeningArgs(), 'log', '--all', '--no-walk=unsorted', '--decorate=full',
+      '--pretty=format:%H%x1f%D', '-z'];
+    const roots = async (): Promise<string> => {
+      const { stdout } = await this.run(rootsArgs, { cwd, env: readEnv() });
+      // 使用 Git 原始 root 順序；多個同時序 root 的 topo tie 可能受它影響。
+      return createHash('sha256').update(stdout).digest('hex');
+    };
+    try {
+      const before = await roots();
+      if (offset > 0 && before !== rootsVersion) return { ok: false, code: 'history-changed' };
+      const overlap = offset > 0 ? 1 : 0;
+      const { stdout } = await this.run(
+        [...readHardeningArgs(), 'log', '--all', '--topo-order', '--decorate=full',
+          `--skip=${offset - overlap}`, '-n', String(limit + overlap + 1),
+          `--pretty=format:${LOG_FORMAT}`, '-z'],
+        { cwd, env: readEnv() },
+      );
+      if (before !== await roots()) return { ok: false, code: 'history-changed' };
+      const rows = parseLogEntries(stdout);
+      if (overlap && rows[0]?.hash !== previousHash) return { ok: false, code: 'history-changed' };
+      const page = rows.slice(overlap);
+      return { ok: true, entries: page.slice(0, limit), hasMore: page.length > limit, rootsVersion: before };
+    } catch (error) {
+      if (isNotARepo(error)) return { ok: true, entries: [], hasMore: false, rootsVersion: '' };
+      throw error;
+    }
+  }
+
   /** 即時依實體 common-dir 歸一；不依賴工作區是否已納管主樹或保存 worktree metadata。 */
   async repositoryQueueKey(wsId: string): Promise<string> {
     const cwd = this.path(wsId);
@@ -1049,6 +1073,23 @@ export class GitService {
     }
   }
 
+}
+
+const LOG_FORMAT = '%H%x1f%an%x1f%at%x1f%P%x1f%D%x1f%s%x1f%b';
+
+function parseLogEntries(stdout: string): GitLogEntry[] {
+  return stdout.split('\0').filter((record) => record.length > 0).map((record) => {
+    const [hash, author, at, parents, refs, subject, body] = record.split('\x1f');
+    return {
+      hash: hash ?? '',
+      author: author ?? '',
+      date: (parseInt(at ?? '0', 10) || 0) * 1000,
+      subject: subject ?? '',
+      parents: (parents ?? '').trim().split(/\s+/).filter((parent) => parent.length > 0),
+      body: (body ?? '').trim(),
+      refs: parseLogRefs(refs ?? ''),
+    };
+  });
 }
 
 /** git-common-dir / 路徑正規化（realpath 後小寫化 on win32；解不了退 resolve）。紅軍 A2 lineage 用。 */
@@ -1192,6 +1233,9 @@ export function registerGitHandlers(ipc: IpcMain, workspaces: WorkspaceManager, 
   );
   ipc.handle('git:log', (_e, req: InvokeReq<'git:log'>) =>
     enqueueRepoRead(req.wsId, () => svc.log(req.wsId, req.limit)),
+  );
+  ipc.handle('git:logPage', (_e, req: InvokeReq<'git:logPage'>) =>
+    enqueueRepoRead(req.wsId, () => svc.logPage(req)),
   );
   ipc.handle('git:show', (_e, req: InvokeReq<'git:show'>) =>
     enqueueRepo(req.wsId, () => svc.show(req.wsId, req.ref, req.path)),

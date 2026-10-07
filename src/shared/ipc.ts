@@ -10,6 +10,8 @@ import type {
   GitChange,
   GitSnapshot,
   GitLogEntry,
+  GitLogPageRequest,
+  GitLogPageResult,
   GitWorktree,
   TermState,
   ShellKind,
@@ -168,6 +170,7 @@ export interface InvokeChannels {
     res: { ok: true } | { ok: false; error: string };
   };
   'git:log': { req: { wsId: string; limit: number }; res: GitLogEntry[] };
+  'git:logPage': { req: GitLogPageRequest; res: GitLogPageResult };
   /** commit diff（git show <ref>；給 path 則限定單檔）；PE-1 右鍵/展開檔案用。 */
   'git:show': { req: { wsId: string; ref: string; path?: string }; res: { patch: string } };
   /** 某 commit 變更的檔案清單 + 狀態（點 commit 展開檔案用，PE-1）。 */

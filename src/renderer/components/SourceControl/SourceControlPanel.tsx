@@ -41,7 +41,17 @@ import { record } from '../../../shared/perf';
 type Tab = 'changes' | 'history' | 'branches' | 'worktree';
 type MetadataTab = 'history' | 'branches';
 const METADATA_CACHE_MS = 3_000;
+const HISTORY_FIRST_PAGE = 20;
+const HISTORY_NEXT_PAGE = 10;
 type BranchKind = 'local' | 'remote';
+
+interface HistoryPage {
+  entries: GitLogEntry[];
+  rootsVersion: string;
+  hasMore: boolean;
+}
+
+const EMPTY_HISTORY_PAGE: HistoryPage = { entries: [], rootsVersion: '', hasMore: false };
 
 interface BranchState {
   local: string[];
@@ -248,6 +258,24 @@ export function SourceControlPanel(): React.JSX.Element {
   const [engine, setEngine] = useState<AiEngine>('claude');
   const [tab, setTab] = useState<Tab>('changes');
   const [log, setLog] = useState<GitLogEntry[]>([]);
+  const [historyReady, setHistoryReady] = useState(false);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState<'initial' | 'more' | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyNotice, setHistoryNotice] = useState<string | null>(null);
+  const [historyReloadKey, setHistoryReloadKey] = useState(0);
+  const historyPage = useRef<HistoryPage>(EMPTY_HISTORY_PAGE);
+  const historyLoadGen = useRef(0);
+  const historyInFlight = useRef<number | null>(null);
+  const historyStaleReload = useRef(false);
+  const historyScrollElement = useRef<HTMLDivElement | null>(null);
+  const historyScrollTop = useRef(0);
+  const historyScrollIntent = useRef(false);
+  const setHistoryScrollElement = useCallback((node: HTMLDivElement | null): void => {
+    historyScrollElement.current = node;
+    historyScrollIntent.current = false;
+    if (node) node.scrollTop = historyScrollTop.current;
+  }, []);
   const [branches, setBranches] = useState<BranchState>(EMPTY_BRANCH_STATE);
   const [cleanupJournals, setCleanupJournals] = useState<GitCleanupJournalSummary[]>([]);
   const [cleanupFeedback, setCleanupFeedback] = useState<CleanupFeedback | null>(null);
@@ -260,6 +288,7 @@ export function SourceControlPanel(): React.JSX.Element {
   const [expanded, setExpanded] = useState<string | null>(null); // PE-1 展開檔案清單的 commit hash
   const [auxRevision, setAuxRevision] = useState(0); // 只有 refs／使用者操作才重讀歷史與分支，不跟著每次 worktree 變更重跑
   const metadataReads = useRef<Partial<Record<MetadataTab, MetadataRead>>>({});
+  const historyIdentity = useRef<{ wsId: string | null; head: string | null | undefined; branch: string | null | undefined; revision: number } | null>(null);
   const branchLoadGen = useRef(0);
   const branchStateWsId = useRef<string | null>(null);
   const [cFiles, setCFiles] = useState<Record<string, { path: string; status: string }[]>>({}); // commit→檔案清單快取
@@ -271,6 +300,21 @@ export function SourceControlPanel(): React.JSX.Element {
   // 工作區時，若不取消，切到最新工作區還得等前面每個 stale 載入跑完、且 stale 結果會回頭覆蓋當前 →
   // 面板卡在 loading。每次 refresh 遞增 gen，await 回來後 gen 不是最新就丟棄（不 setState、不搶 loading）。
   const loadGen = useRef(0);
+  const clearHistory = useCallback((preserveStaleReload = false): void => {
+    historyLoadGen.current += 1;
+    historyInFlight.current = null;
+    if (!preserveStaleReload) historyStaleReload.current = false;
+    historyPage.current = EMPTY_HISTORY_PAGE;
+    historyScrollTop.current = 0;
+    historyScrollIntent.current = false;
+    if (historyScrollElement.current) historyScrollElement.current.scrollTop = 0;
+    setLog([]);
+    setHistoryReady(false);
+    setHistoryHasMore(false);
+    setHistoryLoading(null);
+    setHistoryError(null);
+    setHistoryNotice(null);
+  }, []);
   const refresh = useCallback(async (fresh = true): Promise<void> => {
     if (!isCurrent()) return;
     const gen = ++loadGen.current;
@@ -289,6 +333,8 @@ export function SourceControlPanel(): React.JSX.Element {
       setChanges(snapshot.status.isRepo ? snapshot.changes : []);
       changesRef.current = snapshot.status.isRepo ? snapshot.changes : [];
       if (fresh) {
+        clearHistory();
+        delete metadataReads.current.history;
         setAuxRevision((value) => value + 1);
         invalidateWorktreeBranches(wsPath);
       }
@@ -297,11 +343,25 @@ export function SourceControlPanel(): React.JSX.Element {
     } finally {
       if (gen === loadGen.current && isCurrent()) setLoading(false);
     }
-  }, [wsId, wsPath, isCurrent]);
+  }, [wsId, wsPath, isCurrent, clearHistory]);
 
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+
+  // 離開歷史頁時也立即清除已失效頁數與捲動位置；回來才讀最新首 20 筆。
+  useEffect(() => {
+    const next = { wsId, head: status?.head, branch: status?.branch, revision: auxRevision };
+    const previous = historyIdentity.current;
+    historyIdentity.current = next;
+    // 初次 snapshot 尚未返回時，history 已可先讀；undefined→已知 HEAD 是採用身分，不能丟掉這一頁。
+    if (previous && (previous.wsId !== next.wsId || previous.revision !== next.revision
+      || (previous.head !== undefined && previous.head !== next.head)
+      || (previous.branch !== undefined && previous.branch !== next.branch))) {
+      clearHistory();
+      delete metadataReads.current.history;
+    }
+  }, [wsId, status?.head, status?.branch, auxRevision, clearHistory]);
 
   // PE-4：事件驅動 fetch（拍板不背景輪詢）——只更新 remote-tracking ref，behind（未拉取數）才跟得上遠端。
   // 非 repo／無 remote 不觸發；自動路徑（切工作區）失敗靜默，手動路徑（⟳）顯示小字提示；成功後 refresh 補數字。
@@ -341,14 +401,14 @@ export function SourceControlPanel(): React.JSX.Element {
     statusRef.current = null;
     setChanges([]);
     changesRef.current = [];
-    setLog([]);
+    clearHistory();
     setBranches(EMPTY_BRANCH_STATE);
     metadataReads.current = {};
     branchStateWsId.current = null;
     branchLoadGen.current += 1;
     const t = setTimeout(() => void refresh(false).then(() => fetchRemote(false)), 120);
     return () => clearTimeout(t);
-  }, [refresh, fetchRemote]);
+  }, [refresh, fetchRemote, clearHistory]);
 
   // 掛載時讀回持久化的「智慧產生引擎」設定。
   useEffect(() => {
@@ -487,6 +547,75 @@ export function SourceControlPanel(): React.JSX.Element {
     return true;
   }, [wsId]);
 
+  const loadHistoryPage = useCallback(async (more: boolean): Promise<boolean> => {
+    if (!wsId || !isCurrent()) return false;
+    const gen = historyLoadGen.current;
+    if (historyInFlight.current === gen) return false;
+    const previous = historyPage.current;
+    if (more && (!previous.hasMore || previous.entries.length === 0)) return false;
+    historyInFlight.current = gen;
+    historyScrollIntent.current = false;
+    setHistoryLoading(more ? 'more' : 'initial');
+    setHistoryError(null);
+    try {
+      record('gitLogRequest', 1);
+      const result = await ipc.git.logPage({
+        wsId,
+        offset: more ? previous.entries.length : 0,
+        limit: more ? HISTORY_NEXT_PAGE : HISTORY_FIRST_PAGE,
+        ...(more ? {
+          rootsVersion: previous.rootsVersion,
+          previousHash: previous.entries[previous.entries.length - 1]?.hash,
+        } : {}),
+      });
+      if (gen !== historyLoadGen.current || !isCurrent()) return false;
+      const seen = new Set(previous.entries.map((entry) => entry.hash));
+      if (!result.ok || (more && result.entries.some((entry) => seen.has(entry.hash)))) {
+        if (more) {
+          // --all roots 或 topo 邊界變了：舊頁不能與新頁混接，從最新 20 筆重新開始。
+          historyLoadGen.current += 1;
+          historyInFlight.current = null;
+          historyPage.current = EMPTY_HISTORY_PAGE;
+          historyStaleReload.current = true;
+          historyScrollTop.current = 0;
+          historyScrollIntent.current = false;
+          if (historyScrollElement.current) historyScrollElement.current.scrollTop = 0;
+          delete metadataReads.current.history;
+          setLog([]);
+          setHistoryReady(false);
+          setHistoryHasMore(false);
+          setHistoryLoading(null);
+          setHistoryNotice('歷史已更新，正在重新載入…');
+          setHistoryReloadKey((value) => value + 1);
+        } else {
+          setHistoryError('歷史正在變動，請重試載入。');
+        }
+        return false;
+      }
+      const entries = more ? [...previous.entries, ...result.entries] : result.entries;
+      historyPage.current = { entries, rootsVersion: result.rootsVersion, hasMore: result.hasMore };
+      if (more && metadataReads.current.history?.wsId === wsId) {
+        metadataReads.current.history.expiresAt = Date.now() + METADATA_CACHE_MS;
+      }
+      setLog(entries);
+      setHistoryHasMore(result.hasMore);
+      setHistoryReady(true);
+      if (!more) {
+        setHistoryNotice(historyStaleReload.current ? '歷史已更新，顯示最新 20 筆。' : null);
+        historyStaleReload.current = false;
+      }
+      return true;
+    } catch (e) {
+      if (gen === historyLoadGen.current && isCurrent()) setHistoryError(errText(e));
+      return false;
+    } finally {
+      if (historyInFlight.current === gen) {
+        historyInFlight.current = null;
+        if (gen === historyLoadGen.current && isCurrent()) setHistoryLoading(null);
+      }
+    }
+  }, [wsId, isCurrent]);
+
   // 切到歷史/分支頁時載入對應資料。
   useEffect(() => {
     if (!wsId || status?.isRepo === false) return;
@@ -510,14 +639,12 @@ export function SourceControlPanel(): React.JSX.Element {
       if (isCurrent()) setError(errText(e));
     };
     if (tab === 'history') {
-      record('gitLogRequest', 1);
-      void ipc.git
-        .log({ wsId, limit: 50 })
-        .then((entries) => {
-          if (metadataReads.current.history === request && isCurrent()) setLog(entries);
-          complete();
-        })
-        .catch(fail);
+      clearHistory(true);
+      void loadHistoryPage(false).then((success) => {
+        if (metadataReads.current.history !== request) return;
+        if (success) complete();
+        else delete metadataReads.current.history;
+      });
     } else {
       record('gitBranchListRequest', 1);
       void loadBranches().then((completeResult) => {
@@ -525,7 +652,14 @@ export function SourceControlPanel(): React.JSX.Element {
         else if (metadataReads.current.branches === request) delete metadataReads.current.branches;
       }).catch(fail);
     }
-  }, [tab, wsId, status?.isRepo, status?.head, status?.branch, auxRevision, loadBranches]);
+  }, [tab, wsId, status?.isRepo, status?.head, status?.branch, auxRevision, historyReloadKey, loadBranches, loadHistoryPage, clearHistory]);
+
+  const requestMoreHistory = (): void => {
+    if (!historyReady || !historyHasMore || historyLoading || historyError) return;
+    void loadHistoryPage(true);
+  };
+  const historyAtBottom = (element: HTMLDivElement): boolean =>
+    element.scrollHeight - element.scrollTop - element.clientHeight <= 48;
 
   const run = useCallback(
     async (fn: () => Promise<void>): Promise<void> => {
@@ -1429,10 +1563,37 @@ export function SourceControlPanel(): React.JSX.Element {
       ))}
 
       {tab === 'history' && (
-        <div className="pd-scm-body pd-scroll">
-          {log.length === 0 ? (
-            <div className="pd-scm-empty">尚無提交紀錄。</div>
-          ) : (
+        <div
+          ref={setHistoryScrollElement}
+          className="pd-scm-body pd-scroll"
+          onWheel={(event) => {
+            if (event.deltaY <= 0) return;
+            historyScrollIntent.current = true;
+            if (historyAtBottom(event.currentTarget)) {
+              historyScrollIntent.current = false;
+              requestMoreHistory();
+            }
+          }}
+          onPointerDown={() => { historyScrollIntent.current = true; }}
+          onTouchStart={() => { historyScrollIntent.current = true; }}
+          onKeyDown={(event) => {
+            if (['ArrowDown', 'PageDown', 'End', ' '].includes(event.key)) historyScrollIntent.current = true;
+          }}
+          onScroll={(event) => {
+            historyScrollTop.current = event.currentTarget.scrollTop;
+            if (historyScrollIntent.current && historyAtBottom(event.currentTarget)) {
+              historyScrollIntent.current = false;
+              requestMoreHistory();
+            }
+          }}
+        >
+          {historyNotice && <div className="pd-scm-empty" role="status">{historyNotice}</div>}
+          {log.length === 0 && !historyError && (
+            <div className="pd-scm-empty" role="status">
+              {historyReady ? '尚無提交紀錄。' : '載入歷史…'}
+            </div>
+          )}
+          {log.length > 0 && (
             (() => {
               const graph = computeGitGraph(log);
               const graphW = graph.maxLanes * GRAPH_LANE_W + 6;
@@ -1513,6 +1674,31 @@ export function SourceControlPanel(): React.JSX.Element {
               });
             })()
           )}
+          {historyError && (
+            <div className="pd-scm-empty" role="alert">
+              歷史載入失敗：{historyError}
+              <button
+                type="button"
+                className="pd-btn"
+                onClick={() => {
+                  if (historyReady) void loadHistoryPage(true);
+                  else {
+                    delete metadataReads.current.history;
+                    setHistoryReloadKey((value) => value + 1);
+                  }
+                }}
+              >
+                重試載入
+              </button>
+            </div>
+          )}
+          {historyLoading === 'more' && <div className="pd-scm-empty" role="status">載入更多歷史…</div>}
+          {historyReady && historyHasMore && !historyError && historyLoading !== 'more' && (
+            <div className="pd-scm-empty">
+              <button type="button" className="pd-btn" onClick={requestMoreHistory}>載入更多</button>
+            </div>
+          )}
+          {historyReady && !historyHasMore && <div className="pd-scm-empty" role="status">已顯示全部提交。</div>}
           {hover && (
             <CommitHoverCard
               c={hover.c}

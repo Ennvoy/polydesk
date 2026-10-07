@@ -14,6 +14,7 @@
 ## 主要資料流與邊界
 
 - Git／SCM：`SourceControlPanel` → preload 固定 `git:*` channel → `GitService` handler → repository 共用讀寫佇列（同批唯讀並行、狀態掃描上限 2、寫入維持前後屏障） → `execFile` 系統 Git → 結構化結果回 renderer。
+- 歷史：固定 `git:logPage` IPC 保留 `--all --topo-order` 範圍；首次回傳 20 筆、後續每頁 10 筆，前後檢查 refs 與分頁邊界，歷史變動時 renderer 從前 20 筆重讀（決議 120）。
 - 完整清理：renderer → `git:cleanupPreview/Execute/Status/Cancel/Resume/ImportEvidence` 固定 IPC → repository queue → Git/磁碟/endpoint lease 重驗 → userData 版本化 journal/claim；preview 零副作用，execute 依序執行本機 worktree/ref/metadata，再處理遠端 expected-OID 與 tracking ref，部分結果沿 checkpoint 恢復。
 - 工作區：renderer store／workspace rail → `workspace:*` → `WorkspaceManager` → `StateStore` userData 狀態檔。
 - Worktree：SCM／建立對話框 → `git:worktree*` → `GitService` → `WorkspaceManager` 納管；分支互斥以 `git worktree list` 的即時結果為準。

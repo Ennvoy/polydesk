@@ -175,15 +175,15 @@ test('切換工作區：A 真 Git 歷史延遲回包不污染 B，提交草稿�
     await page.getByLabel('原始碼控制', { exact: true }).click();
     await expect(page.locator('.pd-scm-branch')).toContainText('main');
     await page.getByLabel('commit 訊息', { exact: true }).fill('A draft');
-    // 控制真 handler 的回包時序；Git 原本的 log 讀取完整執行。
+    // 控制真 handler 的回包時序；Git 原本的歷史分頁讀取完整執行。
     await app.evaluate(({ ipcMain }) => {
       const handlers = (ipcMain as unknown as { _invokeHandlers: Map<string, (event: Electron.IpcMainInvokeEvent, request: unknown) => Promise<unknown>> })._invokeHandlers;
-      const original = handlers.get('git:log');
-      if (!original) throw new Error('git:log handler missing');
+      const original = handlers.get('git:logPage');
+      if (!original) throw new Error('git:logPage handler missing');
       const state = globalThis as typeof globalThis & { pdGitDelay?: { started: boolean; release?: () => void } };
       state.pdGitDelay = { started: false };
-      ipcMain.removeHandler('git:log');
-      ipcMain.handle('git:log', async (event, request: unknown) => {
+      ipcMain.removeHandler('git:logPage');
+      ipcMain.handle('git:logPage', async (event, request: unknown) => {
         const result = await original(event, request);
         if (!state.pdGitDelay?.started) {
           state.pdGitDelay = { started: true };

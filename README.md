@@ -1,6 +1,6 @@
 # Polydesk
 
-![version](https://img.shields.io/badge/version-v0.38.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+![version](https://img.shields.io/badge/version-v0.39.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
 
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
@@ -21,7 +21,7 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 | **終端機多開** | 同一工作區可並排/上下多開終端機、可拖曳調整，支援 PowerShell 等 shell；Windows 內建 shell 以絕對路徑啟動，不受其他軟體重排 PATH 影響，啟動失敗會顯示原因；工具列可一鍵建立並啟動 Claude bypass、Codex 或 Agy，且會核對 xterm 與 ConPTY 的實際欄列一致後才啟動 TUI；所有終端機都直接使用完整 xterm 畫面，不再顯示左側內容／對話導覽軸；背景終端以較低成本持續接收資料；選取文字後可用 `Ctrl+C` 在終端機間複製貼上，未選取時仍送出中斷訊號；按住 `Ctrl` 點擊輸出的檔案路徑可直接開檔並跳到指定行欄，點擊 HTTP／HTTPS 網址則交由系統瀏覽器開啟。 |
 | **Monaco 編輯器** | 多分頁、分割並排、依視窗寬度自動換行；AI／外部工具改檔後，乾淨分頁與唯讀預覽會自動更新，大批改檔也會對帳；未存檔內容不會被覆蓋。分頁右鍵可關閉、關閉其他或關閉目前工作區的全部分頁。 |
 | **可停靠版面** | 側欄、編輯器與終端機可拖曳停靠及調整大小；按編輯器／終端機標頭的 `×` 只會原地隱藏 panel，從上方按鈕叫回時側欄會維持操作前的寬度與高度。 |
-| **Git 原始碼控制** | status / stage / commit / push / pull / stash / branch / log / diff；分支與 worktree 共用兩階段完整清理，先以零副作用 preview 顯示 commit、dirty／locked、metadata 與遠端 expected OID，再由 journal 化 CAS 執行；遠端必須逐 endpoint opt-in，unknown 不冒充成功，部分完成可從 SCM 待辦繼續收斂。SCM 面板、側欄頂部角標與狀態列共用短時 Git 快照；歷史／分支不因一般檔案變動重讀，大量變更每批渲染 200 項；fetch 後線圖會顯示尚未 pull 的遠端分支與同事提交；**AI 產生 commit message**（可切換 claude / codex / agy 引擎）。 |
+| **Git 原始碼控制** | status / stage / commit / push / pull / stash / branch / log / diff；分支與 worktree 共用兩階段完整清理，先以零副作用 preview 顯示 commit、dirty／locked、metadata 與遠端 expected OID，再由 journal 化 CAS 執行；遠端必須逐 endpoint opt-in，unknown 不冒充成功，部分完成可從 SCM 待辦繼續收斂。SCM 面板、側欄頂部角標與狀態列共用短時 Git 快照；歷史先顯示 20 筆、往下看再每次載入 10 筆，歷史／分支不因一般檔案變動重讀；大量變更每批渲染 200 項；fetch 後線圖會顯示尚未 pull 的遠端分支與同事提交；**AI 產生 commit message**（可切換 claude / codex / agy 引擎）。 |
 | **檔案總管** | VSCode 風右鍵編輯（新增/改名/刪除/剪貼）；可用 `Ctrl+V` 貼入外部檔案，也能把截圖工具、瀏覽器或通訊軟體複製的圖片直接存成 PNG，包含無路徑且使用通用 MIME 的虛擬圖片檔；刪除**移到資源回收桶**（可救回）。 |
 | **試算表預覽** | `.xlsx / .xls` 直接渲染成表格（Excel 風欄標＋列號、多工作表切換），不再是二進位亂碼。 |
 | **AI 狀態監控** | 以真實 process 與工具事件偵測各工作區狀態；Windows 系統程序掃描使用絕對路徑，不受第三方軟體重排 PATH 影響；Claude / Codex 支援細分狀態，Agy 第一版提供「執行中 / 未啟動」徽章；主工作樹與每個 worktree 皆依自身路徑獨立顯示 Claude／Codex／Agy 標籤。 |
@@ -133,6 +133,8 @@ npm run pack:dir     # 未壓縮 app 目錄 → ../polydesk-dist/win-unpacked（
 
 v0.38.0 的 SCM 修正提交為 `8deb288`。第三輪正式驗證共 20 項指令通過：typecheck、84 個 Vitest 檔 679 案、正式 build，以及 Electron E2E 126 通過、3 案依條件跳過，包含導覽／完整指南 4 案。E2E 沿用既有 `REQ-PERF-001` 排除範圍；大型歷史首次讀取仍受 repository 與本機環境影響。新版需重建並重新打包 portable，成品另行核對版本、大小與 SHA-256。
 
+v0.39.0 的歷史分頁採受影響範圍的目標驗證：typecheck、正式 build 與 `git diff --check` 通過；Git 服務 2 檔 24 案及版本同步 3 案通過，真 Electron 分頁、既有工作區切換與慢狀態掃描共 3 案，以及導覽／完整指南 4 案通過，合計 7 案、0 跳過。以同一 60 筆真 Git 提交對照，v0.38 捲到底只有 50 筆，v0.39 可依序載入到 60 筆與末頁。此次未執行完整 ship runner；portable 成品仍須在發布後另核版本、大小、SHA-256 與隔離啟動。
+
 ### Git 狀態同步
 
 原始碼控制面板開啟期間，Polydesk 會以低頻、僅讀取狀態的方式檢查目前 `HEAD`、分支及 ahead / behind。即使 commit 或 push 是在整合終端機、外部終端機或其他 Git 工具完成，面板也會自動更新，不必手動重新整理。
@@ -143,7 +145,9 @@ v0.38.0 起，初次狀態仍在讀取時就能切到「歷史」、「分支」
 
 歷史與分支頁在同一工作區、HEAD、分支及重新整理狀態相同時，會沿用 3 秒內已讀到的結果；讀取途中反覆切頁也共用同一查詢。超過期限後再次切入會重讀，手動重新整理與成功取回遠端後會讓快取失效。外部工具新增其他分支時，可重新整理或稍後再切入分支頁查看。
 
-取回遠端時會一併建立 Git 歷史索引（commit-graph），供後續歷史讀取使用；設定只套用當次取回。首次讀取大型歷史仍可能需要遍歷超過畫面顯示的 50 筆提交，載入時間會受 repository 大小與本機環境影響。
+取回遠端時會一併建立 Git 歷史索引（commit-graph），供後續歷史讀取使用；設定只套用當次取回。v0.38.0 的歷史畫面一次顯示最多 50 筆；Git 實際走訪範圍仍可能超過畫面顯示的筆數，載入時間會受 repository 大小與本機環境影響。
+
+v0.39.0 起，「歷史」先顯示前 20 筆；捲到列表底部或按「載入更多」，每次再讀取 10 筆，直到畫面顯示「已顯示全部提交」。下一批載入失敗時，已顯示的提交會保留，可按「重試載入」。若讀取期間 Git 歷史已變，畫面會從前 20 筆重新開始並提示「歷史已更新」；按 SCM「重新整理」或切換工作區也會從該工作區的前 20 筆重讀。分批顯示不限制原本可查看的本地與遠端追蹤歷史範圍，也不保證 Git 內部只走訪當頁筆數或固定載入時間。
 
 工作區列的 worktree 分支標籤會共用同一主工作樹的一次清單讀取，結果短時保留 600ms；重新整理、建立或納管 worktree 成功後會明確失效，舊讀取結果也不會覆蓋新結果。標籤只從 worktree metadata 取得分支，不再為每個 worktree 掃描完整變更狀態；detached 與無法辨識分支時保留原有顯示。
 

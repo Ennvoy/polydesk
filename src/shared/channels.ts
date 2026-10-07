@@ -50,6 +50,7 @@ export const INVOKE_CHANNELS = [
   'git:cleanupResume',
   'git:cleanupImportEvidence',
   'git:log',
+  'git:logPage',
   'git:show',
   'git:commitFiles',
   'git:stash',

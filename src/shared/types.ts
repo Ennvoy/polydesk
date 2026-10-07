@@ -209,6 +209,19 @@ export interface GitLogEntry {
   refs: GitLogRef[];
 }
 
+/** 歷史分頁；rootsVersion 對應本次 --all 實際可見的 refs/HEAD 裝飾。 */
+export interface GitLogPageRequest {
+  wsId: string;
+  offset: number;
+  limit: number;
+  rootsVersion?: string;
+  previousHash?: string;
+}
+
+export type GitLogPageResult =
+  | { ok: true; entries: GitLogEntry[]; hasMore: boolean; rootsVersion: string }
+  | { ok: false; code: 'history-changed' };
+
 export interface TermState {
   termId: string;
   wsId: string;

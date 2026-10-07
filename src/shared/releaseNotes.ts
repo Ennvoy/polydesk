@@ -15,6 +15,15 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.39.0',
+    date: '2026-10-07',
+    highlights: [
+      '原始碼控制的歷史先顯示 20 筆，向下捲動時每次再載入 10 筆',
+      '讀到歷史末頁時停止載入；載入失敗可從歷史頁重試，不會清掉已顯示的提交',
+      '重新整理或切換工作區後從新工作區的前 20 筆重新開始，避免舊結果混入',
+    ],
+  },
+  {
     version: '0.38.0',
     date: '2026-10-06',
     highlights: [

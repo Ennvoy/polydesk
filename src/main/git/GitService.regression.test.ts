@@ -243,7 +243,7 @@ describe('GitService 操作回歸（真 Git）', () => {
     try {
       await entered;
       requests = Promise.all([
-        handlers.get('git:log')!({}, { wsId: 'ws', limit: 50 }),
+        handlers.get('git:logPage')!({}, { wsId: 'ws', offset: 0, limit: 20 }),
         handlers.get('git:branch')!({}, { wsId: 'ws', op: 'list' }),
         handlers.get('git:worktreeList')!({}, { wsId: 'ws' }),
       ]);
@@ -251,7 +251,7 @@ describe('GitService 操作回歸（真 Git）', () => {
         requests,
         new Promise<never>((_resolve, reject) => { timeout = setTimeout(() => reject(new Error('metadata blocked by snapshot')), 15_000); }),
       ]);
-      expect(results[0]).toHaveLength(1);
+      expect(results[0]).toMatchObject({ ok: true, entries: [{ subject: 'initial' }], hasMore: false });
       expect(results[1]).toHaveProperty('branches', ['main']);
       expect(results[2]).toHaveProperty('list');
       writer = handlers.get('git:branch')!({}, { wsId: 'ws', op: 'create', name: 'after-snapshot' });

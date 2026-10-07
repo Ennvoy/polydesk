@@ -79,6 +79,18 @@ const ARTICLES: HelpArticle[] = [
     action: 'scm', actionLabel: '前往原始碼控制',
   },
   {
+    id: 'scm-history', category: '原始碼控制', title: '查看提交歷史',
+    summary: '歷史先顯示 20 筆提交，往下捲到清單底部後，每次再載入 10 筆。',
+    steps: ['按原始碼控制的分支圖示，再切到「歷史」。', '往下捲到清單底部，或按「載入更多」，查看下一批 10 筆。', '點提交展開變更檔案，再點檔案查看該次提交的差異。'],
+    states: [
+      { label: '正在載入歷史', detail: '首次讀取與載入下一批時會顯示載入狀態；等載入完成後再繼續往下捲。' },
+      { label: '歷史載入失敗', detail: '已載入的提交會保留。按「重試載入」重讀失敗的那一批。' },
+      { label: '歷史已更新', detail: '偵測到分支或提交變動時，清單會從最新的 20 筆重新載入。也可按上方「重新整理」取得最新結果。' },
+      { label: '已顯示全部提交', detail: '目前可讀取的提交都已顯示，底部不再提供載入更多。' },
+    ],
+    action: 'scm', actionLabel: '前往原始碼控制',
+  },
+  {
     id: 'scm-branches', category: '原始碼控制', title: '分支、stash 與 worktree',
     summary: '切換與建立分支、保存暫存工作，或用兩階段完整清理移除本地、worktree 與明確選取的遠端分支。',
     steps: ['在分支區展開本地或遠端群組，從⋯或右鍵選擇完整清理。', '第一階段選擇切換分支、worktree 與 opt-in 遠端範圍；不同名稱的實際 upstream 會預選，按檢查前不會改 Git 或磁碟。', '第二階段閱讀 commit 數、dirty／locked／prunable、endpoint 與 unknown，再勾選必要的 force／外部寫入確認後執行。'],

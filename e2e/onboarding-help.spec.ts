@@ -138,6 +138,12 @@ test('說明與設定共用入口可搜尋完整指南，手動導覽不改寫�
     await page.getByLabel('搜尋使用說明').fill('正在讀取狀態');
     await expect(page.getByRole('heading', { name: '檢視、暫存與提交變更', exact: true })).toBeVisible();
     await expect(page.getByText('可先切到「歷史」、「分支」或 worktree', { exact: false })).toBeVisible();
+    await page.getByLabel('搜尋使用說明').fill('查看提交歷史');
+    await expect(page.getByRole('heading', { name: '查看提交歷史', exact: true })).toBeVisible();
+    await expect(page.getByText('歷史先顯示 20 筆提交，往下捲到清單底部後，每次再載入 10 筆。', { exact: true })).toBeVisible();
+    await expect(page.getByText('已載入的提交會保留。按「重試載入」重讀失敗的那一批。', { exact: true })).toBeVisible();
+    await expect(page.getByText('偵測到分支或提交變動時，清單會從最新的 20 筆重新載入。', { exact: false })).toBeVisible();
+    await expect(page.getByText('已顯示全部提交', { exact: true })).toBeVisible();
     await page.getByLabel('搜尋使用說明').fill('');
     await page.getByLabel('使用說明分類').getByRole('button', { name: /問題排除/ }).click();
     await expect(page.getByText('信任、確認與安全限制', { exact: true })).toBeVisible();
