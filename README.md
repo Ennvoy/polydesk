@@ -133,7 +133,7 @@ npm run pack:dir     # 未壓縮 app 目錄 → ../polydesk-dist/win-unpacked（
 
 v0.38.0 的 SCM 修正提交為 `8deb288`。第三輪正式驗證共 20 項指令通過：typecheck、84 個 Vitest 檔 679 案、正式 build，以及 Electron E2E 126 通過、3 案依條件跳過，包含導覽／完整指南 4 案。E2E 沿用既有 `REQ-PERF-001` 排除範圍；大型歷史首次讀取仍受 repository 與本機環境影響。新版需重建並重新打包 portable，成品另行核對版本、大小與 SHA-256。
 
-v0.39.0 的歷史分頁採受影響範圍的目標驗證：typecheck、正式 build 與 `git diff --check` 通過；Git 服務 2 檔 24 案及版本同步 3 案通過，真 Electron 分頁、既有工作區切換與慢狀態掃描共 3 案，以及導覽／完整指南 4 案通過，合計 7 案、0 跳過。以同一 60 筆真 Git 提交對照，v0.38 捲到底只有 50 筆，v0.39 可依序載入到 60 筆與末頁。此次未執行完整 ship runner；portable 成品仍須在發布後另核版本、大小、SHA-256 與隔離啟動。
+v0.39.0 的歷史分頁修正提交為 `ba6583f`，採受影響範圍的目標驗證：typecheck、正式 build 與 `git diff --check` 通過；Git 服務 2 檔 24 案及版本同步 3 案通過，真 Electron 分頁、既有工作區切換與慢狀態掃描共 3 案，以及導覽／完整指南 4 案通過，合計 7 案、0 跳過。以同一 60 筆真 Git 提交對照，v0.38 捲到底只有 50 筆，v0.39 可依序載入到 60 筆與末頁。此次未執行完整 ship runner；portable 成品仍須在發布後另核版本、大小、SHA-256 與隔離啟動。
 
 ### Git 狀態同步
 
