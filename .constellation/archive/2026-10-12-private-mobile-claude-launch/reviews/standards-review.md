@@ -45,3 +45,5 @@ CPU fix 靜態複審：`ClaudeStatusMonitor.ts:218–225` 全無 PTY 才逐工�
 CPU finding resolved：已讀 `idle-cpu-after-fix.txt/json`，原案例 1 passed（33.5s）、exit 0；10 工作區／18000ms，main CPU 0.8% < 原 10% 門檻。`e2e/perf.spec.ts` 相對正式 release baseline 及工作樹皆零 diff；最新 `ClaudeStatusMonitor.ts:253–257` 於 await 後重新 pidsOf 判定存活，未快取 PID。原 scan／來源／fallback 活躍語義保留，未見新 finding。
 
 目前 0 unresolved；前 9 件及本次 CPU 均 resolved。正式全量尚未完成，不能宣稱 full PASS；本審查未啟 GUI 或測試。
+
+2026-10-13 portable 清理複審：實際模板尾段與真 NSIS 紅綠 probe 一致；只對 own INSTDIR 有界重試，R6 保留、耗盡 exit 1，無須追加產品修改。真鎖持有者尚未確認。先前全量簽章不涵蓋此 launcher 修正；新版 EXE 正常退出與清理仍待實際重建 smoke，不重跑不受影響的 full20。未啟 GUI、測試或改程式。

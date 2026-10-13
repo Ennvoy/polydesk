@@ -1,0 +1,17 @@
+{
+  "root": "C:\\Users\\ennvoy.lin\\AppData\\Local\\Temp\\pd-portable-cleanup-probe-Q6Bvfi",
+  "mode": "red",
+  "startedAt": "2026-10-13T01:06:52.038Z",
+  "cases": [
+    {
+      "name": "temporary-lock",
+      "holdMs": 1800,
+      "preserve": false,
+      "code": 0,
+      "ms": 230,
+      "removed": false
+    }
+  ],
+  "error": null,
+  "finishedAt": "2026-10-13T01:06:56.781Z"
+}

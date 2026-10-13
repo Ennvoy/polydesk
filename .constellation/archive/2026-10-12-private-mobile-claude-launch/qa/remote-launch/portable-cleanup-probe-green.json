@@ -1,0 +1,33 @@
+{
+  "root": "C:\\Users\\ennvoy.lin\\AppData\\Local\\Temp\\pd-portable-cleanup-probe-eb9oP6",
+  "mode": "green",
+  "startedAt": "2026-10-13T01:08:42.565Z",
+  "cases": [
+    {
+      "name": "temporary-lock",
+      "holdMs": 1800,
+      "preserve": false,
+      "code": 0,
+      "ms": 2597,
+      "removed": true
+    },
+    {
+      "name": "retry-exhausted",
+      "holdMs": 6500,
+      "preserve": false,
+      "code": 1,
+      "ms": 6783,
+      "removed": false
+    },
+    {
+      "name": "preserve",
+      "holdMs": 0,
+      "preserve": true,
+      "code": 1,
+      "ms": 273,
+      "removed": false
+    }
+  ],
+  "error": null,
+  "finishedAt": "2026-10-13T01:08:59.218Z"
+}

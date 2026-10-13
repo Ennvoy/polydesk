@@ -8,6 +8,8 @@ T-010、T-011（done）：完成 v0.40.0 私人手機啟動 Claude bypass，並�
 - 首次七步導覽的第六步、完整使用指南、README、CHANGELOG 與關於版本摘要同步。SCM 清理改為上一筆進度查詢結束後才排下一筆，隔離舊工作區／操作結果，保留最後真狀態與原安全佇列。終端機網址 E2E 改由真 buffer／viewport 定位並重新觸發真 hover。
 - 全部工作區沒有 PTY 時，AI 狀態直接轉閒置並略過全域紀錄與程序掃描；單輪復用工作區清單，非同步回包仍重查當下 PTY，保留開啟終端機後的正常監控。
 
+- 正式 portable 初版三次退出都留下本次解壓主程式；封裝清理改為有界重試、耗盡回報失敗，保留未知程序狀態不刪除的保護。
+
 ## 驗了什麼
 
 - 正式 `verify-runner.mjs --scope ship` 從頭執行 20 個設定命令，全部 exit 0；時間 2026-10-12T14:51:15.167Z、合計 3396 秒。型別檢查、六組 Vitest、正式 build 與十二組 Electron E2E 均完成，簽章證據 ee8bc37f6d3110e2718b825ec4b236db6c7b53bc6703eb23c226a449b799c80a。
@@ -29,12 +31,14 @@ T-010、T-011（done）：完成 v0.40.0 私人手機啟動 Claude bypass，並�
 | 網址測試假設游標／畫面行與 hover 不變 | 真 buffer 換算中文／emoji 七格，讀實際 viewport 與尺寸，每輪真滑鼠移出再移入；三次原鏈路通過 |
 | 完全沒有 PTY 仍反覆讀全域 AI 紀錄，閒置 CPU 超標 | 原案單跑重現 10.244%；診斷窗讀 Claude 1383 次、Codex open 187 次與 JSON parse 2228 次；全無 PTY 早退、單輪復用工作區，先紅回歸與修後原案 0.8% 通過。profiler 有額外成本，26.1278% 僅用於定位，未當效能驗收值 |
 
-- Standards、Spec、安全紅軍無未結案 finding；盲點審補上配對挑戰、realpath／撤銷、送出與就緒區分、持久未知結果四項工程預設，均已落實於規格與驗證。下輪：無。
+- 手機功能與原十項問題的 Standards、Spec、安全紅軍無未結案 finding；新增封裝清理的真 NSIS 縮圈證據通過，新版實際 EXE 待重建驗證；盲點審補上配對挑戰、realpath／撤銷、送出與就緒區分、持久未知結果四項工程預設，均已落實於規格與驗證。剩餘交付驗證：重建 EXE 並確認正常退出清理。
 - 導覽／指南已一起驗證入口、配對、期限、授權、錯誤及風險。SCM 修正不改入口、兩階段確認、安全選項、卡片文案或 selector；AI 監控修正不改徽章狀態與操作，現有指南保持適用，兩項核對結論記於修正附件。
 - 證據界限：未使用真 Tailscale 帳號或實體手機 4G，未宣稱該外部鏈路已驗證。測試 gateway 只在未打包 E2E 啟用。portable 依專案流程在提交與推送後建置，實際產物／封裝驗證結果另於本報告交付附記記錄。
 - 2026-10-12 唯讀核對 [Tailscale 官方代理原始碼](https://github.com/tailscale/tailscale/blob/main/ipn/ipnlocal/serve.go)：HTTP 代理保留原 Host，TLS 請求設置 HTTPS 轉送標頭，Funnel 設置專用識別標頭。這支持標頭契約，仍不代替實際帳號與手機網路量測。
 
 ## 證據在哪
+
+- [portable 清理修正與證據界限](qa/remote-launch/portable-cleanup-fix.md)、同目錄三次初版失敗 JSON 與真 NSIS 紅綠 JSON；正式全量簽章先於這次封裝修正。
 
 - [正式出貨簽章證據](ship-evidence.md)、[正式 runner 結果](qa/remote-launch/final-ship-runner-result.json)及[本輪完成摘要](qa/remote-launch/final-ship-runner-summary.txt)；完成摘要不是所有測試的完整 stdout。
 - [T-010](tickets/T-010-private-remote-launch.md)、[T-011](tickets/T-011-remote-launch-journey.md)、[覆蓋表](coverage.md)、[合成覆蓋表](weave-coverage.md)。

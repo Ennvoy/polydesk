@@ -1,0 +1,29 @@
+{
+  "exe": "C:/polydesk-dist/Polydesk-0.40.0-portable.exe",
+  "root": "C:\\Users\\ennvoy.lin\\AppData\\Local\\Temp\\pd-portable-040-aZV7rS",
+  "startedAt": "2026-10-13T00:58:28.427Z",
+  "checks": {
+    "defaultOff": true,
+    "rendererIsolation": {
+      "require": "undefined",
+      "process": "undefined"
+    },
+    "packagedIgnoresTestGateway": true,
+    "missingPrerequisiteFixture": "isolated empty ProgramFiles; no actual Tailscale configuration changed",
+    "missingTailscaleFailsClosed": "尚未安裝 Tailscale。請在電腦與手機安裝並登入同一個私人網路。",
+    "noRemoteListenerAfterFailure": true,
+    "version": "0.40.0",
+    "qrcodeBundled": true,
+    "nativePtyBundled": true
+  },
+  "error": "AssertionError [ERR_ASSERTION]: portable must clean its own extracted app\n    at C:\\Users\\ennvoy.lin\\AppData\\Local\\Temp\\polydesk-v040-portable-smoke.cjs:119:5",
+  "wrapperPid": 46672,
+  "marker": "C:\\Users\\ennvoy.lin\\AppData\\Local\\Temp\\pd-portable-040-aZV7rS\\Temp\\nsr54AE.tmp\\app\\.polydesk-startup-ready",
+  "closeRequested": true,
+  "wrapperExit": {
+    "code": 0,
+    "signal": null
+  },
+  "unpackRemoved": false,
+  "finishedAt": "2026-10-13T00:59:09.699Z"
+}

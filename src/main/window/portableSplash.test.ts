@@ -37,7 +37,10 @@ describe('portable 啟動畫面封裝契約', () => {
     expect(patched).toContain('StrCmp $R1 "no_wait" startup_no_wait startup_launch_failed');
     expect(patched.indexOf('BgImage::Destroy')).toBeGreaterThan(patched.indexOf('ExecShellWaitEx'));
     expect(patched).toContain('StdUtils.WaitForProcEx');
-    expect(patched).toContain('RMDir /r $INSTDIR');
+    expect(patched).toContain('RMDir /r "$INSTDIR"');
+    expect(patched).toContain('StrCmp $R6 1 startup_preserve');
+    expect(patched).toContain('IntCmp $R8 50 startup_cleanup_failed 0 startup_cleanup_failed');
+    expect(patched).toContain('startup_cleanup_failed:\n    SetErrorLevel 1');
     expect(() => patchPortableTemplate(original.replace('BgImage::Destroy', 'BgImage::Redraw'))).toThrow();
     expect(() => patchPortableTemplate(original.replace('    BgImage::Redraw\n  !endif\nFunctionEnd', '    BgImage::Redraw\nFunctionEnd'))).toThrow();
     expect(() => patchPortableTemplate(original.replace('StrCpy $INSTDIR "$PLUGINSDIR\\app"', 'StrCpy $INSTDIR "$TEMP\\app"'))).toThrow();

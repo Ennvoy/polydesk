@@ -104,7 +104,23 @@ function patchPortableTemplate(template) {
     .replace(ORIGINAL_UNPACK_DIR, '  StrCpy $INSTDIR "$PLUGINSDIR\\app"')
     .replace(ORIGINAL_HANDOFF, CONTINUOUS_HANDOFF)
     .replace('  ${StdUtils.GetAllParameters} $R0 0\n', '  ${StdUtils.GetAllParameters} $R0 0\n  StrCpy $R4 0\n  StrCpy $R6 0\n')
-    .replace(cleanupBlock, '  StrCmp $R6 1 startup_preserve\n\tRMDir /r $INSTDIR\n  startup_preserve:\nSectionEnd');
+    .replace(cleanupBlock, [
+      '  StrCmp $R6 1 startup_preserve',
+      '  StrCpy $R8 0',
+      '  startup_cleanup_retry:',
+      '    ClearErrors',
+      '    RMDir /r "$INSTDIR"',
+      '    IfFileExists "$INSTDIR\\*.*" startup_cleanup_wait startup_preserve',
+      '  startup_cleanup_wait:',
+      '    IntOp $R8 $R8 + 1',
+      '    IntCmp $R8 50 startup_cleanup_failed 0 startup_cleanup_failed',
+      '    Sleep 100',
+      '    Goto startup_cleanup_retry',
+      '  startup_cleanup_failed:',
+      '    SetErrorLevel 1',
+      '  startup_preserve:',
+      'SectionEnd',
+    ].join('\n'));
 }
 
 function copyTemplateDirectory(source, target) {
