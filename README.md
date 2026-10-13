@@ -157,9 +157,11 @@ v0.38.0 的 SCM 修正提交為 `8deb288`。第三輪正式驗證共 20 項指�
 
 v0.39.0 的歷史分頁修正提交為 `ba6583f`，採受影響範圍的目標驗證：typecheck、正式 build 與 `git diff --check` 通過；Git 服務 2 檔 24 案及版本同步 3 案通過，真 Electron 分頁、既有工作區切換與慢狀態掃描共 3 案，以及導覽／完整指南 4 案通過，合計 7 案、0 跳過。以同一 60 筆真 Git 提交對照，v0.38 捲到底只有 50 筆，v0.39 可依序載入到 60 筆與末頁。此次未執行完整 ship runner；portable 成品仍須在發布後另核版本、大小、SHA-256 與隔離啟動。
 
-v0.40.0 的私人手機啟動與背景負擔修正已完成全量驗證。正式 ship runner 20 項指令全部通過，耗時 3396 秒：typecheck、88 個 Vitest 檔案共 723 項、正式 build，以及十二組 Electron E2E 共 128 項通過、3 項依條件略過。沿用既有 REQ-PERF-001 冷啟動排除，背景 CPU 原 18 秒／10% 門檻通過；導覽與完整指南一起驗證。真 Tailscale 帳號及實體手機行動網路未在此環境實測，不以測試 gateway 代替該外部鏈路。 [出貨報告與簽章證據](.constellation/archive/2026-10-12-private-mobile-claude-launch/ship-report.md)保存安全審查、配對／撤銷、離線不重送與原效能門檻結果。
+v0.40.0 的私人手機啟動與背景負擔修正（產品提交 `a969f17`）已完成全量驗證。正式 ship runner 20 項指令全部通過，耗時 3396 秒：typecheck、88 個 Vitest 檔案共 723 項、正式 build，以及十二組 Electron E2E 共 128 項通過、3 項依條件略過。沿用既有 REQ-PERF-001 冷啟動排除，背景 CPU 原 18 秒／10% 門檻通過；導覽與完整指南一起驗證。真 Tailscale 帳號及實體手機行動網路未在此環境實測，不以測試 gateway 代替該外部鏈路。 [出貨報告與簽章證據](.constellation/archive/2026-10-12-private-mobile-claude-launch/ship-report.md)保存安全審查、配對／撤銷、離線不重送與原效能門檻結果。
 
-portable 正常退出後，會短暫重試清理本次解壓目錄；若檔案持續被占用，封裝器以失敗狀態退出並保留尚未清掉的檔案。此修正另經模板與真 NSIS 鎖測試驗證，重新打包的 EXE 尚待核對；先前全量簽章不涵蓋這次封裝修正。
+portable 正常退出後，會短暫重試清理本次解壓目錄；若檔案持續被占用，封裝器以失敗狀態退出並保留尚未清掉的檔案。此修正另經模板與真 NSIS 鎖測試驗證，重新打包的 EXE 三次正常退出與清理通過；先前全量簽章不涵蓋這次封裝修正，縮圈證據另存。
+
+2026-10-13 交付 portable，對應產品提交 `42571ba`；96,183,549 bytes，SHA-256 `1C84D82F9A4508164EBAE1D19E49B90E0A6AE8EBBF370904FD1471423B56D88F`。來源與交付副本的大小、雜湊一致。實際 EXE 隔離啟動確認 v0.40.0、遠端預設關閉、renderer 無 Node API、忽略 E2E gateway；缺少 Tailscale 時顯示原因、停用且無 loopback 監聽。QR 依賴與 native PTY 隨包，正常退出後自己的解壓目錄已清理。
 
 ### Git 狀態同步
 

@@ -47,3 +47,5 @@ CPU finding resolved：已讀 `idle-cpu-after-fix.txt/json`，原案例 1 passed
 目前 0 unresolved；前 9 件及本次 CPU 均 resolved。正式全量尚未完成，不能宣稱 full PASS；本審查未啟 GUI 或測試。
 
 2026-10-13 portable 清理複審：實際模板尾段與真 NSIS 紅綠 probe 一致；只對 own INSTDIR 有界重試，R6 保留、耗盡 exit 1，無須追加產品修改。真鎖持有者尚未確認。先前全量簽章不涵蓋此 launcher 修正；新版 EXE 正常退出與清理仍待實際重建 smoke，不重跑不受影響的 full20。未啟 GUI、測試或改程式。
+
+2026-10-13 成品複審結案：唯讀核對兩次 window.close 與一次 Windows CloseMainWindow raw JSON，全部 error null、wrapper exit 0、own 解壓目錄消失，原安全檢查通過。archive 與交付 QA 逐檔 SHA 一致；重算交付 EXE 為 96,183,549 bytes／1C84D82F9A4508164EBAE1D19E49B90E0A6AE8EBBF370904FD1471423B56D88F，吻合產品提交 42571ba 的 manifest。清理 finding resolved，目前 0 unresolved。全量先於 launcher 修正、縮圈證據、NotSigned 及真帳號／4G 未實測的界限均已記錄。未啟 GUI、測試或改程式。

@@ -8,7 +8,7 @@
 
 真 Windows FileStream 不允許刪除的鎖搭配實際 makensis，取最新模板的清理尾段編譯執行。舊版 1800ms 鎖時 exit 0／removed false，重現假成功；修後短鎖 exit 0／removed true（2597ms），6500ms 鎖超過重試預算時 exit 1／removed false（6783ms），R6 保留時 exit 1／removed false（273ms）。三項斷言通過。typecheck exit 0；portableSplash、portableStartup 兩檔四項測試通過。
 
-2026-10-12 正式 20 指令綠燈與簽章是在本次 launcher 修正之前，不能當作此修正的簽章。此變更不涉及 shared IPC、遠端權限、資料格式或 UI；縮圈驗證涵蓋模板、實際 NSIS 鎖與重新建置的 EXE。新版 EXE 的正常退出清理仍待實際重建驗證。
+2026-10-12 正式 20 指令綠燈與簽章是在本次 launcher 修正之前，不能當作此修正的簽章。此變更不涉及 shared IPC、遠端權限、資料格式或 UI；縮圈驗證涵蓋模板、實際 NSIS 鎖與重新建置的 EXE。產品修正提交 42571ba 重建後，實際 EXE 兩次程式內 window.close 與一次 Windows CloseMainWindow 均正常 exit 0、own 解壓目錄已消失；原遠端與隔離斷言全部保留並通過。三次 raw JSON 見 portable-smoke-v040-fixed-api-1、api-2 與 native.json。
 
 導覽與完整指南檢查：此修正只影響程序退出後的本次暫存檔清理，入口、步驟、selector、畫面、配對與安全說明皆不受影響，無須改動凍結 UI。
 

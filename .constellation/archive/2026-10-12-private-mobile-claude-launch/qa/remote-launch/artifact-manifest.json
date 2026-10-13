@@ -1,0 +1,89 @@
+{
+  "version": "0.40.0",
+  "deliveredAt": "2026-10-13T01:35:05.487Z",
+  "codeCommit": "42571ba85ebc60b93e517f628181617bbca8e4eb",
+  "featureCommit": "a969f17dfa2a990de3cfd012fb1237617c80d226",
+  "source": "C:/polydesk-dist/Polydesk-0.40.0-portable.exe",
+  "delivery": "C:\\Users\\ennvoy.lin\\Documents\\polydesk-dist\\Polydesk-0.40.0-portable.exe",
+  "bytes": 96183549,
+  "sha256": "1C84D82F9A4508164EBAE1D19E49B90E0A6AE8EBBF370904FD1471423B56D88F",
+  "authenticodeStatus": "NotSigned",
+  "build": {
+    "command": "cmd /c npm run dist",
+    "exitCode": 0
+  },
+  "ship": {
+    "timestamp": "2026-10-12T14:51:15.167Z",
+    "seconds": 3396,
+    "signature": "ee8bc37f6d3110e2718b825ec4b236db6c7b53bc6703eb23c226a449b799c80a",
+    "commands": 20,
+    "unitFiles": 88,
+    "unitPassed": 723,
+    "unitSkipped": 0,
+    "e2ePassed": 128,
+    "e2eSkipped": 3,
+    "runResult": "C:/Users/ennvoy.lin/AppData/Local/Temp/polydesk-final-ship-2026-10-12T13-54-38-368Z.json",
+    "logPath": "C:\\Users\\ennvoy.lin\\AppData\\Local\\Temp\\polydesk-final-ship-2026-10-12T13-54-38-368Z.txt",
+    "scope": "Full source validation completed before launcher-only cleanup repair; signature does not cover that repair."
+  },
+  "focusedRepair": {
+    "typecheck": "exit 0",
+    "unitTests": "2 files / 4 passed",
+    "realNsisProbe": "3 cases passed",
+    "packagedRuns": [
+      {
+        "file": "portable-smoke-v040-fixed-api-1.json",
+        "startedAt": "2026-10-13T01:31:33.145Z",
+        "finishedAt": "2026-10-13T01:32:34.548Z",
+        "close": "window.close",
+        "wrapperExit": {
+          "code": 0,
+          "signal": null
+        },
+        "unpackRemoved": true
+      },
+      {
+        "file": "portable-smoke-v040-fixed-api-2.json",
+        "startedAt": "2026-10-13T01:32:43.824Z",
+        "finishedAt": "2026-10-13T01:33:43.807Z",
+        "close": "window.close",
+        "wrapperExit": {
+          "code": 0,
+          "signal": null
+        },
+        "unpackRemoved": true
+      },
+      {
+        "file": "portable-smoke-v040-fixed-native.json",
+        "startedAt": "2026-10-13T01:33:55.107Z",
+        "finishedAt": "2026-10-13T01:34:49.569Z",
+        "close": "Windows CloseMainWindow",
+        "wrapperExit": {
+          "code": 0,
+          "signal": null
+        },
+        "unpackRemoved": true
+      }
+    ]
+  },
+  "packagedSmoke": {
+    "defaultOff": true,
+    "rendererIsolation": {
+      "require": "undefined",
+      "process": "undefined"
+    },
+    "packagedIgnoresTestGateway": true,
+    "missingPrerequisiteFixture": "isolated empty ProgramFiles; no actual Tailscale configuration changed",
+    "missingTailscaleFailsClosed": "尚未安裝 Tailscale。請在電腦與手機安裝並登入同一個私人網路。",
+    "noRemoteListenerAfterFailure": true,
+    "version": "0.40.0",
+    "qrcodeBundled": true,
+    "nativePtyBundled": true,
+    "wrapperExit": {
+      "code": 0,
+      "signal": null
+    },
+    "unpackRemoved": true
+  },
+  "externalNetwork": "真 Tailscale 帳號及實體手機 4G 未實測；本機 HTTP／Electron 證據不代替該外部鏈路。"
+}

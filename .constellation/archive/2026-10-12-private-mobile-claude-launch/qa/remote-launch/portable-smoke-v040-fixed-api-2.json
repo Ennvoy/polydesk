@@ -1,0 +1,29 @@
+{
+  "exe": "C:/polydesk-dist/Polydesk-0.40.0-portable.exe",
+  "root": "C:\\Users\\ennvoy.lin\\AppData\\Local\\Temp\\pd-portable-040-DspRX4",
+  "startedAt": "2026-10-13T01:32:43.824Z",
+  "checks": {
+    "defaultOff": true,
+    "rendererIsolation": {
+      "require": "undefined",
+      "process": "undefined"
+    },
+    "packagedIgnoresTestGateway": true,
+    "missingPrerequisiteFixture": "isolated empty ProgramFiles; no actual Tailscale configuration changed",
+    "missingTailscaleFailsClosed": "尚未安裝 Tailscale。請在電腦與手機安裝並登入同一個私人網路。",
+    "noRemoteListenerAfterFailure": true,
+    "version": "0.40.0",
+    "qrcodeBundled": true,
+    "nativePtyBundled": true
+  },
+  "error": null,
+  "wrapperPid": 43156,
+  "marker": "C:\\Users\\ennvoy.lin\\AppData\\Local\\Temp\\pd-portable-040-DspRX4\\Temp\\nstB1AC.tmp\\app\\.polydesk-startup-ready",
+  "closeRequested": true,
+  "wrapperExit": {
+    "code": 0,
+    "signal": null
+  },
+  "unpackRemoved": true,
+  "finishedAt": "2026-10-13T01:33:43.807Z"
+}

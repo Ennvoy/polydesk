@@ -30,13 +30,16 @@ T-010、T-011（done）：完成 v0.40.0 私人手機啟動 Claude bypass，並�
 | 清理成功後 status 查詢積壓，按鈕長時間 busy | 真 GUI／Git 診斷 205 請求、觀測 138 待處理，execute 已 closed 後最後查詢仍等 68.384 秒；single-flight 修正、先紅回歸及原 GUI 案通過 |
 | 網址測試假設游標／畫面行與 hover 不變 | 真 buffer 換算中文／emoji 七格，讀實際 viewport 與尺寸，每輪真滑鼠移出再移入；三次原鏈路通過 |
 | 完全沒有 PTY 仍反覆讀全域 AI 紀錄，閒置 CPU 超標 | 原案單跑重現 10.244%；診斷窗讀 Claude 1383 次、Codex open 187 次與 JSON parse 2228 次；全無 PTY 早退、單輪復用工作區，先紅回歸與修後原案 0.8% 通過。profiler 有額外成本，26.1278% 僅用於定位，未當效能驗收值 |
+| portable 正常退出留下本次解壓主程式，單次刪除失敗仍 exit 0 | 有界重試及耗盡 exit 1；真 NSIS 短鎖、長鎖與 R6 保留三案通過；重建 EXE 兩次程式內關閉及一次 Windows 關閉均 exit 0、目錄消失，Standards 結案 |
 
-- 手機功能與原十項問題的 Standards、Spec、安全紅軍無未結案 finding；新增封裝清理的真 NSIS 縮圈證據通過，新版實際 EXE 待重建驗證；盲點審補上配對挑戰、realpath／撤銷、送出與就緒區分、持久未知結果四項工程預設，均已落實於規格與驗證。剩餘交付驗證：重建 EXE 並確認正常退出清理。
+- 手機功能與原十項問題的 Standards、Spec、安全紅軍無未結案 finding；新增封裝清理經真 NSIS 三情境與新版 EXE 三次正常退出驗證結案；盲點審補上配對挑戰、realpath／撤銷、送出與就緒區分、持久未知結果四項工程預設，均已落實於規格與驗證。下輪：無。
 - 導覽／指南已一起驗證入口、配對、期限、授權、錯誤及風險。SCM 修正不改入口、兩階段確認、安全選項、卡片文案或 selector；AI 監控修正不改徽章狀態與操作，現有指南保持適用，兩項核對結論記於修正附件。
-- 證據界限：未使用真 Tailscale 帳號或實體手機 4G，未宣稱該外部鏈路已驗證。測試 gateway 只在未打包 E2E 啟用。portable 依專案流程在提交與推送後建置，實際產物／封裝驗證結果另於本報告交付附記記錄。
+- 證據界限：未使用真 Tailscale 帳號或實體手機 4G，未宣稱該外部鏈路已驗證。測試 gateway 只在未打包 E2E 啟用。2026-10-13 交付 portable，對應產品提交 `42571ba`；96,183,549 bytes，SHA-256 `1C84D82F9A4508164EBAE1D19E49B90E0A6AE8EBBF370904FD1471423B56D88F`。來源與交付副本的大小、雜湊一致。實際 EXE 隔離啟動確認 v0.40.0、遠端預設關閉、renderer 無 Node API、忽略 E2E gateway；缺少 Tailscale 時顯示原因、停用且無 loopback 監聽。QR 依賴與 native PTY 隨包，正常退出後自己的解壓目錄已清理。
 - 2026-10-12 唯讀核對 [Tailscale 官方代理原始碼](https://github.com/tailscale/tailscale/blob/main/ipn/ipnlocal/serve.go)：HTTP 代理保留原 Host，TLS 請求設置 HTTPS 轉送標頭，Funnel 設置專用識別標頭。這支持標頭契約，仍不代替實際帳號與手機網路量測。
 
 ## 證據在哪
+
+- [交付 manifest](qa/remote-launch/artifact-manifest.json)、[真 portable 隔離啟動](qa/remote-launch/portable-smoke-v040.json)、[畫面](qa/remote-launch/portable-remote-default-off.png)。交付檔位於本機 `Documents/polydesk-dist/Polydesk-0.40.0-portable.exe`；文件補記不改產品程式，EXE 對應上述產品提交。
 
 - [portable 清理修正與證據界限](qa/remote-launch/portable-cleanup-fix.md)、同目錄三次初版失敗 JSON 與真 NSIS 紅綠 JSON；正式全量簽章先於這次封裝修正。
 
