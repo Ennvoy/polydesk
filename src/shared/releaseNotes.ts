@@ -15,6 +15,18 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.40.0',
+    date: '2026-10-12',
+    highlights: [
+      '手機透過私人 Tailscale HTTPS，一鍵在授權工作區新增 Claude bypass 分頁',
+      '遠端啟動會切換工作區、顯示終端機並還原縮小視窗；電腦仍須保持開機與 Poly 執行',
+      'QR code 或一次性代碼配對，核對手機識別碼後在電腦批准，可選 7 天、30 天或永久',
+      '工作區逐一授權、手機可隨時撤銷；遠端功能預設關閉，導覽與指南同步說明設定及 bypass 風險',
+      '離線不排隊、不自動重送；同一操作可查詢結果，避免重複新增分頁',
+      '修正 SCM 清理完成後進度查詢持續累積，避免操作按鈕長時間停留忙碌狀態',
+    ],
+  },
+  {
     version: '0.39.0',
     date: '2026-10-07',
     highlights: [

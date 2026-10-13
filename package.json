@@ -1,6 +1,6 @@
 {
   "name": "polydesk",
-  "version": "0.39.0",
+  "version": "0.40.0",
   "description": "Polydesk — 多工作區開發終端機（Electron skeleton）",
   "author": "Polydesk",
   "license": "MIT",
@@ -36,6 +36,7 @@
     "mammoth": "^1.12.0",
     "monaco-editor": "^0.55.1",
     "node-pty": "^1.1.0",
+    "qrcode": "1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-resizable-panels": "^4.12.0",
@@ -49,6 +50,7 @@
     "@electron/rebuild": "^4.0.6",
     "@playwright/test": "^1.61.1",
     "@types/node": "^22.0.0",
+    "@types/qrcode": "1.5.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",

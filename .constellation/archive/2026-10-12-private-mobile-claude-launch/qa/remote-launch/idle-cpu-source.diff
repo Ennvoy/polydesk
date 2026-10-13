@@ -1,0 +1,177 @@
+﻿diff --git a/src/main/monitor/ClaudeStatusMonitor.test.ts b/src/main/monitor/ClaudeStatusMonitor.test.ts
+index 121bfb2..0982b92 100644
+--- a/src/main/monitor/ClaudeStatusMonitor.test.ts
++++ b/src/main/monitor/ClaudeStatusMonitor.test.ts
+@@ -1,6 +1,6 @@
+ // ClaudeStatusMonitor（hook 版）單測：注入 readSessions + no-op watch，直接呼 recompute 驗證
+ // 聚合（cwd→工作區）、pidsOf 閘門（關終端機→idle）、變才 emit、running→待確認 通知。
+-import { describe, it, expect } from 'vitest';
++import { describe, it, expect, vi } from 'vitest';
+ import { ClaudeStatusMonitor } from './ClaudeStatusMonitor';
+ import type { EventChannels } from '../../shared/ipc';
+ import type { Workspace } from '../../shared/types';
+@@ -227,4 +227,121 @@ describe('ClaudeStatusMonitor（hook 版）', () => {
+     expect(emitted).toContainEqual({ wsId: 'a', tool: 'codex', status: { state: 'done' } });
+   });
+
++  it('十個空 PTY 工作區不掃程序，也不讀取任何全域 session 來源', async () => {
++    const workspaces = { list: () => wsList(Array.from({ length: 10 }, (_, i) => ({ id: `idle-${i}`, path: `C:/idle-${i}` }))) };
++    const readSessions = vi.fn(async (): Promise<SessionStatus[]> => []);
++    const readCodex = vi.fn(async (): Promise<SessionStatus[]> => []);
++    const readAgy = vi.fn(async (): Promise<SessionStatus[]> => []);
++    const scanPids = vi.fn(async () => ({ claude: new Set<number>(), codex: new Set<number>(), agy: new Set<number>() }));
++    const emitted: StatusEvent[] = [];
++    const mon = new ClaudeStatusMonitor(workspaces, { pidsOf: () => [] }, (p) => emitted.push(p), {
++      readSessions, readCodex, readAgy, scanPids, watchFactory: noWatch,
++    });
++    await mon.recompute();
++    await mon.recompute();
++    expect(scanPids).not.toHaveBeenCalled();
++    expect(readSessions).not.toHaveBeenCalled();
++    expect(readCodex).not.toHaveBeenCalled();
++    expect(readAgy).not.toHaveBeenCalled();
++    expect(emitted).toEqual([]);
++  });
++
++  it('關閉最後一個 PTY 後，三種工具同步轉 idle 且不再讀來源', async () => {
++    let pids = [100];
++    const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
++    const source = (tool: SessionStatus['tool']): SessionStatus[] => [{ sessionId: tool ?? 'claude', cwd: 'C:/p/a', state: 'working', ts: Date.now(), tool }];
++    const readSessions = vi.fn(async () => source('claude'));
++    const readCodex = vi.fn(async () => source('codex'));
++    const readAgy = vi.fn(async () => source('agy'));
++    const scanPids = vi.fn(async () => ({ claude: new Set([100]), codex: new Set([100]), agy: new Set([100]) }));
++    const emitted: StatusEvent[] = [];
++    const mon = new ClaudeStatusMonitor(workspaces, { pidsOf: () => pids }, (p) => emitted.push(p), {
++      readSessions, readCodex, readAgy, scanPids, processScanMs: 0, watchFactory: noWatch,
++    });
++    await mon.recompute();
++    await new Promise((resolve) => setTimeout(resolve, 0));
++    expect(mon.snapshot().filter((p) => p.status.state === 'running')).toHaveLength(3);
++    pids = [];
++    readSessions.mockClear(); readCodex.mockClear(); readAgy.mockClear(); scanPids.mockClear();
++    await mon.recompute();
++    expect(mon.snapshot()).toHaveLength(3);
++    expect(mon.snapshot().every((p) => p.status.state === 'idle')).toBe(true);
++    expect(readSessions).not.toHaveBeenCalled();
++    expect(readCodex).not.toHaveBeenCalled();
++    expect(readAgy).not.toHaveBeenCalled();
++    expect(scanPids).not.toHaveBeenCalled();
++  });
++
++  it('閒置後新開 PTY 仍恢復掃描與真實 session 狀態', async () => {
++    let pids: number[] = [];
++    const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) };
++    const readSessions = vi.fn(async (): Promise<SessionStatus[]> => [{ sessionId: 'new', cwd: 'C:/p/a', state: 'working', ts: Date.now() }]);
++    const scanPids = vi.fn(async () => ({ claude: new Set([100]), codex: new Set<number>(), agy: new Set<number>() }));
++    const emitted: StatusEvent[] = [];
++    const mon = new ClaudeStatusMonitor(workspaces, { pidsOf: () => pids }, (p) => emitted.push(p), {
++      readSessions, readCodex: async () => [], readAgy: async () => [], scanPids, processScanMs: 0, watchFactory: noWatch,
++    });
++    await mon.recompute();
++    pids = [100];
++    await mon.recompute();
++    expect(readSessions).toHaveBeenCalled();
++    expect(scanPids).toHaveBeenCalled();
++    expect(emitted).toContainEqual({ wsId: 'a', tool: 'claude', status: { state: 'running' } });
++  });
++
++  it('混合工作區中有 PTY 者維持監控，沒有 PTY 者不受殘留 session 污染', async () => {
++    const workspaces = { list: () => wsList([{ id: 'a', path: 'C:/p/a' }, { id: 'b', path: 'C:/p/b' }]) };
++    const emitted: StatusEvent[] = [];
++    const mon = new ClaudeStatusMonitor(workspaces, { pidsOf: (id) => id === 'a' ? [100] : [] }, (p) => emitted.push(p), {
++      readSessions: async () => ['a', 'b'].map((id) => ({ sessionId: id, cwd: `C:/p/${id}`, state: 'working', ts: Date.now() })),
++      readCodex: async () => [], readAgy: async () => [],
++      scanPids: async () => ({ claude: new Set([100]), codex: new Set<number>(), agy: new Set<number>() }),
++      watchFactory: noWatch,
++    });
++    await mon.recompute();
++    expect(emitted).toContainEqual({ wsId: 'a', tool: 'claude', status: { state: 'running' } });
++    expect(emitted.some((p) => p.wsId === 'b' && p.status.state !== 'idle')).toBe(false);
++  });
++
++  it('非同步來源讀取期間關閉 PTY，完成後須重新檢查存活而不發布 running', async () => {
++    let pids = [100];
++    let delayed = false;
++    let accept!: (sessions: SessionStatus[]) => void;
++    let markStarted!: () => void;
++    const started = new Promise<void>((resolve) => { markStarted = resolve; });
++    const pending = new Promise<SessionStatus[]>((resolve) => { accept = resolve; });
++    const emitted: StatusEvent[] = [];
++    const mon = new ClaudeStatusMonitor({ list: () => wsList([{ id: 'a', path: 'C:/p/a' }]) }, { pidsOf: () => pids }, (p) => emitted.push(p), {
++      readSessions: async () => {
++        if (!delayed) return [{ sessionId: 'active', cwd: 'C:/p/a', state: 'working' as const, ts: Date.now() }];
++        markStarted(); return pending;
++      }, readCodex: async () => [], readAgy: async () => [],
++      scanPids: async () => ({ claude: new Set([100]), codex: new Set<number>(), agy: new Set<number>() }),
++      watchFactory: noWatch,
++    });
++    await mon.recompute();
++    await new Promise((resolve) => setTimeout(resolve, 0));
++    expect(mon.snapshot()).toContainEqual({ wsId: 'a', tool: 'claude', status: { state: 'running' } });
++    emitted.length = 0;
++    delayed = true;
++    const operation = mon.recompute();
++    await started;
++    pids = [];
++    accept([{ sessionId: 'late', cwd: 'C:/p/a', state: 'working', ts: Date.now() }]);
++    await operation;
++    expect(emitted.some((p) => p.status.state === 'running')).toBe(false);
++    expect(mon.snapshot()).toContainEqual({ wsId: 'a', tool: 'claude', status: { state: 'idle' } });
++  });
++
++  it('單輪重用工作區快照，不因每個新 session 重做磁碟存在檢查', async () => {
++    const list = vi.fn(() => wsList([{ id: 'a', path: 'C:/p/a' }]));
++    const mon = new ClaudeStatusMonitor({ list }, { pidsOf: () => [100] }, () => undefined, {
++      readSessions: async () => Array.from({ length: 30 }, (_, i) => ({ sessionId: `s-${i}`, cwd: 'C:/p/a', state: 'working' as const, ts: Date.now() })),
++      readCodex: async () => [], readAgy: async () => [],
++      scanPids: async () => ({ claude: new Set<number>(), codex: new Set<number>(), agy: new Set<number>() }),
++      watchFactory: noWatch,
++    });
++    await mon.recompute();
++    expect(list).toHaveBeenCalledTimes(1);
++  });
+ });
+diff --git a/src/main/monitor/ClaudeStatusMonitor.ts b/src/main/monitor/ClaudeStatusMonitor.ts
+index 96f1d89..81d9a51 100644
+--- a/src/main/monitor/ClaudeStatusMonitor.ts
++++ b/src/main/monitor/ClaudeStatusMonitor.ts
+@@ -215,6 +215,14 @@ export class ClaudeStatusMonitor {
+    * 掃描失敗保留上次快取（fail-open，防「掃描逾時→全部誤判 idle→徽章閃爍」）。
+    */
+   private async runOnce(): Promise<void> {
++    const workspaces = this.workspaces.list();
++    // 沒有納管 PTY 時三種工具都只能是 idle；不讀全域歷史 session，也不掃整機程序。
++    if (!workspaces.some((ws) => this.pty.pidsOf(ws.id).length > 0)) {
++      for (const ws of workspaces) {
++        for (const tool of AI_TOOLS) this.applyState(ws.id, tool, 'idle');
++      }
++      return;
++    }
+     const scan = this.maybeScanPids(false);
+     if (scan && !this.scannedOnce) await scan; // 冷啟動首輪：等真實 pid 再聚合
+     const now = Date.now();
+@@ -227,7 +235,7 @@ export class ClaudeStatusMonitor {
+     const sessions = [...claudeSessions, ...codexSessions, ...agySessions];
+     // Codex rollout / Agy log 尚未出現活動前補一筆 done，代表 CLI 已開但尚未送出任務。
+     // 有 session 時以事件的 working/awaiting/done 為準，不再把「程序存在」等同「執行中」。
+-    for (const ws of this.workspaces.list()) {
++    for (const ws of workspaces) {
+       const ptyPids = this.pty.pidsOf(ws.id);
+       const hasCodex = ptyPids.some((pid) => this.codexShellPids.has(pid));
+       const hasCodexSession = codexSessions.some((s) => matchWorkspace(s.cwd, [ws]) === ws.id);
+@@ -253,12 +261,12 @@ export class ClaudeStatusMonitor {
+     for (const s of sessions) {
+       if (this.seenSessions.has(s.sessionId)) continue;
+       this.seenSessions.add(s.sessionId);
+-      const wsId = matchWorkspace(s.cwd, this.workspaces.list());
++      const wsId = matchWorkspace(s.cwd, workspaces);
+       if (wsId && !isAlive(wsId, s.tool ?? 'claude')) wantForce = true;
+     }
+     if (this.seenSessions.size > 500) this.seenSessions.clear(); // 防無限長大（清掉只多掃一次，無害）
+     if (wantForce) this.maybeScanPids(true);
+-    const byWsTool = aggregateByTool(this.workspaces.list(), sessions, isAlive, now);
++    const byWsTool = aggregateByTool(workspaces, sessions, isAlive, now);
+     for (const [wsId, toolMap] of byWsTool) {
+       for (const [tool, state] of toolMap) this.applyState(wsId, tool, state);
+     }

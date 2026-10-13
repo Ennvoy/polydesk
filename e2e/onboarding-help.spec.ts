@@ -62,6 +62,11 @@ test('首次導覽會保存進度、續接並在完成後不再自動出現', as
     for (const count of ['04 / 07', '05 / 07', '06 / 07', '07 / 07']) {
       await resumed.page.getByRole('button', { name: '下一步' }).click();
       await expect(resumedTour).toContainText(count);
+      if (count === '06 / 07') {
+        await expect(resumedTour).toContainText('手機遠端啟動');
+        await expect(resumedTour).toContainText('僅授權的工作區');
+        await expect(resumedTour).toContainText('bypass 只適用於完全信任的工作區');
+      }
     }
     await resumed.page.getByRole('button', { name: '完成' }).click();
     await expect(resumedTour).toHaveCount(0);
@@ -144,6 +149,14 @@ test('說明與設定共用入口可搜尋完整指南，手動導覽不改寫�
     await expect(page.getByText('已載入的提交會保留。按「重試載入」重讀失敗的那一批。', { exact: true })).toBeVisible();
     await expect(page.getByText('偵測到分支或提交變動時，清單會從最新的 20 筆重新載入。', { exact: false })).toBeVisible();
     await expect(page.getByText('已顯示全部提交', { exact: true })).toBeVisible();
+    await page.getByLabel('搜尋使用說明').fill('手機遠端啟動');
+    await expect(page.getByRole('heading', { name: '手機遠端啟動 Claude bypass', exact: true })).toBeVisible();
+    await expect(page.getByText('離線不排程、不自動重送啟動。', { exact: false })).toBeVisible();
+    await expect(page.getByText('結果不確定', { exact: true })).toBeVisible();
+    await expect(page.getByText('先查看電腦再決定建立新操作', { exact: false })).toBeVisible();
+    await expect(page.getByText('到期／撤銷／路徑改變', { exact: true })).toBeVisible();
+    await expect(page.getByText('bypass 略過權限確認，並不是工作區沙箱', { exact: false })).toBeVisible();
+    await expect(page.getByText('已啟動的 Claude 不會因撤銷而強制結束。', { exact: false })).toBeVisible();
     await page.getByLabel('搜尋使用說明').fill('');
     await page.getByLabel('使用說明分類').getByRole('button', { name: /問題排除/ }).click();
     await expect(page.getByText('信任、確認與安全限制', { exact: true })).toBeVisible();

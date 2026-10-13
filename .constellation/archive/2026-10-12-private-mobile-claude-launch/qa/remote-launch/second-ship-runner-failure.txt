@@ -1,0 +1,54 @@
+機器鎖無人佔用，開跑。
+驗證失敗：`cmd /c npm run e2e -- --workers=1 --shard=6/12 --grep-invert "REQ-PERF-001"`（exit 1，158s）
+以下指令因前一條紅燈未執行：`cmd /c npm run e2e -- --workers=1 --shard=7/12 --grep-invert "REQ-PERF-001"`、`cmd /c npm run e2e -- --workers=1 --shard=8/12 --grep-invert "REQ-PERF-001"`、`cmd /c npm run e2e -- --workers=1 --shard=9/12 --grep-invert "REQ-PERF-001"`、`cmd /c npm run e2e -- --workers=1 --shard=10/12 --grep-invert "REQ-PERF-001"`、`cmd /c npm run e2e -- --workers=1 --shard=11/12 --grep-invert "REQ-PERF-001"`、`cmd /c npm run e2e -- --workers=1 --shard=12/12 --grep-invert "REQ-PERF-001"`
+--- stdout（最後 40 行） ---
+    "p95": 20,
+    "n": 20,
+    "budget": 50
+  },
+  "idleCpu": {
+    "pct": 14.3,
+    "workspaces": 10,
+    "windowMs": 18000,
+    "budget": 10
+  }
+}
+  x  10 e2e\perf.spec.ts:156:5 › REQ-MON-006 N=10 背景閒置監控 CPU 低水位 (29.5s)
+  ok 11 e2e\rail-resize.spec.ts:11:5 › 工作區欄可拖曳調寬 + 重啟持久化 (18.3s)
+
+
+  1) e2e\perf.spec.ts:156:5 › REQ-MON-006 N=10 背景閒置監控 CPU 低水位 ──────────────────────────────────────
+
+    Error: 閒置監控 CPU%（單核）
+
+    expect(received).toBeLessThan(expected)
+
+    Expected: < 10
+    Received:   14.322222222222223
+
+      174 |   rmSync(userData, { recursive: true, force: true });
+      175 |
+    > 176 |   expect(cpuPct, '閒置監控 CPU%（單核）').toBeLessThan(BUDGET.idleCpuPct);
+          |                                   ^
+      177 | });
+      178 |
+        at C:\polydesk-remote-dev\e2e\perf.spec.ts:176:35
+
+    Error Context: test-results\perf-REQ-MON-006-N-10-背景閒置監控-CPU-低水位\error-context.md
+
+    Error Context: test-results\perf-REQ-MON-006-N-10-背景閒置監控-CPU-低水位\error-context.md
+
+  1 failed
+    e2e\perf.spec.ts:156:5 › REQ-MON-006 N=10 背景閒置監控 CPU 低水位 ───────────────────────────────────────
+  10 passed (2.6m)
+
+--- stderr（最後 40 行） ---
+(node:21616) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:28800) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+完整輸出：C:\Users\ennvoy.lin\AppData\Local\Temp\constellation-verify\0b9fd26c7067-ship.log
+未寫入驗證證據，這一輪不能出貨。
+
+FORMAL SHIP RESULT {"startedAt":"2026-10-12T12:47:43.878Z","runner":"C:/Users/ennvoy.lin/Desktop/Constellation/gates/verify-runner.mjs","args":["--scope","ship","--cwd","C:/polydesk-remote-dev"],"exitCode":1,"durationMs":2570595,"logPath":"C:\\Users\\ennvoy.lin\\AppData\\Local\\Temp\\polydesk-final-ship-2026-10-12T12-47-43-864Z.txt","scope":"Actual official ship runner, all configured commands from beginning"}

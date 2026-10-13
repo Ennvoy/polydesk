@@ -1,0 +1,312 @@
+diff --git a/src/renderer/components/SourceControl/SourceControlPanel.tsx b/src/renderer/components/SourceControl/SourceControlPanel.tsx
+index c8f1ce1..5844e20 100644
+--- a/src/renderer/components/SourceControl/SourceControlPanel.tsx
++++ b/src/renderer/components/SourceControl/SourceControlPanel.tsx
+@@ -30,6 +30,7 @@ import type {
+ } from '../../../shared/types';
+ import type { GitCleanupJournalSummary, GitCleanupPreviewResult } from '../../../shared/gitCleanup';
+ import { cleanupCheckpointText } from './cleanupFeedback';
++import { startCleanupProgressPolling } from './cleanupProgressPolling';
+ import type { CleanupFeedback, CleanupFeedbackApi } from './cleanupFeedback';
+ import { DEFAULT_BACKGROUND_POLL_MS, FETCH_COOLDOWN_MS } from '../../../shared/constants';
+ import { shouldAutoFetch } from './fetchCooldown';
+@@ -280,6 +281,13 @@ export function SourceControlPanel(): React.JSX.Element {
+   const [cleanupJournals, setCleanupJournals] = useState<GitCleanupJournalSummary[]>([]);
+   const [cleanupFeedback, setCleanupFeedback] = useState<CleanupFeedback | null>(null);
+   const cleanupStepsRef = useRef<string[]>([]); // journal 關閉後查不到 checkpoints，過程中逐次累積才能在成功後列出做過的事
++  const cleanupProgressGenerationRef = useRef(0);
++  const cleanupProgressStopRef = useRef<(() => void) | null>(null);
++  useLayoutEffect(() => () => {
++    cleanupProgressGenerationRef.current += 1;
++    cleanupProgressStopRef.current?.();
++    cleanupProgressStopRef.current = null;
++  }, [wsId]);
+   const [branchGroupsOpen, setBranchGroupsOpen] = useState<Record<BranchKind, boolean>>({ local: true, remote: true });
+   const [branchMenu, setBranchMenu] = useState<BranchMenuState | null>(null);
+   const [hover, setHover] = useState<{ c: GitLogEntry; top: number; left: number } | null>(null); // PE-1 hover 卡
+@@ -744,17 +752,20 @@ export function SourceControlPanel(): React.JSX.Element {
+       setCleanupJournals(result.journals);
+       if (result.globalBlocked) setError('清理儲存區有無法歸屬的狀態；新的破壞性清理已暫停。');
+     } catch (cleanupError) {
+-      setError(`無法讀取清理待辦：${errText(cleanupError)}`);
++      if (isCurrent()) setError(`無法讀取清理待辦：${errText(cleanupError)}`);
+     }
+-  }, [wsId]);
++  }, [wsId, isCurrent]);
+
+   const withCleanupProgress = useCallback(async <T,>(branch: string, operation: () => Promise<T>): Promise<T> => {
++    if (!isCurrent()) return operation();
++    const generation = ++cleanupProgressGenerationRef.current;
++    cleanupProgressStopRef.current?.();
+     cleanupStepsRef.current = [];
+-    let settled = false;
+     setCleanupFeedback({ kind: 'running', branch, step: '正在建立安全清理租約…' });
+-    const timer = window.setInterval(() => {
+-      void ipc.git.cleanupStatus({ wsId: wsId ?? undefined }).then((statusResult) => {
+-        if (settled) return; // 操作已結束：清掉 timer 前發出的查詢不得覆蓋成功／失敗終態
++    const stop = startCleanupProgressPolling({
++      request: () => ipc.git.cleanupStatus({ wsId: wsId ?? undefined }),
++      isCurrent: () => isCurrent() && generation === cleanupProgressGenerationRef.current,
++      onStatus: (statusResult) => {
+         const journal = statusResult.journals.find((entry) => entry.phase !== 'prepared');
+         for (const checkpoint of journal?.checkpoints ?? []) {
+           if (!cleanupStepsRef.current.includes(checkpoint)) cleanupStepsRef.current.push(checkpoint);
+@@ -767,15 +778,16 @@ export function SourceControlPanel(): React.JSX.Element {
+             ? `步驟 ${cleanupStepsRef.current.length}：${cleanupCheckpointText(latest)}，正在進行下一步…`
+             : '正在執行第一個不可逆步驟…',
+         });
+-      }).catch(() => undefined);
+-    }, 250);
++      },
++    });
++    cleanupProgressStopRef.current = stop;
+     try {
+       return await operation();
+     } finally {
+-      settled = true;
+-      window.clearInterval(timer);
++      stop();
++      if (generation === cleanupProgressGenerationRef.current) cleanupProgressStopRef.current = null;
+     }
+-  }, [wsId]);
++  }, [wsId, isCurrent]);
+
+   /** 已完成步驟的白話清單（成功摘要用）。 */
+   const cleanupDoneSteps = useCallback((): string[] => cleanupStepsRef.current.map(cleanupCheckpointText), []);
+@@ -792,13 +804,17 @@ export function SourceControlPanel(): React.JSX.Element {
+   // worktree 分頁的清理與分支清理共用同一張回饋卡（卡片渲染在分頁上方，兩邊都看得到）。
+   const cleanupApi: CleanupFeedbackApi = {
+     run: withCleanupProgress,
+-    done: (branch) => setCleanupFeedback({ kind: 'done', branch, did: cleanupDoneSteps() }),
+-    fail: (branch, message, journalId) => setCleanupFeedback({
+-      kind: 'failed',
+-      branch,
+-      message,
+-      ...(journalId ? { journalId } : {}),
+-    }),
++    done: (branch) => {
++      if (isCurrent()) setCleanupFeedback({ kind: 'done', branch, did: cleanupDoneSteps() });
++    },
++    fail: (branch, message, journalId) => {
++      if (isCurrent()) setCleanupFeedback({
++        kind: 'failed',
++        branch,
++        message,
++        ...(journalId ? { journalId } : {}),
++      });
++    },
+   };
+
+   useEffect(() => {
+@@ -1160,6 +1176,7 @@ export function SourceControlPanel(): React.JSX.Element {
+           remoteTargets,
+         },
+       }));
++      if (!isCurrent()) return;
+       if (!result.ok) {
+         const endpointDetails = result.remote?.endpoints
+           .filter((endpoint) => endpoint.status !== 'deleted' && endpoint.status !== 'already-completed' && endpoint.status !== 'skipped')
+@@ -1186,6 +1203,7 @@ export function SourceControlPanel(): React.JSX.Element {
+     if (!wsId) return;
+     const branch = cleanupJournals.find((entry) => entry.journalId === journalId)?.branch ?? '未知分支';
+     const result = await withCleanupProgress(branch, () => ipc.git.cleanupResume({ wsId, journalId }));
++    if (!isCurrent()) return;
+     if (!result.ok) setCleanupFeedback({ kind: 'failed', branch, message: result.error, journalId });
+     else {
+       setCleanupFeedback({ kind: 'done', branch, did: cleanupDoneSteps() });
+diff --git a/src/shared/releaseNotes.ts b/src/shared/releaseNotes.ts
+index 013de38..de21227 100644
+--- a/src/shared/releaseNotes.ts
++++ b/src/shared/releaseNotes.ts
+@@ -14,6 +14,18 @@ export interface ReleaseNote {
+
+ /** 由新到舊排列；[0] 即目前版本。 */
+ export const RELEASE_NOTES: ReleaseNote[] = [
++  {
++    version: '0.40.0',
++    date: '2026-10-12',
++    highlights: [
++      '手機透過私人 Tailscale HTTPS，一鍵在授權工作區新增 Claude bypass 分頁',
++      '遠端啟動會切換工作區、顯示終端機並還原縮小視窗；電腦仍須保持開機與 Poly 執行',
++      'QR code 或一次性代碼配對，核對手機識別碼後在電腦批准，可選 7 天、30 天或永久',
++      '工作區逐一授權、手機可隨時撤銷；遠端功能預設關閉，導覽與指南同步說明設定及 bypass 風險',
++      '離線不排隊、不自動重送；同一操作可查詢結果，避免重複新增分頁',
++      '修正 SCM 清理完成後進度查詢持續累積，避免操作按鈕長時間停留忙碌狀態',
++    ],
++  },
+   {
+     version: '0.39.0',
+     date: '2026-10-07',
+diff --git a/src/renderer/components/SourceControl/cleanupProgressPolling.ts b/src/renderer/components/SourceControl/cleanupProgressPolling.ts
+new file mode 100644
+--- /dev/null
++++ b/src/renderer/components/SourceControl/cleanupProgressPolling.ts
+@@ -0,0 +1,38 @@
++interface CleanupProgressPollingOptions<T> {
++  request: () => Promise<T>;
++  onStatus: (status: T) => void;
++  isCurrent: () => boolean;
++  intervalMs?: number;
++}
++
++export function startCleanupProgressPolling<T>({
++  request,
++  onStatus,
++  isCurrent,
++  intervalMs = 250,
++}: CleanupProgressPollingOptions<T>): () => void {
++  let active = true;
++  let timer: ReturnType<typeof setTimeout> | undefined;
++  const current = (): boolean => active && isCurrent();
++  const poll = async (): Promise<void> => {
++    timer = undefined;
++    if (!current()) { active = false; return; }
++    try {
++      const status = await request();
++      if (current()) onStatus(status);
++    } catch {
++      // 進度查詢失敗不打斷清理；仍由原操作及最後一次狀態讀取呈現結果／錯誤。
++    } finally {
++      // 本次查詢結束才安排下一次，避免進度查詢堆積在 main 的 claims 佇列。
++      if (current()) schedule();
++      else active = false;
++    }
++  };
++  const schedule = (): void => { timer = setTimeout(() => void poll(), intervalMs); };
++  schedule();
++  return () => {
++    active = false;
++    if (timer !== undefined) clearTimeout(timer);
++    timer = undefined;
++  };
++}
+
+diff --git a/src/renderer/components/SourceControl/cleanupProgressPolling.test.ts b/src/renderer/components/SourceControl/cleanupProgressPolling.test.ts
+new file mode 100644
+--- /dev/null
++++ b/src/renderer/components/SourceControl/cleanupProgressPolling.test.ts
+@@ -0,0 +1,124 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { startCleanupProgressPolling } from './cleanupProgressPolling';
++
++function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (error: Error) => void } {
++  let resolve!: (value: T) => void;
++  let reject!: (error: Error) => void;
++  const promise = new Promise<T>((accept, fail) => { resolve = accept; reject = fail; });
++  return { promise, resolve, reject };
++}
++
++describe('清理進度輪詢', () => {
++  beforeEach(() => vi.useFakeTimers());
++  afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
++
++  it('慢查詢最多保留一筆未完成請求，最後一次狀態讀取不會排在大量舊請求後方', async () => {
++    const pending = deferred<string>();
++    const request = vi.fn(() => pending.promise);
++    const onStatus = vi.fn();
++    const stop = startCleanupProgressPolling({ request, onStatus, isCurrent: () => true });
++    try {
++      await vi.advanceTimersByTimeAsync(10_000);
++      expect(request).toHaveBeenCalledTimes(1);
++      stop();
++      const finalStatus = request();
++      expect(request).toHaveBeenCalledTimes(2); // 一筆舊進度查詢，加上呼叫端最後一次狀態讀取。
++      pending.resolve('closed');
++      await expect(finalStatus).resolves.toBe('closed');
++      expect(onStatus).not.toHaveBeenCalled();
++      await vi.advanceTimersByTimeAsync(10_000);
++      expect(request).toHaveBeenCalledTimes(2);
++    } finally { stop(); }
++  });
++
++  it('成功回覆更新進度後，再等完整間隔才查詢下一次', async () => {
++    const pending = deferred<string>();
++    const request = vi.fn(() => pending.promise);
++    const onStatus = vi.fn();
++    const stop = startCleanupProgressPolling({ request, onStatus, isCurrent: () => true });
++    try {
++      await vi.advanceTimersByTimeAsync(250);
++      pending.resolve('tracking-deleted');
++      await vi.advanceTimersByTimeAsync(0);
++      expect(onStatus).toHaveBeenCalledWith('tracking-deleted');
++      await vi.advanceTimersByTimeAsync(249);
++      expect(request).toHaveBeenCalledTimes(1);
++      await vi.advanceTimersByTimeAsync(1);
++      expect(request).toHaveBeenCalledTimes(2);
++    } finally { stop(); }
++  });
++
++  it('查詢失敗會釋放未完成狀態，下一輪仍能成功更新進度', async () => {
++    const request = vi.fn<() => Promise<string>>()
++      .mockRejectedValueOnce(new Error('暫時讀取失敗'))
++      .mockResolvedValue('endpoint-deleted');
++    const onStatus = vi.fn();
++    const stop = startCleanupProgressPolling({ request, onStatus, isCurrent: () => true });
++    try {
++      await vi.advanceTimersByTimeAsync(250);
++      expect(request).toHaveBeenCalledTimes(1);
++      expect(onStatus).not.toHaveBeenCalled();
++      await vi.advanceTimersByTimeAsync(250);
++      expect(request).toHaveBeenCalledTimes(2);
++      expect(onStatus).toHaveBeenCalledWith('endpoint-deleted');
++    } finally { stop(); }
++  });
++
++  it('操作結束或取消後忽略遲到回覆，不再發出新查詢', async () => {
++    const pending = deferred<string>();
++    const request = vi.fn(() => pending.promise);
++    const onStatus = vi.fn();
++    const stop = startCleanupProgressPolling({ request, onStatus, isCurrent: () => true });
++    await vi.advanceTimersByTimeAsync(250);
++    stop(); stop();
++    pending.resolve('old-running');
++    await vi.advanceTimersByTimeAsync(1000);
++    expect(onStatus).not.toHaveBeenCalled();
++    expect(request).toHaveBeenCalledTimes(1);
++  });
++
++  it('工作區切換或面板卸載會在發送前停止輪詢', async () => {
++    let current = true;
++    const request = vi.fn(async () => 'running');
++    const onStatus = vi.fn();
++    const stop = startCleanupProgressPolling({ request, onStatus, isCurrent: () => current });
++    try {
++      current = false;
++      await vi.advanceTimersByTimeAsync(1000);
++      expect(request).not.toHaveBeenCalled();
++      expect(onStatus).not.toHaveBeenCalled();
++    } finally { stop(); }
++  });
++
++  it('舊操作的遲到回覆不能覆寫新一輪進度', async () => {
++    let generation = 1;
++    const pending = deferred<string>();
++    const request = vi.fn(() => pending.promise);
++    const onStatus = vi.fn();
++    const stop = startCleanupProgressPolling({ request, onStatus, isCurrent: () => generation === 1 });
++    try {
++      await vi.advanceTimersByTimeAsync(250);
++      generation = 2;
++      pending.resolve('old-running');
++      await vi.advanceTimersByTimeAsync(1000);
++      expect(onStatus).not.toHaveBeenCalled();
++      expect(request).toHaveBeenCalledTimes(1);
++    } finally { stop(); }
++  });
++
++  it('操作失敗仍由 finally 停止進度，即使舊查詢稍後也失敗', async () => {
++    const pending = deferred<string>();
++    const request = vi.fn(() => pending.promise);
++    const onStatus = vi.fn();
++    const stop = startCleanupProgressPolling({ request, onStatus, isCurrent: () => true });
++    await vi.advanceTimersByTimeAsync(250);
++    const operation = async (): Promise<void> => {
++      try { throw new Error('清理失敗'); } finally { stop(); }
++    };
++    await expect(operation()).rejects.toThrow('清理失敗');
++    pending.reject(new Error('遲到查詢失敗'));
++    await vi.advanceTimersByTimeAsync(1000);
++    expect(request).toHaveBeenCalledTimes(1);
++    expect(onStatus).not.toHaveBeenCalled();
++  });
++});

@@ -48,9 +48,19 @@ import type {
   GitCleanupImportEvidenceRequest,
   GitCleanupStatusResult,
 } from './gitCleanup';
+import type { RemoteStatus, RemoteResult, RemotePairChallenge, RemoteLaunchEvent, PairLifetime } from './remoteLaunch';
 
 /** invoke 通道：renderer 經 preload 呼叫、main `ipcMain.handle` 回應（一次性 Promise）。 */
 export interface InvokeChannels {
+  'remote:status': { req: void; res: RemoteStatus };
+  'remote:enable': { req: void; res: RemoteResult };
+  'remote:disable': { req: void; res: RemoteResult };
+  'remote:challenge': { req: void; res: RemotePairChallenge | { error: string } };
+  'remote:approve': { req: { id: string; lifetime: PairLifetime }; res: RemoteResult };
+  'remote:reject': { req: { id: string }; res: RemoteResult };
+  'remote:revoke': { req: { id: string }; res: RemoteResult };
+  'remote:allowWorkspace': { req: { wsId: string; allowed: boolean }; res: RemoteResult };
+  'remote:ready': { req: { opId: string; termId: string }; res: RemoteResult };
   // 應用程式層操作
   'app:rendererReady': {
     req: void;
@@ -273,6 +283,7 @@ export interface StreamChannels {
 
 /** event 通道：main 主動 `webContents.send` 推播；payload 一律帶 wsId 以路由面板。 */
 export interface EventChannels {
+  'remote:launch': RemoteLaunchEvent;
   /** Electron 攔截 Ctrl/Cmd+V 後通知 renderer；EditorGroup 僅在 Monaco 有文字焦點時處理。 */
   'editor:pasteShortcut': Record<string, never>;
   /** 桌面通知點擊 → main 聚焦視窗後叫 renderer 切到該工作區（PE-2：通知可回跳）。 */

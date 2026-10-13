@@ -30,6 +30,7 @@ import type {
 } from '../../../shared/types';
 import type { GitCleanupJournalSummary, GitCleanupPreviewResult } from '../../../shared/gitCleanup';
 import { cleanupCheckpointText } from './cleanupFeedback';
+import { startCleanupProgressPolling } from './cleanupProgressPolling';
 import type { CleanupFeedback, CleanupFeedbackApi } from './cleanupFeedback';
 import { DEFAULT_BACKGROUND_POLL_MS, FETCH_COOLDOWN_MS } from '../../../shared/constants';
 import { shouldAutoFetch } from './fetchCooldown';
@@ -280,6 +281,13 @@ export function SourceControlPanel(): React.JSX.Element {
   const [cleanupJournals, setCleanupJournals] = useState<GitCleanupJournalSummary[]>([]);
   const [cleanupFeedback, setCleanupFeedback] = useState<CleanupFeedback | null>(null);
   const cleanupStepsRef = useRef<string[]>([]); // journal 關閉後查不到 checkpoints，過程中逐次累積才能在成功後列出做過的事
+  const cleanupProgressGenerationRef = useRef(0);
+  const cleanupProgressStopRef = useRef<(() => void) | null>(null);
+  useLayoutEffect(() => () => {
+    cleanupProgressGenerationRef.current += 1;
+    cleanupProgressStopRef.current?.();
+    cleanupProgressStopRef.current = null;
+  }, [wsId]);
   const [branchGroupsOpen, setBranchGroupsOpen] = useState<Record<BranchKind, boolean>>({ local: true, remote: true });
   const [branchMenu, setBranchMenu] = useState<BranchMenuState | null>(null);
   const [hover, setHover] = useState<{ c: GitLogEntry; top: number; left: number } | null>(null); // PE-1 hover 卡
@@ -744,17 +752,20 @@ export function SourceControlPanel(): React.JSX.Element {
       setCleanupJournals(result.journals);
       if (result.globalBlocked) setError('清理儲存區有無法歸屬的狀態；新的破壞性清理已暫停。');
     } catch (cleanupError) {
-      setError(`無法讀取清理待辦：${errText(cleanupError)}`);
+      if (isCurrent()) setError(`無法讀取清理待辦：${errText(cleanupError)}`);
     }
-  }, [wsId]);
+  }, [wsId, isCurrent]);
 
   const withCleanupProgress = useCallback(async <T,>(branch: string, operation: () => Promise<T>): Promise<T> => {
+    if (!isCurrent()) return operation();
+    const generation = ++cleanupProgressGenerationRef.current;
+    cleanupProgressStopRef.current?.();
     cleanupStepsRef.current = [];
-    let settled = false;
     setCleanupFeedback({ kind: 'running', branch, step: '正在建立安全清理租約…' });
-    const timer = window.setInterval(() => {
-      void ipc.git.cleanupStatus({ wsId: wsId ?? undefined }).then((statusResult) => {
-        if (settled) return; // 操作已結束：清掉 timer 前發出的查詢不得覆蓋成功／失敗終態
+    const stop = startCleanupProgressPolling({
+      request: () => ipc.git.cleanupStatus({ wsId: wsId ?? undefined }),
+      isCurrent: () => isCurrent() && generation === cleanupProgressGenerationRef.current,
+      onStatus: (statusResult) => {
         const journal = statusResult.journals.find((entry) => entry.phase !== 'prepared');
         for (const checkpoint of journal?.checkpoints ?? []) {
           if (!cleanupStepsRef.current.includes(checkpoint)) cleanupStepsRef.current.push(checkpoint);
@@ -767,15 +778,16 @@ export function SourceControlPanel(): React.JSX.Element {
             ? `步驟 ${cleanupStepsRef.current.length}：${cleanupCheckpointText(latest)}，正在進行下一步…`
             : '正在執行第一個不可逆步驟…',
         });
-      }).catch(() => undefined);
-    }, 250);
+      },
+    });
+    cleanupProgressStopRef.current = stop;
     try {
       return await operation();
     } finally {
-      settled = true;
-      window.clearInterval(timer);
+      stop();
+      if (generation === cleanupProgressGenerationRef.current) cleanupProgressStopRef.current = null;
     }
-  }, [wsId]);
+  }, [wsId, isCurrent]);
 
   /** 已完成步驟的白話清單（成功摘要用）。 */
   const cleanupDoneSteps = useCallback((): string[] => cleanupStepsRef.current.map(cleanupCheckpointText), []);
@@ -792,13 +804,17 @@ export function SourceControlPanel(): React.JSX.Element {
   // worktree 分頁的清理與分支清理共用同一張回饋卡（卡片渲染在分頁上方，兩邊都看得到）。
   const cleanupApi: CleanupFeedbackApi = {
     run: withCleanupProgress,
-    done: (branch) => setCleanupFeedback({ kind: 'done', branch, did: cleanupDoneSteps() }),
-    fail: (branch, message, journalId) => setCleanupFeedback({
-      kind: 'failed',
-      branch,
-      message,
-      ...(journalId ? { journalId } : {}),
-    }),
+    done: (branch) => {
+      if (isCurrent()) setCleanupFeedback({ kind: 'done', branch, did: cleanupDoneSteps() });
+    },
+    fail: (branch, message, journalId) => {
+      if (isCurrent()) setCleanupFeedback({
+        kind: 'failed',
+        branch,
+        message,
+        ...(journalId ? { journalId } : {}),
+      });
+    },
   };
 
   useEffect(() => {
@@ -1160,6 +1176,7 @@ export function SourceControlPanel(): React.JSX.Element {
           remoteTargets,
         },
       }));
+      if (!isCurrent()) return;
       if (!result.ok) {
         const endpointDetails = result.remote?.endpoints
           .filter((endpoint) => endpoint.status !== 'deleted' && endpoint.status !== 'already-completed' && endpoint.status !== 'skipped')
@@ -1186,6 +1203,7 @@ export function SourceControlPanel(): React.JSX.Element {
     if (!wsId) return;
     const branch = cleanupJournals.find((entry) => entry.journalId === journalId)?.branch ?? '未知分支';
     const result = await withCleanupProgress(branch, () => ipc.git.cleanupResume({ wsId, journalId }));
+    if (!isCurrent()) return;
     if (!result.ok) setCleanupFeedback({ kind: 'failed', branch, message: result.error, journalId });
     else {
       setCleanupFeedback({ kind: 'done', branch, did: cleanupDoneSteps() });

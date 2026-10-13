@@ -1,0 +1,89 @@
+--- stdout ---
+
+> polydesk@0.40.0 e2e
+> playwright test --workers=1 --shard=3/12 --grep-invert REQ-PERF-001
+
+
+Running 13 tests using 1 worker, shard 3 of 12
+
+  ok  1 e2e\explorer-drop.spec.ts:20:5 › OS 拖檔進檔案總管：空白區→複製到根；資料夾列→複製進該資料夾 (7.8s)
+  ok  2 e2e\explorer-drop.spec.ts:58:5 › app 內部拖曳（樹列→樹）不觸發匯入：無 Files 型別一律忽略 (7.2s)
+  ok  3 e2e\explorer-edit.spec.ts:7:5 › 檔案總管右鍵：新增檔案 → 改名 → 刪除 (8.6s)
+  ok  4 e2e\explorer-edit.spec.ts:48:5 › 隱藏編輯器時點檔 → 編輯器自動顯示回來 (6.1s)
+  ok  5 e2e\explorer-edit.spec.ts:72:5 › 右鍵「複製路徑／複製相對路徑」→ 系統剪貼簿真的有正確路徑（clipboard IPC，非被封鎖的 navigator.clipboard） (6.7s)
+  ok  6 e2e\explorer-paste.spec.ts:42:5 › 貼上外部檔案：fileUtils 已暴露 + importFiles 複製進工作區並自動顯示 (6.5s)
+  ok  7 e2e\explorer-paste.spec.ts:82:5 › 真實 Ctrl+V：非可編輯焦點下也能貼入外部檔案（paste catcher） (7.9s)
+  ok  8 e2e\explorer-paste.spec.ts:109:5 › 真實 Ctrl+V：截圖 bitmap 沒有磁碟路徑時會轉成 PNG 貼入工作區 (6.6s)
+  ok  9 e2e\explorer-paste.spec.ts:140:5 › 虛擬圖片檔：只有 Files 且 MIME 非 image 時仍會從系統剪貼簿貼入 (7.8s)
+  x  10 e2e\git-branch-management.spec.ts:50:5 › 分支管理：本地／遠端分組與兩階段完整清理真鏈路 (10.0m)
+  ok 11 e2e\git-branch-management.spec.ts:146:5 › 遠端多 endpoint 部分失敗後，重啟仍顯示待辦並可繼續收斂 (4.6m)
+  ok 12 e2e\git-branch-management.spec.ts:240:5 › 遠端 tip 在風險確認後變動時拒絕舊租約且不刪新 commit (1.3m)
+  ok 13 e2e\git-branch-management.spec.ts:266:5 › 刪除目前分支時先切換到使用者選定分支，再以同一流程清理 (51.3s)
+
+
+  1) e2e\git-branch-management.spec.ts:50:5 › 分支管理：本地／遠端分組與兩階段完整清理真鏈路 ──────────────────────────────
+
+    Test timeout of 600000ms exceeded.
+
+    Error Context: test-results\git-branch-management-分支管理：本地／遠端分組與兩階段完整清理真鏈路\error-context.md
+
+  1 failed
+    e2e\git-branch-management.spec.ts:50:5 › 分支管理：本地／遠端分組與兩階段完整清理真鏈路 ───────────────────────────────
+  12 passed (18.0m)
+
+--- stderr ---
+(node:12176) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to a new branch 'unfinished'
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'unfinished.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to branch 'main'
+Preparing worktree (checking out 'busy-worktree')
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-mMnje5\upstream.git
+ * [new branch]      main -> main
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-mMnje5\upstream.git
+ * [new branch]      remote-delete -> remote-delete
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-mMnje5\upstream.git
+ * [new branch]      profile -> deployed-profile
+(node:38788) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to a new branch 'unfinished'
+warning: in the working copy of 'unfinished.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to branch 'main'
+Preparing worktree (checking out 'busy-worktree')
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-3tdf4b\upstream.git
+ * [new branch]      main -> main
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-3tdf4b\upstream.git
+ * [new branch]      remote-delete -> remote-delete
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-3tdf4b\upstream.git
+ * [new branch]      profile -> deployed-profile
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-3tdf4b\rejecting.git
+ * [new branch]      remote-delete -> remote-delete
+warning: in the working copy of 'other.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to a new branch 'unfinished'
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'unfinished.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to branch 'main'
+Preparing worktree (checking out 'busy-worktree')
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-hPlYbf\upstream.git
+ * [new branch]      main -> main
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-hPlYbf\upstream.git
+ * [new branch]      remote-delete -> remote-delete
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-hPlYbf\upstream.git
+ * [new branch]      profile -> deployed-profile
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-hPlYbf\upstream.git
+   e0134ab..98b71e6  unfinished -> remote-delete
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to a new branch 'unfinished'
+warning: in the working copy of 'unfinished.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to branch 'main'
+Preparing worktree (checking out 'busy-worktree')
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-d1V6cD\upstream.git
+ * [new branch]      main -> main
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-d1V6cD\upstream.git
+ * [new branch]      remote-delete -> remote-delete
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-d1V6cD\upstream.git
+ * [new branch]      profile -> deployed-profile

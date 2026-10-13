@@ -1,0 +1,10 @@
+{
+  "scope": "Scoped fix plus previously unexecuted independent journeys; not full ship evidence",
+  "results": [
+    {
+      "command": "npm run e2e -- e2e/git-branch-management.spec.ts --grep \"^分支管理：本地\" --workers=1",
+      "exitCode": 1,
+      "durationMs": 6992
+    }
+  ]
+}

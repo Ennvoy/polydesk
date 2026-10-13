@@ -1,0 +1,58 @@
+
+Running 1 test using 1 worker
+
+(node:32892) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to a new branch 'unfinished'
+warning: in the working copy of 'unfinished.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to branch 'main'
+Preparing worktree (checking out 'busy-worktree')
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-4MnXWD\upstream.git
+ * [new branch]      main -> main
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-4MnXWD\upstream.git
+ * [new branch]      remote-delete -> remote-delete
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-4MnXWD\upstream.git
+ * [new branch]      profile -> deployed-profile
+[branch-management] setup: 25297ms
+[branch-management] profile/upstream: 193988ms
+[branch-management] merged: 64358ms
+[branch-management] remote: 295107ms
+  x  1 e2e\git-branch-management.spec.ts:50:5 › 分支管理：本地／遠端分組與兩階段完整清理真鏈路 (9.7m)
+
+
+  1) e2e\git-branch-management.spec.ts:50:5 › 分支管理：本地／遠端分組與兩階段完整清理真鏈路 › remote ─────────────────────
+
+    Error: expect(locator).toBeEnabled() failed
+
+    Locator:  getByRole('button', { name: '重新整理' })
+    Expected: enabled
+    Received: disabled
+    Timeout:  120000ms
+
+    Call log:
+      - Expect "toBeEnabled" getByRole('button', { name: '重新整理' }) with timeout 120000ms
+      - waiting for getByRole('button', { name: '重新整理' })
+        195 × locator resolved to <button disabled aria-label="重新整理" class="pd-scm-icon" title="重新整理（含取回遠端狀態）">⟳</button>
+            - unexpected value "disabled"
+
+
+      132 |       await expect.poll(() => git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/remote-delete').trim(), { timeout: cleanupTimeout }).toBe('');
+      133 |       const refreshButton = page.getByRole('button', { name: '重新整理' });
+    > 134 |       await expect(refreshButton).toBeEnabled({ timeout: cleanupTimeout });
+          |                                   ^
+      135 |       await refreshButton.click();
+      136 |       await expect(page.locator('[data-branch-kind="remote"]', { hasText: 'team/backend/remote-delete' })).toHaveCount(0, { timeout: 30_000 });
+      137 |       expect(git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/remote-delete').trim()).toBe('');
+        at C:\polydesk-remote-dev\e2e\git-branch-management.spec.ts:134:35
+        at C:\polydesk-remote-dev\e2e\git-branch-management.spec.ts:55:14
+        at C:\polydesk-remote-dev\e2e\git-branch-management.spec.ts:122:27
+
+    Error Context: test-results\git-branch-management-分支管理：本地／遠端分組與兩階段完整清理真鏈路\error-context.md
+
+  Slow test file: e2e\git-branch-management.spec.ts (9.7m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  1 failed
+    e2e\git-branch-management.spec.ts:50:5 › 分支管理：本地／遠端分組與兩階段完整清理真鏈路 ───────────────────────────────
+
+SCOPED RESULT {"startedAt":"2026-10-12T12:04:08.766Z","args":["test","e2e/git-branch-management.spec.ts","--grep","分支管理：本地","--workers=1"],"exitCode":1,"durationMs":583743,"scope":"Single failed case after overall-budget adjustment; not full ship evidence"}

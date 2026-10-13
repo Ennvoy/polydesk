@@ -1,0 +1,182 @@
+Baseline copied from original withCleanupProgress setInterval implementation; no product fix applied yet.
+COMMAND: cmd /c npm test -- src/renderer/components/SourceControl/cleanupProgressPolling.test.ts
+
+> polydesk@0.40.0 test
+> vitest run src/renderer/components/SourceControl/cleanupProgressPolling.test.ts
+
+ RUN  v3.2.7 C:/polydesk-remote-dev
+
+ ❯ src/renderer/components/SourceControl/cleanupProgressPolling.test.ts (7 tests | 3 failed) 38ms
+   × cleanup progress polling > slow status never accumulates requests and leaves only one read before the final status 18ms
+     → expected "spy" to be called 1 times, but got 40 times
+   ✓ cleanup progress polling > successful reads update progress then schedule the next read after a fresh interval 4ms
+   ✓ cleanup progress polling > a rejected status releases the flight and allows a later successful progress read 2ms
+   ✓ cleanup progress polling > settle or cancellation ignores a late result and never starts another read 1ms
+   × cleanup progress polling > workspace change or unmount stops polling before a request is emitted 5ms
+     → expected "spy" to not be called at all, but actually been called 4 times
+
+Received:
+
+  1st spy call:
+
+    Array []
+
+  2nd spy call:
+
+    Array []
+
+  3rd spy call:
+
+    Array []
+
+  4th spy call:
+
+    Array []
+
+
+Number of calls: 4
+
+   × cleanup progress polling > a late result from an old operation cannot overwrite a newer generation 2ms
+     → expected "spy" to not be called at all, but actually been called 5 times
+
+Received:
+
+  1st spy call:
+
+    Array [
+      "old-running",
+    ]
+
+  2nd spy call:
+
+    Array [
+      "old-running",
+    ]
+
+  3rd spy call:
+
+    Array [
+      "old-running",
+    ]
+
+  4th spy call:
+
+    Array [
+      "old-running",
+    ]
+
+  5th spy call:
+
+    Array [
+      "old-running",
+    ]
+
+
+Number of calls: 5
+
+   ✓ cleanup progress polling > operation failure finally stops progress even when the status subsequently rejects 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/renderer/components/SourceControl/cleanupProgressPolling.test.ts > cleanup progress polling > slow status never accumulates requests and leaves only one read before the final status
+AssertionError: expected "spy" to be called 1 times, but got 40 times
+ ❯ src/renderer/components/SourceControl/cleanupProgressPolling.test.ts:22:23
+     20|     try {
+     21|       await vi.advanceTimersByTimeAsync(10_000);
+     22|       expect(request).toHaveBeenCalledTimes(1);
+       |                       ^
+     23|       stop();
+     24|       const finalStatus = request();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/renderer/components/SourceControl/cleanupProgressPolling.test.ts > cleanup progress polling > workspace change or unmount stops polling before a request is emitted
+AssertionError: expected "spy" to not be called at all, but actually been called 4 times
+
+Received:
+
+  1st spy call:
+
+    Array []
+
+  2nd spy call:
+
+    Array []
+
+  3rd spy call:
+
+    Array []
+
+  4th spy call:
+
+    Array []
+
+
+Number of calls: 4
+
+ ❯ src/renderer/components/SourceControl/cleanupProgressPolling.test.ts:88:27
+     86|       current = false;
+     87|       await vi.advanceTimersByTimeAsync(1000);
+     88|       expect(request).not.toHaveBeenCalled();
+       |                           ^
+     89|       expect(onStatus).not.toHaveBeenCalled();
+     90|     } finally { stop(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/renderer/components/SourceControl/cleanupProgressPolling.test.ts > cleanup progress polling > a late result from an old operation cannot overwrite a newer generation
+AssertionError: expected "spy" to not be called at all, but actually been called 5 times
+
+Received:
+
+  1st spy call:
+
+    Array [
+      "old-running",
+    ]
+
+  2nd spy call:
+
+    Array [
+      "old-running",
+    ]
+
+  3rd spy call:
+
+    Array [
+      "old-running",
+    ]
+
+  4th spy call:
+
+    Array [
+      "old-running",
+    ]
+
+  5th spy call:
+
+    Array [
+      "old-running",
+    ]
+
+
+Number of calls: 5
+
+ ❯ src/renderer/components/SourceControl/cleanupProgressPolling.test.ts:104:28
+    102|       pending.resolve('old-running');
+    103|       await vi.advanceTimersByTimeAsync(1000);
+    104|       expect(onStatus).not.toHaveBeenCalled();
+       |                            ^
+    105|       expect(request).toHaveBeenCalledTimes(1);
+    106|     } finally { stop(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 4 passed (7)
+   Start at  20:27:09
+   Duration  3.06s (transform 159ms, setup 0ms, collect 232ms, tests 38ms, environment 0ms, prepare 1.43s)
+
+
+exit=1

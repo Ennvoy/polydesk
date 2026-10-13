@@ -215,6 +215,14 @@ export class ClaudeStatusMonitor {
    * 掃描失敗保留上次快取（fail-open，防「掃描逾時→全部誤判 idle→徽章閃爍」）。
    */
   private async runOnce(): Promise<void> {
+    const workspaces = this.workspaces.list();
+    // 沒有納管 PTY 時三種工具都只能是 idle；不讀全域歷史 session，也不掃整機程序。
+    if (!workspaces.some((ws) => this.pty.pidsOf(ws.id).length > 0)) {
+      for (const ws of workspaces) {
+        for (const tool of AI_TOOLS) this.applyState(ws.id, tool, 'idle');
+      }
+      return;
+    }
     const scan = this.maybeScanPids(false);
     if (scan && !this.scannedOnce) await scan; // 冷啟動首輪：等真實 pid 再聚合
     const now = Date.now();
@@ -227,7 +235,7 @@ export class ClaudeStatusMonitor {
     const sessions = [...claudeSessions, ...codexSessions, ...agySessions];
     // Codex rollout / Agy log 尚未出現活動前補一筆 done，代表 CLI 已開但尚未送出任務。
     // 有 session 時以事件的 working/awaiting/done 為準，不再把「程序存在」等同「執行中」。
-    for (const ws of this.workspaces.list()) {
+    for (const ws of workspaces) {
       const ptyPids = this.pty.pidsOf(ws.id);
       const hasCodex = ptyPids.some((pid) => this.codexShellPids.has(pid));
       const hasCodexSession = codexSessions.some((s) => matchWorkspace(s.cwd, [ws]) === ws.id);
@@ -253,12 +261,12 @@ export class ClaudeStatusMonitor {
     for (const s of sessions) {
       if (this.seenSessions.has(s.sessionId)) continue;
       this.seenSessions.add(s.sessionId);
-      const wsId = matchWorkspace(s.cwd, this.workspaces.list());
+      const wsId = matchWorkspace(s.cwd, workspaces);
       if (wsId && !isAlive(wsId, s.tool ?? 'claude')) wantForce = true;
     }
     if (this.seenSessions.size > 500) this.seenSessions.clear(); // 防無限長大（清掉只多掃一次，無害）
     if (wantForce) this.maybeScanPids(true);
-    const byWsTool = aggregateByTool(this.workspaces.list(), sessions, isAlive, now);
+    const byWsTool = aggregateByTool(workspaces, sessions, isAlive, now);
     for (const [wsId, toolMap] of byWsTool) {
       for (const [tool, state] of toolMap) this.applyState(wsId, tool, state);
     }

@@ -48,94 +48,114 @@ async function openBranches(page: import('@playwright/test').Page): Promise<void
 }
 
 test('分支管理：本地／遠端分組與兩階段完整清理真鏈路', async () => {
-  test.setTimeout(600_000); // 四段完整清理各自可能需要預檢與執行，涵蓋每段既有 120 秒等待上限。
-  const { root, repo, remote } = seedRepo();
-  const { app, page, userData } = await launchApp();
+  test.setTimeout(1_500_000); // 既有逐步顯式等待合計 1320 秒，另預留 setup／teardown 180 秒。
+  const timedStep = async <T>(name: string, run: () => Promise<T>): Promise<T> => test.step(name, async () => {
+    const started = Date.now();
+    try {
+      return await run();
+    } finally {
+      console.log(`[branch-management] ${name}: ${Date.now() - started}ms`);
+    }
+  });
+  const { root, repo, remote, app, page, userData } = await timedStep('setup', async () => {
+    const fixture = seedRepo();
+    const launched = await launchApp();
+    return { ...fixture, ...launched };
+  });
   try {
-    await stubFolderPicker(app, [repo]);
-    await addWorkspaceViaUI(page);
-    await openBranches(page);
+    await timedStep('profile/upstream', async () => {
+      await stubFolderPicker(app, [repo]);
+      await addWorkspaceViaUI(page);
+      await openBranches(page);
 
-    const localGroup = page.getByRole('button', { name: /^本地分支 \d+$/ });
-    const remoteGroup = page.getByRole('button', { name: /^遠端分支 \d+$/ });
-    await expect(localGroup).toHaveAttribute('aria-expanded', 'true');
-    await expect(remoteGroup).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.locator('[data-branch-kind="local"]')).toHaveCount(6, { timeout: 30_000 });
-    await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(3, { timeout: 30_000 });
+      const localGroup = page.getByRole('button', { name: /^本地分支 \d+$/ });
+      const remoteGroup = page.getByRole('button', { name: /^遠端分支 \d+$/ });
+      await expect(localGroup).toHaveAttribute('aria-expanded', 'true');
+      await expect(remoteGroup).toHaveAttribute('aria-expanded', 'true');
+      await expect(page.locator('[data-branch-kind="local"]')).toHaveCount(6, { timeout: 30_000 });
+      await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(3, { timeout: 30_000 });
 
-    await remoteGroup.click();
-    await expect(remoteGroup).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(0);
-    await remoteGroup.click();
-    await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(3);
+      await remoteGroup.click();
+      await expect(remoteGroup).toHaveAttribute('aria-expanded', 'false');
+      await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(0);
+      await remoteGroup.click();
+      await expect(page.locator('[data-branch-kind="remote"]')).toHaveCount(3);
 
-    await page.getByRole('button', { name: '更多本地分支操作 profile' }).click();
-    await page.getByRole('menuitem', { name: '刪除本地分支', exact: true }).click();
-    await page.getByLabel('連同檢查遠端同名／upstream 分支').check();
-    await expect(page.getByRole('checkbox', { name: 'team/backend/deployed-profile' })).toBeChecked();
-    await page.getByRole('button', { name: '檢查清理風險' }).click();
-    await expect(page.getByRole('dialog')).toContainText('team/backend/deployed-profile', { timeout: 60_000 });
-    await page.getByRole('button', { name: '開始完整清理' }).click();
-    await expect(page.locator('[data-branch-kind="local"]', { hasText: 'profile' })).toHaveCount(0, { timeout: cleanupTimeout });
-    expect(git(repo, 'branch', '--list', 'profile').trim()).toBe('');
-    expect(git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/deployed-profile').trim()).toBe('');
+      await page.getByRole('button', { name: '更多本地分支操作 profile' }).click();
+      await page.getByRole('menuitem', { name: '刪除本地分支', exact: true }).click();
+      await page.getByLabel('連同檢查遠端同名／upstream 分支').check();
+      await expect(page.getByRole('checkbox', { name: 'team/backend/deployed-profile' })).toBeChecked();
+      await page.getByRole('button', { name: '檢查清理風險' }).click();
+      await expect(page.getByRole('dialog')).toContainText('team/backend/deployed-profile', { timeout: 60_000 });
+      await page.getByRole('button', { name: '開始完整清理' }).click();
+      await expect(page.locator('[data-branch-kind="local"]', { hasText: 'profile' })).toHaveCount(0, { timeout: cleanupTimeout });
+      expect(git(repo, 'branch', '--list', 'profile').trim()).toBe('');
+      expect(git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/deployed-profile').trim()).toBe('');
 
-    const mainMore = page.getByRole('button', { name: '更多本地分支操作 main' });
-    await expect(mainMore).toBeEnabled({ timeout: cleanupTimeout });
-    await mainMore.click();
-    await expect(page.getByRole('menuitem', { name: '刪除本地分支（目前分支）' })).toBeEnabled();
-    await page.screenshot({ path: join(shotDir, 'ui-branch-management-groups.png') });
-    await page.keyboard.press('Escape');
+      const mainMore = page.getByRole('button', { name: '更多本地分支操作 main' });
+      await expect(mainMore).toBeEnabled({ timeout: cleanupTimeout });
+      await mainMore.click();
+      await expect(page.getByRole('menuitem', { name: '刪除本地分支（目前分支）' })).toBeEnabled();
+      await page.screenshot({ path: join(shotDir, 'ui-branch-management-groups.png') });
+      await page.keyboard.press('Escape');
 
-    const busyRow = page.locator('[data-branch-kind="local"]', { hasText: 'busy-worktree' });
-    await busyRow.click({ button: 'right' });
-    await expect(page.getByRole('menuitem', { name: '刪除本地分支（由 worktree 使用中）' })).toBeEnabled();
-    await page.keyboard.press('Escape');
+      const busyRow = page.locator('[data-branch-kind="local"]', { hasText: 'busy-worktree' });
+      await busyRow.click({ button: 'right' });
+      await expect(page.getByRole('menuitem', { name: '刪除本地分支（由 worktree 使用中）' })).toBeEnabled();
+      await page.keyboard.press('Escape');
+    });
 
-    await page.getByRole('button', { name: '更多本地分支操作 merged-local' }).click();
-    await page.getByRole('menuitem', { name: '刪除本地分支', exact: true }).click();
-    await expect(page.getByRole('heading', { name: '完整清理分支' })).toBeVisible();
-    await expect(page.getByRole('dialog')).toContainText('此畫面尚未開始刪除');
-    expect(git(repo, 'branch', '--list', 'merged-local').trim()).toBe('merged-local');
-    await page.getByRole('button', { name: '檢查清理風險' }).click();
-    await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByRole('dialog')).toContainText('Git 判定可安全刪除');
-    await page.getByRole('button', { name: '開始完整清理' }).click();
-    await expect(page.locator('[data-branch-kind="local"]', { hasText: 'merged-local' })).toHaveCount(0, { timeout: cleanupTimeout });
-    expect(git(repo, 'branch', '--list', 'merged-local').trim()).toBe('');
+    await timedStep('merged', async () => {
+      await page.getByRole('button', { name: '更多本地分支操作 merged-local' }).click();
+      await page.getByRole('menuitem', { name: '刪除本地分支', exact: true }).click();
+      await expect(page.getByRole('heading', { name: '完整清理分支' })).toBeVisible();
+      await expect(page.getByRole('dialog')).toContainText('此畫面尚未開始刪除');
+      expect(git(repo, 'branch', '--list', 'merged-local').trim()).toBe('merged-local');
+      await page.getByRole('button', { name: '檢查清理風險' }).click();
+      await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible({ timeout: 60_000 });
+      await expect(page.getByRole('dialog')).toContainText('Git 判定可安全刪除');
+      await page.getByRole('button', { name: '開始完整清理' }).click();
+      await expect(page.locator('[data-branch-kind="local"]', { hasText: 'merged-local' })).toHaveCount(0, { timeout: cleanupTimeout });
+      expect(git(repo, 'branch', '--list', 'merged-local').trim()).toBe('');
+    });
 
-    const remoteDeleteMore = page.getByRole('button', { name: '更多遠端分支操作 team/backend/remote-delete' });
-    await expect(remoteDeleteMore).toBeEnabled({ timeout: cleanupTimeout });
-    await remoteDeleteMore.click();
-    await page.getByRole('menuitem', { name: '刪除遠端分支', exact: true }).click();
-    await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByRole('dialog')).toContainText('team/backend/remote-delete');
-    const deleteRemote = page.getByRole('button', { name: '開始完整清理' });
-    await expect(deleteRemote).toHaveClass(/pd-btn-danger/);
-    await deleteRemote.click();
-    await expect.poll(() => git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/remote-delete').trim(), { timeout: cleanupTimeout }).toBe('');
-    const refreshButton = page.getByRole('button', { name: '重新整理' });
-    await expect(refreshButton).toBeEnabled({ timeout: cleanupTimeout });
-    await refreshButton.click();
-    await expect(page.locator('[data-branch-kind="remote"]', { hasText: 'team/backend/remote-delete' })).toHaveCount(0, { timeout: 30_000 });
-    expect(git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/remote-delete').trim()).toBe('');
-    expect(git(repo, 'branch', '--list', 'remote-delete').trim()).toBe('remote-delete');
+    const refreshButton = await timedStep('remote', async () => {
+      const remoteDeleteMore = page.getByRole('button', { name: '更多遠端分支操作 team/backend/remote-delete' });
+      await expect(remoteDeleteMore).toBeEnabled({ timeout: cleanupTimeout });
+      await remoteDeleteMore.click();
+      await page.getByRole('menuitem', { name: '刪除遠端分支', exact: true }).click();
+      await expect(page.getByRole('heading', { name: '確認完整清理風險' })).toBeVisible({ timeout: 60_000 });
+      await expect(page.getByRole('dialog')).toContainText('team/backend/remote-delete');
+      const deleteRemote = page.getByRole('button', { name: '開始完整清理' });
+      await expect(deleteRemote).toHaveClass(/pd-btn-danger/);
+      await deleteRemote.click();
+      await expect.poll(() => git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/remote-delete').trim(), { timeout: cleanupTimeout }).toBe('');
+      const refreshButton = page.getByRole('button', { name: '重新整理' });
+      await expect(refreshButton).toBeEnabled({ timeout: cleanupTimeout });
+      await refreshButton.click();
+      await expect(page.locator('[data-branch-kind="remote"]', { hasText: 'team/backend/remote-delete' })).toHaveCount(0, { timeout: 30_000 });
+      expect(git(remote, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/remote-delete').trim()).toBe('');
+      expect(git(repo, 'branch', '--list', 'remote-delete').trim()).toBe('remote-delete');
+      return refreshButton;
+    });
 
-    await page.getByRole('button', { name: '更多本地分支操作 unfinished' }).click();
-    await page.getByRole('menuitem', { name: '刪除本地分支', exact: true }).click();
-    await page.getByRole('button', { name: '檢查清理風險' }).click();
-    await expect(page.getByRole('dialog')).toContainText('尚未安全合併', { timeout: 60_000 });
-    await expect(page.getByRole('button', { name: '開始完整清理' })).toBeDisabled();
-    await page.getByLabel('我確認強制清理本機未知／未合併內容').check();
-    await expect(page.getByRole('button', { name: '開始完整清理' })).toBeEnabled();
-    await page.getByRole('button', { name: '開始完整清理' }).click();
-    await expect.poll(() => git(repo, 'branch', '--list', 'unfinished').trim(), { timeout: cleanupTimeout }).toBe('');
-    await expect(refreshButton).toBeEnabled({ timeout: cleanupTimeout });
-    await refreshButton.click();
-    await expect(page.locator('[data-branch-kind="local"]', { hasText: 'unfinished' })).toHaveCount(0, { timeout: 30_000 });
-    expect(git(repo, 'branch', '--list', 'unfinished').trim()).toBe('');
-    expect(() => git(repo, 'config', '--get-regexp', '^branch\\.unfinished\\.')).toThrow();
-    expect(() => git(repo, 'reflog', 'exists', 'refs/heads/unfinished')).toThrow();
+    await timedStep('unfinished', async () => {
+      await page.getByRole('button', { name: '更多本地分支操作 unfinished' }).click();
+      await page.getByRole('menuitem', { name: '刪除本地分支', exact: true }).click();
+      await page.getByRole('button', { name: '檢查清理風險' }).click();
+      await expect(page.getByRole('dialog')).toContainText('尚未安全合併', { timeout: 60_000 });
+      await expect(page.getByRole('button', { name: '開始完整清理' })).toBeDisabled();
+      await page.getByLabel('我確認強制清理本機未知／未合併內容').check();
+      await expect(page.getByRole('button', { name: '開始完整清理' })).toBeEnabled();
+      await page.getByRole('button', { name: '開始完整清理' }).click();
+      await expect.poll(() => git(repo, 'branch', '--list', 'unfinished').trim(), { timeout: cleanupTimeout }).toBe('');
+      await expect(refreshButton).toBeEnabled({ timeout: cleanupTimeout });
+      await refreshButton.click();
+      await expect(page.locator('[data-branch-kind="local"]', { hasText: 'unfinished' })).toHaveCount(0, { timeout: 30_000 });
+      expect(git(repo, 'branch', '--list', 'unfinished').trim()).toBe('');
+      expect(() => git(repo, 'config', '--get-regexp', '^branch\\.unfinished\\.')).toThrow();
+      expect(() => git(repo, 'reflog', 'exists', 'refs/heads/unfinished')).toThrow();
+    });
   } finally {
     await app.close();
     rmSync(userData, { recursive: true, force: true });

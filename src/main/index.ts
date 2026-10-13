@@ -186,8 +186,9 @@ function createWindow(): void {
   });
 
   mainWindow.webContents.on('did-fail-load', (_event, _code, description, _url, isMainFrame) => {
-    if (isMainFrame) showStartupFailure(description || '主畫面載入失敗，請重試或退出程式。');
+    if (isMainFrame) { void services.remote.disable(); showStartupFailure(description || '主畫面載入失敗，請重試或退出程式。'); }
   });
+  mainWindow.webContents.on('render-process-gone', () => { mainInteractive = false; void services.remote.disable(); });
 
   // 外開連結一律拒絕 app 內導航，改丟系統瀏覽器（REQ-SEC-001）
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -211,12 +212,12 @@ function createWindow(): void {
     if (mainWindow && !mainWindow.isDestroyed()) {
       store.setWindowBounds(mainWindow.getBounds());
     }
-    if (closeGate.confirmed() || !services) return;
+    if (closeGate.confirmed() || !services) { if (services) void services.remote.disable(); return; }
     const wsIds = services.workspaces
       .list()
       .filter((w) => services.pty.hasRunningProcesses(w.id))
       .map((w) => w.id);
-    if (wsIds.length === 0) return;
+    if (wsIds.length === 0) { void services.remote.disable(); return; }
     const wc = mainWindow?.webContents;
     if (!wc || wc.isDestroyed() || wc.isCrashed()) return;
     e.preventDefault();
@@ -263,7 +264,7 @@ function initializeApp(): void {
     throw new Error('E2E first initialization failure');
   }
   applyContentSecurityPolicy();
-  if (!services) services = registerIpcHandlers(store, app.getPath('userData'));
+  if (!services) services = registerIpcHandlers(store, app.getPath('userData'), () => mainInteractive);
   createWindow();
   // F-8：注入 Claude Code 狀態 hooks（merge-safe、冪等、壞檔不覆寫）。
   void installClaudeStatusHooks().catch(() => undefined);
@@ -329,6 +330,7 @@ async function shutdownAndExit(): Promise<void> {
       ]);
     }
     if (services) {
+      await services.remote.disable();
       services.monitor.stop(); // 先停輪詢，避免關閉中再起一次 probe
       const teardownAll = (async () => {
         for (const w of services.workspaces.list()) await services.lifecycle.teardown(w.id);

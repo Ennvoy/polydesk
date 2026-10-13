@@ -1,0 +1,105 @@
+import { test, expect } from 'C:/polydesk-remote-dev/node_modules/@playwright/test';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { launchApp, stubFolderPicker, addWorkspaceViaUI } from 'C:/polydesk-remote-dev/e2e/electronApp';
+
+const qa = 'C:/polydesk-remote-dev/.constellation/qa/remote-launch';
+
+test('相同十個工作區與十八秒視窗的真實 main CPU profile', async () => {
+  test.setTimeout(240_000);
+  const dirs = Array.from({ length: 10 }, (_, i) => {
+    const root = mkdtempSync(join(tmpdir(), 'pdperf-'));
+    const dir = join(root, `idle-${i}`);
+    mkdirSync(dir, { recursive: true });
+    return { root, dir };
+  });
+  const { app, page, userData } = await launchApp();
+  try {
+    await stubFolderPicker(app, dirs.map(({ dir }) => dir));
+    for (let i = 0; i < 10; i++) await addWorkspaceViaUI(page);
+    await expect(page.locator('aside[aria-label="工作區列表"]')).toBeVisible();
+    await page.waitForTimeout(1500);
+
+    await app.evaluate(async () => {
+      const runtime = process as typeof process & { getBuiltinModule: (name: string) => unknown };
+      const inspector = runtime.getBuiltinModule('node:inspector') as { Session: new () => {
+        connect: () => void;
+        disconnect: () => void;
+        post: (method: string, params: object, callback: (error: Error | null, result: unknown) => void) => void;
+      } };
+      const session = new inspector.Session();
+      session.connect();
+      const post = (method: string): Promise<unknown> => new Promise((resolve, reject) => {
+        session.post(method, {}, (error, result) => error ? reject(error) : resolve(result));
+      });
+      const counts = { jsonCalls: 0, jsonCharacters: 0, readFileCalls: 0, readFileBytes: 0, openCalls: 0, openReadCalls: 0, openReadBytes: 0, readdirCalls: 0, statCalls: 0, execCalls: 0, execReturned: 0, codexOpens: 0, claudeReads: 0, agyReads: 0 };
+      const fs = runtime.getBuiltinModule('node:fs/promises') as Record<string, (...args: unknown[]) => Promise<unknown>>;
+      const originals: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+      for (const name of ['open', 'readFile', 'readdir', 'stat']) {
+        const original = fs[name]; originals[name] = original;
+        fs[name] = async (...args: unknown[]): Promise<unknown> => {
+          const result = await Reflect.apply(original, fs, args);
+          const path = String(args[0]);
+          if (name === 'open') {
+            counts.openCalls++;
+            if (path.includes('rollout-')) counts.codexOpens++;
+            const handle = result as { read: (...params: unknown[]) => Promise<{ bytesRead: number }> };
+            const read = handle.read;
+            handle.read = async (...params: unknown[]) => {
+              const answer = await Reflect.apply(read, handle, params);
+              counts.openReadCalls++; counts.openReadBytes += answer.bytesRead;
+              return answer;
+            };
+          } else if (name === 'readFile') {
+            counts.readFileCalls++;
+            counts.readFileBytes += typeof result === 'string' ? Buffer.byteLength(result) : (result as Buffer).length;
+            if (path.includes('polydesk') && path.includes('status')) counts.claudeReads++;
+            if (path.includes('antigravity-cli')) counts.agyReads++;
+          } else if (name === 'readdir') counts.readdirCalls++;
+          else if (name === 'stat') counts.statCalls++;
+          return result;
+        };
+      }
+      const originalParse = JSON.parse;
+      JSON.parse = (...args: Parameters<typeof JSON.parse>): unknown => {
+        counts.jsonCalls++; counts.jsonCharacters += String(args[0]).length;
+        return Reflect.apply(originalParse, JSON, args);
+      };
+      const child = runtime.getBuiltinModule('node:child_process') as { execFile: (...args: unknown[]) => unknown };
+      const originalExec = child.execFile;
+      child.execFile = (...args: unknown[]): unknown => {
+        counts.execCalls++;
+        const last = args.length - 1;
+        const callback = args[last];
+        if (typeof callback === 'function') args[last] = (...results: unknown[]) => { counts.execReturned++; return Reflect.apply(callback, undefined, results); };
+        return Reflect.apply(originalExec, child, args);
+      };
+      const data = { session, post, counts, samples: [] as { elapsedMs: number; user: number; system: number }[], started: Date.now(), interval: undefined as ReturnType<typeof setInterval> | undefined,
+        restore: () => { JSON.parse = originalParse; child.execFile = originalExec; for (const name of Object.keys(originals)) fs[name] = originals[name]; },
+      };
+      (globalThis as unknown as { __idleDiag: typeof data }).__idleDiag = data;
+      await post('Profiler.enable');
+      await post('Profiler.start');
+      data.started = Date.now();
+      data.interval = setInterval(() => { const sample = process.cpuUsage(); data.samples.push({ elapsedMs: Date.now() - data.started, ...sample }); }, 1000);
+    });
+    const c0 = await app.evaluate(() => process.cpuUsage());
+    await page.waitForTimeout(18000);
+    const c1 = await app.evaluate(() => process.cpuUsage());
+    const result = await app.evaluate(async () => {
+      const data = (globalThis as unknown as { __idleDiag: { post: (method: string) => Promise<unknown>; counts: object; samples: object[]; interval: ReturnType<typeof setInterval>; restore: () => void; session: { disconnect: () => void } } }).__idleDiag;
+      clearInterval(data.interval);
+      const profile = await data.post('Profiler.stop');
+      data.restore(); data.session.disconnect();
+      return { ...profile as object, counts: data.counts, samples: data.samples };
+    });
+    const cpuPct = ((c1.user + c1.system - c0.user - c0.system) / 1000 / 18000) * 100;
+    writeFileSync(join(qa, 'idle-cpu-instrumented-profile.json'), JSON.stringify({ ...result, c0, c1, cpuPct, workspaces: 10, windowMs: 18000, budget: 10, note: 'Profiler and transparent original-call counting add diagnostic overhead; not an uninstrumented benchmark pass' }, null, 2));
+    console.log('CPU DIAGNOSTIC', JSON.stringify({ cpuPct, counts: result.counts }));
+  } finally {
+    await app.close();
+    rmSync(userData, { recursive: true, force: true });
+    for (const { root } of dirs) rmSync(root, { recursive: true, force: true });
+  }
+});

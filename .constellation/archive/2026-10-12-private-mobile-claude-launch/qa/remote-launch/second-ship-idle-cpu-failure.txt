@@ -1,0 +1,89 @@
+--- stdout ---
+
+> polydesk@0.40.0 e2e
+> playwright test --workers=1 --shard=6/12 --grep-invert REQ-PERF-001
+
+
+Running 11 tests using 1 worker, shard 6 of 12
+
+  ok  1 e2e\image-view.spec.ts:12:5 › png 開啟為圖片預覽（非 Monaco 亂碼），像素真的載入 (8.8s)
+  ok  2 e2e\layout-close-size.spec.ts:19:5 › dockview 標頭 × 原地隱藏編輯器或終端機，側欄尺寸維持 (7.8s)
+  ok  3 e2e\lsp.spec.ts:18:5 › REQ-E2E-002 後半：開 .py（無 LSP）→ 缺件提示 + 仍可編輯存檔 (11.7s)
+  ok  4 e2e\onboarding-help.spec.ts:34:5 › 首次導覽會保存進度、續接並在完成後不再自動出現 (19.2s)
+  ok  5 e2e\onboarding-help.spec.ts:85:5 › schema v2 與舊導覽版本從第 1 步開始，缺少目標時提供不阻塞替代內容 (13.0s)
+  ok  6 e2e\onboarding-help.spec.ts:118:5 › 說明與設定共用入口可搜尋完整指南，手動導覽不改寫首次狀態 (13.0s)
+  ok  7 e2e\onboarding-help.spec.ts:186:5 › 導覽只還原自己顯示且未被使用者覆寫的區域 (6.5s)
+  ok  8 e2e\overview.spec.ts:6:5 › 總覽面板：開 → 用量卡片 + 工作區狀態 → 關閉 (6.1s)
+  ok  9 e2e\perf.spec.ts:76:5 › REQ-PERF-002/003/004 切換 / 開檔 / 按鍵 p95 (16.3s)
+
+=== PERF REPORT ===
+{
+  "machine": {
+    "cpu": "Intel(R) Core(TM) Ultra 5 235U",
+    "cores": 14,
+    "totalMemGB": 34
+  },
+  "note": "務實 N 量測（嚴謹 30 次 p95 + 基準機規格留 ship 量一次）",
+  "budgets": {
+    "coldStart": 3000,
+    "wsSwitch": 200,
+    "fileOpen": 500,
+    "keyLatency": 50,
+    "idleCpuPct": 10
+  },
+  "wsSwitch": {
+    "p95": 1,
+    "n": 13,
+    "budget": 200
+  },
+  "fileOpen": {
+    "p95": 123,
+    "n": 8,
+    "budget": 500
+  },
+  "keyLatency": {
+    "p95": 20,
+    "n": 20,
+    "budget": 50
+  },
+  "idleCpu": {
+    "pct": 14.3,
+    "workspaces": 10,
+    "windowMs": 18000,
+    "budget": 10
+  }
+}
+  x  10 e2e\perf.spec.ts:156:5 › REQ-MON-006 N=10 背景閒置監控 CPU 低水位 (29.5s)
+  ok 11 e2e\rail-resize.spec.ts:11:5 › 工作區欄可拖曳調寬 + 重啟持久化 (18.3s)
+
+
+  1) e2e\perf.spec.ts:156:5 › REQ-MON-006 N=10 背景閒置監控 CPU 低水位 ──────────────────────────────────────
+
+    Error: 閒置監控 CPU%（單核）
+
+    expect(received).toBeLessThan(expected)
+
+    Expected: < 10
+    Received:   14.322222222222223
+
+      174 |   rmSync(userData, { recursive: true, force: true });
+      175 |
+    > 176 |   expect(cpuPct, '閒置監控 CPU%（單核）').toBeLessThan(BUDGET.idleCpuPct);
+          |                                   ^
+      177 | });
+      178 |
+        at C:\polydesk-remote-dev\e2e\perf.spec.ts:176:35
+
+    Error Context: test-results\perf-REQ-MON-006-N-10-背景閒置監控-CPU-低水位\error-context.md
+
+    Error Context: test-results\perf-REQ-MON-006-N-10-背景閒置監控-CPU-低水位\error-context.md
+
+  1 failed
+    e2e\perf.spec.ts:156:5 › REQ-MON-006 N=10 背景閒置監控 CPU 低水位 ───────────────────────────────────────
+  10 passed (2.6m)
+
+--- stderr ---
+(node:21616) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:28800) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)

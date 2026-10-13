@@ -1,0 +1,25 @@
+{
+  "explanation": "列出的 Git 證據副本只去除行尾空白及末尾空行；原始 bytes 留在本機交付 qa-v0.40.0/raw-evidence。diff 副本用於閱讀，不作重放 patch；原始 patch 使用本機原檔。測試結果與數值未改。",
+  "files": [
+    {
+      "file": "branch-scoped-step-failure.md",
+      "rawSha256": "912f8d11aab81dbbc64c313faaeb5cb0a4b4d1ed33c2183973ac79ea20ad009a"
+    },
+    {
+      "file": "cleanup-polling-source.diff",
+      "rawSha256": "ca1da6b0542e7e0044ea56f2d56e5a3d7bdb44de1da97d87c6854b7579362c16"
+    },
+    {
+      "file": "cleanup-progress-polling-red.txt",
+      "rawSha256": "59b123a219181ca8773448326200c622856cd2d32450ea33d822644ac90e884d"
+    },
+    {
+      "file": "idle-cpu-source.diff",
+      "rawSha256": "68ea2b889109e4dd5a9524851669fdaad8e81a0ae33a77cefe0b00451e531392"
+    },
+    {
+      "file": "second-ship-idle-cpu-error-context.md",
+      "rawSha256": "4c510c33e76e9b672ffedd76d346a13d4c1cbdd9628fc8b124020db2270bc459"
+    }
+  ]
+}

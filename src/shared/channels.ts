@@ -4,6 +4,15 @@
 import type { InvokeChannel, EventChannel } from './ipc';
 
 export const INVOKE_CHANNELS = [
+  'remote:status',
+  'remote:enable',
+  'remote:disable',
+  'remote:challenge',
+  'remote:approve',
+  'remote:reject',
+  'remote:revoke',
+  'remote:allowWorkspace',
+  'remote:ready',
   'app:rendererReady',
   'app:openExternalUrl',
   'workspace:list',
@@ -99,6 +108,7 @@ export const INVOKE_CHANNELS = [
 ] as const satisfies readonly InvokeChannel[];
 
 export const EVENT_CHANNELS = [
+  'remote:launch',
   'editor:pasteShortcut',
   'workspace:activate',
   'claude:status',

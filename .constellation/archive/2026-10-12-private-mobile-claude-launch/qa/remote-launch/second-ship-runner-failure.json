@@ -1,0 +1,14 @@
+{
+  "startedAt": "2026-10-12T12:47:43.878Z",
+  "runner": "C:/Users/ennvoy.lin/Desktop/Constellation/gates/verify-runner.mjs",
+  "args": [
+    "--scope",
+    "ship",
+    "--cwd",
+    "C:/polydesk-remote-dev"
+  ],
+  "exitCode": 1,
+  "durationMs": 2570595,
+  "logPath": "C:\\Users\\ennvoy.lin\\AppData\\Local\\Temp\\polydesk-final-ship-2026-10-12T12-47-43-864Z.txt",
+  "scope": "Actual official ship runner, all configured commands from beginning"
+}

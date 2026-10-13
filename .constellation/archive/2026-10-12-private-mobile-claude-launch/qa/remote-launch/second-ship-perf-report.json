@@ -1,0 +1,36 @@
+{
+  "machine": {
+    "cpu": "Intel(R) Core(TM) Ultra 5 235U",
+    "cores": 14,
+    "totalMemGB": 34
+  },
+  "note": "務實 N 量測（嚴謹 30 次 p95 + 基準機規格留 ship 量一次）",
+  "budgets": {
+    "coldStart": 3000,
+    "wsSwitch": 200,
+    "fileOpen": 500,
+    "keyLatency": 50,
+    "idleCpuPct": 10
+  },
+  "wsSwitch": {
+    "p95": 1,
+    "n": 13,
+    "budget": 200
+  },
+  "fileOpen": {
+    "p95": 123,
+    "n": 8,
+    "budget": 500
+  },
+  "keyLatency": {
+    "p95": 20,
+    "n": 20,
+    "budget": 50
+  },
+  "idleCpu": {
+    "pct": 14.3,
+    "workspaces": 10,
+    "windowMs": 18000,
+    "budget": 10
+  }
+}

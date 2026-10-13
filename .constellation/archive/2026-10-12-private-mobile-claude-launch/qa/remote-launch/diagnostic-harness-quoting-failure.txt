@@ -1,0 +1,29 @@
+
+DIAGNOSTIC ONLY 2026-10-12T11:30:17.047Z npm run e2e -- e2e/git-branch-management.spec.ts --grep "^分支管理：本地" --workers=1
+
+> polydesk@0.40.0 e2e
+> playwright test e2e/git-branch-management.spec.ts --grep "^分支管理：本地" --workers=1
+
+Error: No tests found.
+Make sure that arguments are regular expressions matching test files.
+You may need to escape symbols like "$" or "*" and quote the arguments.
+
+
+DIAGNOSTIC RESULT {"command":"npm run e2e -- e2e/git-branch-management.spec.ts --grep \"^分支管理：本地\" --workers=1","exitCode":1,"durationMs":6992}
+
+DIAGNOSTIC ONLY 2026-10-12T11:30:24.050Z npm run e2e -- --workers=1 --shard=4/12 --grep-invert "REQ-PERF-001"
+
+> polydesk@0.40.0 e2e
+> playwright test --workers=1 --shard=4/12 --grep-invert "REQ-PERF-001"
+
+
+Running 14 tests using 1 worker, shard 4 of 12
+
+(node:3288) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+warning: in the working copy of 'f.txt', LF will be replaced by CRLF the next time Git touches it
+  ok  1 e2e\git-commit-actions.spec.ts:11:5 › commit hover 卡片 + 右鍵選單（開啟此 commit 變更 / 從此 commit 建分支） (30.0s)
+  ok  2 e2e\git-fetch-behind.spec.ts:38:5 › PE-4：遠端進新 commit → fetch 後線圖可見遠端版本，並顯示 ↓1 未拉取 (42.3s)
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'other.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to a new branch 'feature'

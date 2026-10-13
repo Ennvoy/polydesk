@@ -1,0 +1,16 @@
+
+Running 3 tests using 1 worker
+
+(node:35008) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 e2e\terminal-web-link.spec.ts:8:5 › Ctrl+點擊終端機 HTTP 網址：由系統瀏覽器外開，一般點擊不觸發 (12.6s)
+(node:16748) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 2 e2e\terminal-web-link.spec.ts:8:5 › Ctrl+點擊終端機 HTTP 網址：由系統瀏覽器外開，一般點擊不觸發 (8.1s)
+(node:24072) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 3 e2e\terminal-web-link.spec.ts:8:5 › Ctrl+點擊終端機 HTTP 網址：由系統瀏覽器外開，一般點擊不觸發 (7.5s)
+
+  3 passed (31.5s)
+
+SCOPED RESULT {"startedAt":"2026-10-12T12:44:17.371Z","args":["test","e2e/terminal-web-link.spec.ts","--repeat-each=3","--workers=1"],"exitCode":0,"durationMs":32961,"scope":"Three actual GUI runs after link hover harness correction; not full ship evidence"}

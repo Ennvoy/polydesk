@@ -499,15 +499,23 @@ export class PtyManager {
   }
 
   /** renderer→main 高頻輸入；termId 不存在/已死則安全 no-op（F-3-A4）。 */
-  write(termId: string, data: string): void {
+  write(termId: string, data: string): boolean {
     const t = this.terms.get(termId);
-    if (!t || !t.alive) return;
+    if (!t || !t.alive) return false;
     try {
       t.lastInputAt = Date.now();
       t.pty.write(data);
+      return true;
     } catch {
       /* 寫入競態（程序剛結束）：忽略，不讓 main 崩潰 */
+      return false;
     }
+  }
+
+  /** Remote startup revalidates actual PTY state after renderer's sizing handshake. */
+  dimensions(termId: string): { alive: boolean; cols: number; rows: number } {
+    const t = this.terms.get(termId);
+    return { alive: !!t?.alive, cols: t?.appliedCols ?? 0, rows: t?.appliedRows ?? 0 };
   }
 
   /**

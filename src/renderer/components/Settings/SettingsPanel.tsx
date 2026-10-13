@@ -11,6 +11,7 @@ import { ipc } from '../../ipc/client';
 import type { ThemeId } from '../../../shared/types';
 import { openHelpCenter } from '../Help/HelpCenter';
 import { tourBus } from '../../state/tourBus';
+import { RemoteSettings } from './RemoteSettings';
 
 const THEMES: { id: ThemeId; label: string; desc: string }[] = [
   { id: 'dark', label: '深色', desc: 'near-black 畫布 · 工程感' },
@@ -80,7 +81,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }): React.JSX.E
   };
 
   return (
-    <div style={{ minWidth: 420, maxWidth: 520 }}>
+    <div style={{ minWidth: 420, maxWidth: 520, maxHeight: '80vh', overflowY: 'auto', paddingRight: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <h2 style={{ margin: 0, fontSize: 'var(--text-lg)', fontFamily: 'var(--font-display)' }}>設定</h2>
         <button className="pd-btn" aria-label="關閉設定" onClick={onClose}>關閉</button>
@@ -154,6 +155,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }): React.JSX.E
         </p>
       </section>
 
+      <RemoteSettings />
       <section style={{ marginBottom: 8 }}>
         <h3 style={{ margin: '0 0 8px', fontSize: 'var(--text-sm)', color: 'var(--muted)', fontWeight: 600 }}>設定可攜</h3>
         <div style={{ display: 'flex', gap: 8 }}>

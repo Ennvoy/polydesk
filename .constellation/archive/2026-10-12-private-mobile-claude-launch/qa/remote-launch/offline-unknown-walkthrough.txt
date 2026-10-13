@@ -1,0 +1,38 @@
+{
+  "status": "PASS",
+  "timestamp": "2026-10-12T11:28:10.748Z",
+  "scope": "Supplemental frozen-build real Electron/PTY/Chrome/HTTP UI walkthrough; no source edits or rebuild",
+  "limitation": "Tailscale gateway uses existing unpackaged E2E seam; fake Claude executable checks the fixed command, not real Claude login/readiness",
+  "checks": [
+    {
+      "name": "Approved phone creates one real GUI tab and sends the fixed command",
+      "passed": true
+    },
+    {
+      "name": "Offline refresh/query show connection failure and disable launch without queuing",
+      "passed": true
+    },
+    {
+      "name": "Restored connection queries the original operation without another POST or GUI tab",
+      "passed": true
+    },
+    {
+      "name": "Unknown UUID restores through real GET, stays blocked and offers desktop-check acknowledgement; no automatic POST",
+      "passed": true
+    },
+    {
+      "name": "Explicit desktop-check acknowledgement clears the unknown result without launching",
+      "passed": true
+    }
+  ],
+  "launchAttempts": 1,
+  "forwardedLaunches": 1,
+  "offlineTransportAborts": 2,
+  "resultQueries": 9,
+  "screenshots": [
+    "mobile-offline-walkthrough.png",
+    "mobile-restored-same-operation.png",
+    "mobile-unknown-walkthrough.png"
+  ],
+  "cleanupErrors": []
+}

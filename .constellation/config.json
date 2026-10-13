@@ -1,5 +1,5 @@
 {
-  "approved": true,
+  "approved": false,
   "timeoutSec": 3600,
   "commands": {
     "test": [

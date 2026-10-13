@@ -1,6 +1,6 @@
 # Polydesk
 
-![version](https://img.shields.io/badge/version-v0.39.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+![version](https://img.shields.io/badge/version-v0.40.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
 
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
@@ -27,6 +27,7 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 | **AI 狀態監控** | 以真實 process 與工具事件偵測各工作區狀態；Windows 系統程序掃描使用絕對路徑，不受第三方軟體重排 PATH 影響；Claude / Codex 支援細分狀態，Agy 第一版提供「執行中 / 未啟動」徽章；主工作樹與每個 worktree 皆依自身路徑獨立顯示 Claude／Codex／Agy 標籤。 |
 | **總覽面板** | 一鍵最大化總覽：各工作區 Claude / Codex / Agy 狀態，以及 Claude / Codex 服務用量（5 小時 / 每週額度；Agy CLI 未提供可讀取用量，因此不顯示用量卡）。 |
 | **三主題** | 深色 / 淺色 / 暖色，字型統一 Geist，切換不跳版面。 |
+| **手機啟動 Claude** | Tailscale 私人連線、電腦批准配對與逐工作區授權；手機按一次就新增真實 Claude bypass 分頁，可選 7 天、30 天或永久配對，並由電腦撤銷。 |
 | **搜尋 / LSP** | 內建 ripgrep 全文搜尋、Language Server 診斷。 |
 
 ---
@@ -41,11 +42,32 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 
 終端機面板右上方提供三個 AI CLI 快捷按鈕：`Claude bypass` 會執行 `claude --dangerously-skip-permissions`，`Codex` 會執行 `codex`，`Agy` 會執行 `agy`。每次點擊都會建立一個獨立終端機，沿用目前工作區選定的 shell；Polydesk 會等 xterm 與 Windows ConPTY 回報相同欄列後才啟動工具，若尺寸未實際套用則自動重試，避免 Claude 等 TUI 先用錯誤欄寬排版。Claude bypass 會略過所有工具與檔案操作的權限確認，只能在你完全信任的工作區使用。
 
+### 用手機新增 Claude 分頁
+
+每人使用自己的手機、電腦與 Polydesk 獨立設定。同事拿到同一份 portable 也能使用，配對憑證不隨執行檔或一般設定匯出分享。
+
+1. 電腦安裝 [Tailscale for Windows](https://tailscale.com/download/windows)，手機安裝 Tailscale，登入可互通的私人網路。公司使用請依組織的 Tailscale 方案及存取規則設定。手機同時使用其他 VPN 時，可能需要切換 VPN。
+2. 電腦先確認工作區內的 `claude` 命令可使用且已登入。開啟 Polydesk「設定 → 手機遠端啟動」，啟用私人連線。若 Tailscale 未安裝、未登入或 HTTPS 尚未允許，依畫面提示完成後重試。
+3. 勾選允許手機啟動的工作區。這代表你允許手機在該工作區啟動 bypass；新增工作區不會自動授權，實際路徑改變也須重新授權。
+4. 按「產生手機配對碼」，手機掃 QR 碼；不能掃碼時，在手機入口手動輸入一次性碼。手機送出申請後，在電腦核對雙端識別碼，選擇期限：7 天（預設）、30 天或永久，再按「識別碼相同，批准」。
+5. 批准後，手機只顯示已授權工作區。按該工作區的 Claude bypass，即可在電腦建立新終端機；Polydesk 會恢復視窗、切到指定工作區並顯示終端機，不解鎖 Windows。
+6. 電腦必須保持開機、連線且 Polydesk 運作。每次重新啟動 Polydesk 要再啟用遠端功能；既有配對與工作區授權會保留。
+
+配對期限從電腦批准起算，永久指保留到手動撤銷；手機瀏覽器清除 cookie 後須重新配對。要改期限，先在電腦撤銷原配對，再以新期限重新配對。關閉遠端開關會停止受理；撤銷配對或取消工作區授權會阻止尚未送出的啟動命令，已啟動 Claude 不會因此被強制終止。
+
+手機的「已送出啟動命令」只表示已建立真實分頁並送出固定命令，不表示 Claude 已登入或就緒。CLI 缺失、登入及後續錯誤請查看電腦終端機。離線操作不排隊、不自動重送；送出後連線中斷時可查詢原操作，若結果無法確認，先檢查電腦分頁，再決定是否重新啟動。
+
+連線使用 [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve) 的私人 HTTPS，預設使用 8443 連入及 loopback 49387 轉接。Polydesk 不使用公開 Funnel，也不會重設其他 Serve 服務；若該埠已有其他服務，須先處理衝突。手機仍須獨立配對，私網連線本身不等於取得啟動授權。bypass 會略過 Claude 的權限確認，工作區授權不是檔案系統沙箱，只允許完全信任的專案。
+
+需求、安全邊界與驗收方式見 [手機啟動規格](specs/remote-launch.md)。
+
 終端機內容／對話導覽軸已從 Polydesk 完整移除，Claude、Codex、Agy 與一般 shell 都不再顯示左側節點，也不會在背景掃描 xterm scrollback 或攔截 `Alt+↑`／`Alt+↓`。AI CLI 快捷啟動、尺寸同步、scrollback 與工作區狀態徽章不受影響。
 
 Windows PowerShell、CMD 與 WSL 會由 Polydesk 使用系統絕對路徑啟動，即使安裝 Sunlike365 等軟體後 `PATH` 順序改變也不需手動修環境變數。PowerShell 7 或 Git Bash 若未安裝，終端機面板會顯示 `shell-not-found` 錯誤；工作區遺失或 ConPTY 無法建立時也會提供對應代碼，不再只像按鈕沒有反應。
 
 AI 執行狀態監控使用 `SystemRoot` 下的 Windows PowerShell／WMIC 絕對路徑掃描程序，因此同一類 PATH 重排不會再造成工作區的 Claude、Codex、Agy 標籤消失。標籤只會在對應 AI CLI 確實於 Polydesk 終端機內啟動時顯示；工具結束並關閉終端機後會回到未啟動狀態。
+
+v0.40.0 起，全部工作區都沒有終端機時，狀態監控直接維持閒置，略過全域 AI 紀錄讀取與程序掃描，減少背景 CPU 耗用。重新開啟終端機後恢復正常監控；部分工作區有終端機時仍各自判斷工具狀態。
 
 ### Git 操作失敗與衝突處理
 
@@ -135,9 +157,13 @@ v0.38.0 的 SCM 修正提交為 `8deb288`。第三輪正式驗證共 20 項指�
 
 v0.39.0 的歷史分頁修正提交為 `ba6583f`，採受影響範圍的目標驗證：typecheck、正式 build 與 `git diff --check` 通過；Git 服務 2 檔 24 案及版本同步 3 案通過，真 Electron 分頁、既有工作區切換與慢狀態掃描共 3 案，以及導覽／完整指南 4 案通過，合計 7 案、0 跳過。以同一 60 筆真 Git 提交對照，v0.38 捲到底只有 50 筆，v0.39 可依序載入到 60 筆與末頁。此次未執行完整 ship runner；portable 成品仍須在發布後另核版本、大小、SHA-256 與隔離啟動。
 
+v0.40.0 的私人手機啟動與背景負擔修正已完成全量驗證。正式 ship runner 20 項指令全部通過，耗時 3396 秒：typecheck、88 個 Vitest 檔案共 723 項、正式 build，以及十二組 Electron E2E 共 128 項通過、3 項依條件略過。沿用既有 REQ-PERF-001 冷啟動排除，背景 CPU 原 18 秒／10% 門檻通過；導覽與完整指南一起驗證。真 Tailscale 帳號及實體手機行動網路未在此環境實測，不以測試 gateway 代替該外部鏈路。 [出貨報告與簽章證據](.constellation/archive/2026-10-12-private-mobile-claude-launch/ship-report.md)保存安全審查、配對／撤銷、離線不重送與原效能門檻結果。
+
 ### Git 狀態同步
 
 原始碼控制面板開啟期間，Polydesk 會以低頻、僅讀取狀態的方式檢查目前 `HEAD`、分支及 ahead / behind。即使 commit 或 push 是在整合終端機、外部終端機或其他 Git 工具完成，面板也會自動更新，不必手動重新整理。
+
+v0.40.0 的完整清理進度會等上一筆查詢完成後才查下一筆，避免查詢累積，導致清理完成後操作按鈕仍長時間停在忙碌狀態。切換工作區或離開面板會停止舊查詢的更新；兩階段確認與安全清理方式不變。
 
 狀態、變更清單、側欄頂部角標與底部狀態列會共用同工作區的一次 Git 快照；同時發生的讀取只啟動一個查詢。分支清單以 `for-each-ref` 取得本地、遠端與目前分支，再依實際 remote 名稱辨識遠端分支，支援名稱含斜線的 remote。
 

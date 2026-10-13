@@ -1,0 +1,24 @@
+機器鎖無人佔用，開跑。
+出貨驗證通過：20 項指令（test＋journey 全量）全數 exit 0（總耗時 3396s），證據已寫入 C:\polydesk-remote-dev\.constellation\ship-evidence.md
+  - cmd /c npm run typecheck -- --pretty false（exit 0，15s）
+  - cmd /c npm test -- --maxWorkers=1 --minWorkers=1 --shard=1/6（exit 0，410s）
+  - cmd /c npm test -- --maxWorkers=1 --minWorkers=1 --shard=2/6（exit 0，505s）
+  - cmd /c npm test -- --maxWorkers=1 --minWorkers=1 --shard=3/6（exit 0，72s）
+  - cmd /c npm test -- --maxWorkers=1 --minWorkers=1 --shard=4/6（exit 0，143s）
+  - cmd /c npm test -- --maxWorkers=1 --minWorkers=1 --shard=5/6（exit 0，63s）
+  - cmd /c npm test -- --maxWorkers=1 --minWorkers=1 --shard=6/6（exit 0，57s）
+  - cmd /c npm run build（exit 0，74s）
+  - cmd /c npm run e2e -- --workers=1 --shard=1/12 --grep-invert "REQ-PERF-001"（exit 0，91s）
+  - cmd /c npm run e2e -- --workers=1 --shard=2/12 --grep-invert "REQ-PERF-001"（exit 0，85s）
+  - cmd /c npm run e2e -- --workers=1 --shard=3/12 --grep-invert "REQ-PERF-001"（exit 0，603s）
+  - cmd /c npm run e2e -- --workers=1 --shard=4/12 --grep-invert "REQ-PERF-001"（exit 0，276s）
+  - cmd /c npm run e2e -- --workers=1 --shard=5/12 --grep-invert "REQ-PERF-001"（exit 0，106s）
+  - cmd /c npm run e2e -- --workers=1 --shard=6/12 --grep-invert "REQ-PERF-001"（exit 0，128s）
+  - cmd /c npm run e2e -- --workers=1 --shard=7/12 --grep-invert "REQ-PERF-001"（exit 0，138s）
+  - cmd /c npm run e2e -- --workers=1 --shard=8/12 --grep-invert "REQ-PERF-001"（exit 0，114s）
+  - cmd /c npm run e2e -- --workers=1 --shard=9/12 --grep-invert "REQ-PERF-001"（exit 0，89s）
+  - cmd /c npm run e2e -- --workers=1 --shard=10/12 --grep-invert "REQ-PERF-001"（exit 0，91s）
+  - cmd /c npm run e2e -- --workers=1 --shard=11/12 --grep-invert "REQ-PERF-001"（exit 0，80s）
+  - cmd /c npm run e2e -- --workers=1 --shard=12/12 --grep-invert "REQ-PERF-001"（exit 0，253s）
+
+FORMAL SHIP RESULT {"startedAt":"2026-10-12T13:54:38.375Z","runner":"C:/Users/ennvoy.lin/Desktop/Constellation/gates/verify-runner.mjs","args":["--scope","ship","--cwd","C:/polydesk-remote-dev"],"exitCode":0,"durationMs":3396845,"logPath":"C:\\Users\\ennvoy.lin\\AppData\\Local\\Temp\\polydesk-final-ship-2026-10-12T13-54-38-368Z.txt","scope":"Actual official ship runner, all configured commands from beginning"}

@@ -1,0 +1,49 @@
+{
+  "source": null,
+  "frozen": [
+    "src/renderer/components/Settings/SettingsPanel.tsx",
+    "src/renderer/components/Settings/RemoteSettings.tsx",
+    "src/main/remote/mobilePage.ts",
+    "src/renderer/components/Terminal/TerminalPanel.tsx",
+    "src/renderer/components/Help/GuidedTour.tsx",
+    "src/renderer/components/Help/HelpCenter.tsx"
+  ],
+  "log": [
+    {
+      "path": "src/renderer/components/Settings/SettingsPanel.tsx",
+      "action": "freeze",
+      "at": "2026-10-12T10:08:56.785Z",
+      "reason": "依決議133委託推薦定案；真UI互動及截圖已檢查"
+    },
+    {
+      "path": "src/renderer/components/Settings/RemoteSettings.tsx",
+      "action": "freeze",
+      "at": "2026-10-12T10:08:56.785Z",
+      "reason": "依決議133委託推薦定案；真UI互動及截圖已檢查"
+    },
+    {
+      "path": "src/main/remote/mobilePage.ts",
+      "action": "freeze",
+      "at": "2026-10-12T10:08:56.785Z",
+      "reason": "依決議133委託推薦定案；真UI互動及截圖已檢查"
+    },
+    {
+      "path": "src/renderer/components/Terminal/TerminalPanel.tsx",
+      "action": "freeze",
+      "at": "2026-10-12T10:08:56.785Z",
+      "reason": "依決議133委託推薦定案；真UI互動及截圖已檢查"
+    },
+    {
+      "path": "src/renderer/components/Help/GuidedTour.tsx",
+      "action": "freeze",
+      "at": "2026-10-12T10:08:56.785Z",
+      "reason": "依決議133委託推薦定案；真UI互動及截圖已檢查"
+    },
+    {
+      "path": "src/renderer/components/Help/HelpCenter.tsx",
+      "action": "freeze",
+      "at": "2026-10-12T10:08:56.785Z",
+      "reason": "依決議133委託推薦定案；真UI互動及截圖已檢查"
+    }
+  ]
+}

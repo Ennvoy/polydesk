@@ -19,7 +19,7 @@ const STEPS: TourStep[] = [
   { title: '快速控制工作台版面', body: '工作區、側欄、編輯器與終端機都能原地顯示或隱藏；重設版面會盡量保留開啟中的工作。', target: '[data-tour="layout-toolbar"]' },
   { title: '側欄跟著目前功能切換', body: '檔案、搜尋與 Git 共享同一個側欄位置。選擇側欄頂部圖示，下面的內容會立即切換。Git 操作失敗時，先看錯誤摘要與處理方式，需要排查再展開技術細節。', target: '.pd-sidebar-view', reveal: 'sidebar' },
   { title: '編輯器與終端機可以自由停靠', body: '開啟檔案、檢查差異、執行 shell 或 AI CLI。按分頁×只會原地隱藏，重新顯示時保留尺寸與狀態。', target: '[data-tour="dock-workbench"]', reveal: 'editor' },
-  { title: '終端機也能啟動 AI 工具', body: 'Claude bypass、Codex 與 Agy 會各自建立獨立終端機；bypass 只適用於完全信任的工作區。', target: '[data-tour="dock-workbench"]', reveal: 'terminal' },
+  { title: '終端機也能啟動 AI 工具', body: 'Claude bypass、Codex 與 Agy 會各自建立獨立終端機；bypass 只適用於完全信任的工作區。設定中的「手機遠端啟動」可配對手機，僅授權的工作區能遠端新增 Claude 分頁。', target: '[data-tour="dock-workbench"]', reveal: 'terminal' },
   { title: '隨時回來查說明', body: '從「說明」重新執行導覽、搜尋完整使用指南，或查看 Polydesk 版本資訊。', target: '[data-tour="help-menu"]' },
 ];
 

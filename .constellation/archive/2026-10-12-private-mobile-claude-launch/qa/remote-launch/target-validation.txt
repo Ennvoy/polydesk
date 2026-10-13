@@ -1,0 +1,733 @@
+Target validation 2026-10-12T10:01:58.240Z
+
+COMMAND: npm run typecheck
+
+> polydesk@0.40.0 typecheck
+> tsc --noEmit
+
+
+exit=0; error=none
+
+COMMAND: npm test -- src/main/remote/RemoteService.test.ts src/main/remote/TailscaleGateway.test.ts src/main/pty/PtyManager.test.ts
+
+> polydesk@0.40.0 test
+> vitest run src/main/remote/RemoteService.test.ts src/main/remote/TailscaleGateway.test.ts src/main/pty/PtyManager.test.ts
+
+
+ RUN  v3.2.7 C:/polydesk-remote-dev
+
+ ✓ src/main/remote/TailscaleGateway.test.ts (7 tests) 26ms
+ ✓ src/main/remote/RemoteService.test.ts (11 tests) 2373ms
+   ✓ remote HTTP security and launch contracts > persists operation before creation and never resends an unfinished operation after restart  351ms
+ ✓ src/main/pty/PtyManager.test.ts (31 tests) 18512ms
+   ✓ PtyManager teardown 殺子程序樹（F-3-A6） > 真實：終端機內前景子程序在 teardown 後不再存在（無殘留）  7019ms
+   ✓ PtyManager 真實 node-pty 生命週期（REQ-TERM-001/006/004） > create → write 指令 → 收到 data（含輸出標記）  4739ms
+   ✓ PtyManager 真實 node-pty 生命週期（REQ-TERM-001/006/004） > write 指令使 shell 結束 → onExit 帶 exitCode、list 標 alive=false  4795ms
+
+ Test Files  3 passed (3)
+      Tests  49 passed (49)
+   Start at  18:02:14
+   Duration  21.36s (transform 1.04s, setup 0ms, collect 2.17s, tests 20.91s, environment 1ms, prepare 2.40s)
+
+
+exit=0; error=none
+
+COMMAND: npm run build
+
+> polydesk@0.40.0 build
+> electron-vite build
+
+vite v6.4.4 building SSR bundle for production...
+transforming...
+✓ 66 modules transformed.
+rendering chunks...
+out/main/index.js  432.57 kB
+✓ built in 1.25s
+vite v6.4.4 building SSR bundle for production...
+transforming...
+✓ 2 modules transformed.
+rendering chunks...
+out/preload/index.js  3.70 kB
+✓ built in 52ms
+vite v6.4.4 building for production...
+transforming...
+✓ 1348 modules transformed.
+rendering chunks...
+../../out/renderer/index.html                                                          0.41 kB
+../../out/renderer/assets/jetbrains-mono-greek-400-normal-C190GLew.woff2               4.23 kB
+../../out/renderer/assets/jetbrains-mono-greek-700-normal-C6CZE3T8.woff2               4.30 kB
+../../out/renderer/assets/source-code-pro-cyrillic-ext-700-normal-CsEcUHnW.woff2       4.48 kB
+../../out/renderer/assets/source-code-pro-cyrillic-ext-400-normal-DMj7z5uw.woff2       4.52 kB
+../../out/renderer/assets/source-code-pro-vietnamese-700-normal-CxyXxWvs.woff2         4.75 kB
+../../out/renderer/assets/source-code-pro-vietnamese-400-normal-Cp62Zi-a.woff2         4.75 kB
+../../out/renderer/assets/jetbrains-mono-cyrillic-400-normal-BEIGL1Tu.woff2            5.33 kB
+../../out/renderer/assets/jetbrains-mono-cyrillic-700-normal-BWTpRfYl.woff2            5.34 kB
+../../out/renderer/assets/jetbrains-mono-vietnamese-400-normal-CqNFfHCs.woff           5.37 kB
+../../out/renderer/assets/space-mono-vietnamese-400-normal-B0PMp_xB.woff               5.41 kB
+../../out/renderer/assets/space-mono-vietnamese-700-normal-D-KrLuLr.woff               5.45 kB
+../../out/renderer/assets/jetbrains-mono-vietnamese-700-normal-BDLVIk2r.woff           5.45 kB
+../../out/renderer/assets/source-code-pro-greek-700-normal-D3R3zC5Z.woff2              5.53 kB
+../../out/renderer/assets/source-code-pro-greek-400-normal-loYmywBR.woff2              5.53 kB
+../../out/renderer/assets/ibm-plex-mono-vietnamese-400-normal-DDuiU_S-.woff            5.62 kB
+../../out/renderer/assets/ibm-plex-mono-vietnamese-700-normal-Bs14ezHR.woff            5.64 kB
+../../out/renderer/assets/jetbrains-mono-greek-400-normal-B9oWc5Lo.woff                5.66 kB
+../../out/renderer/assets/jetbrains-mono-greek-700-normal-DEigVDxa.woff                5.70 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-ext-700-normal-CtgKGIh5.woff          5.75 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-ext-400-normal-DMdlQ8Kv.woff          5.82 kB
+../../out/renderer/assets/source-code-pro-cyrillic-ext-700-normal-Bgm39ugp.woff        5.82 kB
+../../out/renderer/assets/source-code-pro-cyrillic-ext-400-normal-C4HW5rAf.woff        5.86 kB
+../../out/renderer/assets/ibm-plex-mono-vietnamese-400-normal-BulugwFq.woff2           5.87 kB
+../../out/renderer/assets/ibm-plex-mono-vietnamese-700-normal-apsD3J7v.woff2           6.07 kB
+../../out/renderer/assets/source-code-pro-vietnamese-400-normal-DgY6bmny.woff          6.50 kB
+../../out/renderer/assets/source-code-pro-vietnamese-700-normal-DmKv_uoU.woff          6.63 kB
+../../out/renderer/assets/source-code-pro-cyrillic-400-normal-zAQh90eX.woff2           6.79 kB
+../../out/renderer/assets/source-code-pro-cyrillic-700-normal-BLgPr0kP.woff2           6.80 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-ext-400-normal-xuaO2J-f.woff2         6.91 kB
+../../out/renderer/assets/jetbrains-mono-cyrillic-400-normal-ugxPyKxw.woff             6.98 kB
+../../out/renderer/assets/jetbrains-mono-cyrillic-700-normal-CEoEElIJ.woff             7.02 kB
+../../out/renderer/assets/source-code-pro-greek-400-normal-BLt0TW07.woff               7.10 kB
+../../out/renderer/assets/source-code-pro-greek-700-normal-S96-jIG2.woff               7.11 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-ext-700-normal-BDQ-w_bc.woff2         7.18 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-400-normal-CEL4l2ZJ.woff              7.20 kB
+../../out/renderer/assets/space-mono-vietnamese-400-normal-BNOj0Qhp.woff2              7.27 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-700-normal-O_YjL27c.woff              7.28 kB
+../../out/renderer/assets/space-mono-vietnamese-700-normal-DWQgDHuA.woff2              7.33 kB
+../../out/renderer/assets/jetbrains-mono-latin-ext-400-normal-Bc8Ftmh3.woff2           7.34 kB
+../../out/renderer/assets/jetbrains-mono-latin-ext-700-normal-CZipNAKV.woff2           7.47 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-400-normal-BSMlKf0J.woff2             8.36 kB
+../../out/renderer/assets/source-code-pro-cyrillic-700-normal-DRMte6BP.woff            8.61 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-700-normal-Bp80XfeI.woff2             8.68 kB
+../../out/renderer/assets/source-code-pro-cyrillic-400-normal-BNPE9vbi.woff            8.73 kB
+../../out/renderer/assets/jetbrains-mono-latin-ext-400-normal-fXTG6kC5.woff           10.13 kB
+../../out/renderer/assets/jetbrains-mono-latin-ext-700-normal-CxPITLHs.woff           10.30 kB
+../../out/renderer/assets/source-code-pro-latin-700-normal-DKwZGtZT.woff2             11.54 kB
+../../out/renderer/assets/ibm-plex-mono-latin-ext-700-normal-Cwsjk1Jb.woff            11.65 kB
+../../out/renderer/assets/source-code-pro-latin-400-normal-DEXWLoHG.woff2             11.66 kB
+../../out/renderer/assets/ibm-plex-mono-latin-ext-400-normal-D3D2R8hC.woff            11.77 kB
+../../out/renderer/assets/space-mono-latin-400-normal-_3DlpgIW.woff                   12.31 kB
+../../out/renderer/assets/space-mono-latin-700-normal-D7A851RN.woff                   12.42 kB
+../../out/renderer/assets/space-mono-latin-ext-700-normal-B_E7P90g.woff               12.48 kB
+../../out/renderer/assets/space-mono-latin-ext-400-normal-D4cJI_B-.woff               12.61 kB
+../../out/renderer/assets/ibm-plex-mono-latin-400-normal-CvHOgSBP.woff                13.14 kB
+../../out/renderer/assets/ibm-plex-mono-latin-700-normal-CNHXzs6v.woff                13.21 kB
+../../out/renderer/assets/ibm-plex-mono-latin-ext-400-normal-BmRBH3aV.woff2           13.35 kB
+../../out/renderer/assets/ibm-plex-mono-latin-ext-700-normal-Dhimjc7-.woff2           13.38 kB
+../../out/renderer/assets/ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2               14.71 kB
+../../out/renderer/assets/ibm-plex-mono-latin-700-normal-7sUh57Bg.woff2               14.91 kB
+../../out/renderer/assets/source-code-pro-latin-700-normal-DQXC5bpC.woff              15.19 kB
+../../out/renderer/assets/source-code-pro-latin-400-normal-C5QriPt2.woff              15.33 kB
+../../out/renderer/assets/space-mono-latin-ext-700-normal-B2s3bDs2.woff2              15.81 kB
+../../out/renderer/assets/space-mono-latin-ext-400-normal-DTLbW2xa.woff2              15.83 kB
+../../out/renderer/assets/space-mono-latin-400-normal-Rg4St2Dn.woff2                  16.52 kB
+../../out/renderer/assets/space-mono-latin-700-normal-mWgeinG7.woff2                  16.72 kB
+../../out/renderer/assets/source-code-pro-latin-ext-700-normal-hx76J3qd.woff2         17.64 kB
+../../out/renderer/assets/source-code-pro-latin-ext-400-normal-C8wU-ygL.woff2         17.75 kB
+../../out/renderer/assets/jetbrains-mono-latin-400-normal-V6pRDFza.woff2              21.17 kB
+../../out/renderer/assets/jetbrains-mono-latin-700-normal-BYuf6tUa.woff2              21.91 kB
+../../out/renderer/assets/source-code-pro-latin-ext-700-normal-BD2lII8a.woff          23.70 kB
+../../out/renderer/assets/source-code-pro-latin-ext-400-normal-CB0vIBLK.woff          23.76 kB
+../../out/renderer/assets/jetbrains-mono-latin-400-normal-6-qcROiO.woff               27.50 kB
+../../out/renderer/assets/jetbrains-mono-latin-700-normal-D3wTyLJW.woff               28.21 kB
+../../out/renderer/assets/codicon-ngg6Pgfi.ttf                                       121.97 kB
+../../out/renderer/assets/editor.worker-BCR8tfx6.js                                  541.05 kB
+../../out/renderer/assets/json.worker-D4JVmXIe.js                                    840.01 kB
+../../out/renderer/assets/html.worker-BT47iy49.js                                  1,241.54 kB
+../../out/renderer/assets/css.worker-umuuUiIb.js                                   1,865.95 kB
+../../out/renderer/assets/ts.worker-C7hW3aY-.js                                   13,264.91 kB
+../../out/renderer/assets/index-BBwoSmcr.css                                         448.59 kB
+../../out/renderer/assets/azcli-BEAhqcuE.js                                            1.30 kB
+../../out/renderer/assets/javascript-BaVKedq2.js                                       1.30 kB
+../../out/renderer/assets/ini-BcQysCTb.js                                              1.67 kB
+../../out/renderer/assets/csp-D_3BK2Wp.js                                              1.70 kB
+../../out/renderer/assets/scheme-D7PxodDG.js                                           2.36 kB
+../../out/renderer/assets/bat-Bqkp9Cfu.js                                              2.66 kB
+../../out/renderer/assets/xml-D0yUMRoC.js                                              2.75 kB
+../../out/renderer/assets/flow9-ZSTChSMd.js                                            2.76 kB
+../../out/renderer/assets/sb-Chfc_wZF.js                                               2.81 kB
+../../out/renderer/assets/pla-DEV89yYj.js                                              2.87 kB
+../../out/renderer/assets/dockerfile--oxj0cAH.js                                       3.02 kB
+../../out/renderer/assets/pascaligo-VA_LQ1oU.js                                        3.25 kB
+../../out/renderer/assets/lua-hNsuGJkO.js                                              3.43 kB
+../../out/renderer/assets/bicep-DIlfshcM.js                                            3.44 kB
+../../out/renderer/assets/objective-c-B1L1C5EC.js                                      3.48 kB
+../../out/renderer/assets/cameligo-CLaaYNMV.js                                         3.51 kB
+../../out/renderer/assets/graphql-BeiGgjIU.js                                          3.77 kB
+../../out/renderer/assets/lexon-C1U0m2n9.js                                            3.81 kB
+../../out/renderer/assets/typespec-R77Ln7Jb.js                                         3.90 kB
+../../out/renderer/assets/sparql-DxuVdnRl.js                                           3.94 kB
+../../out/renderer/assets/mips-CJm71dS3.js                                             4.14 kB
+../../out/renderer/assets/m3-6ko6q9-_.js                                               4.15 kB
+../../out/renderer/assets/sophia-D7pU0Y1d.js                                           4.27 kB
+../../out/renderer/assets/shell-vZEubQ82.js                                            4.48 kB
+../../out/renderer/assets/go-brnMpFrj.js                                               4.49 kB
+../../out/renderer/assets/fsharp-D2uoxuLH.js                                           4.51 kB
+../../out/renderer/assets/pascal-DMQyD4Xk.js                                           4.71 kB
+../../out/renderer/assets/r-CtqYUQ6l.js                                                4.80 kB
+../../out/renderer/assets/less-B7Qaxw-O.js                                             5.00 kB
+../../out/renderer/assets/tcl-Bb4GCwBr.js                                              5.05 kB
+../../out/renderer/assets/liquid-D9455f9f.js                                           5.08 kB
+../../out/renderer/assets/qsharp-BWK6YLKm.js                                           5.14 kB
+../../out/renderer/assets/cypher-D0--_GAN.js                                           5.15 kB
+../../out/renderer/assets/java-Dt3iMn2o.js                                             5.16 kB
+../../out/renderer/assets/kotlin-Ddo1SjA5.js                                           5.20 kB
+../../out/renderer/assets/hcl-CrX1Es2W.js                                              5.21 kB
+../../out/renderer/assets/redis-O7gSt3oh.js                                            5.25 kB
+../../out/renderer/assets/restructuredtext-B-KQCVu_.js                                 5.33 kB
+../../out/renderer/assets/powershell-BXiKvz7Z.js                                       5.39 kB
+../../out/renderer/assets/coffee-CzJ5oEdj.js                                           5.51 kB
+../../out/renderer/assets/mdx-B24V2xZA.js                                              5.76 kB
+../../out/renderer/assets/yaml-DEPbL5Do.js                                             5.81 kB
+../../out/renderer/assets/css-i3rI3_64.js                                              6.10 kB
+../../out/renderer/assets/cssMode-bvrelrRp.js                                          6.15 kB
+../../out/renderer/assets/rust-B1c0VCeq.js                                             6.27 kB
+../../out/renderer/assets/apex-DVGUZ64i.js                                             6.39 kB
+../../out/renderer/assets/python-CU7tzX_U.js                                           6.43 kB
+../../out/renderer/assets/dart-vLMHv35g.js                                             6.48 kB
+../../out/renderer/assets/markdown-B0YTnTxW.js                                         6.65 kB
+../../out/renderer/assets/htmlMode-Dr92eZMh.js                                         6.89 kB
+../../out/renderer/assets/msdax-BBeIktCY.js                                            6.95 kB
+../../out/renderer/assets/csharp-BJeIuvde.js                                           6.98 kB
+../../out/renderer/assets/swift-BmOZGynf.js                                            7.18 kB
+../../out/renderer/assets/html-eVAoiB0O.js                                             7.56 kB
+../../out/renderer/assets/typescript-6IBV0EbZ.js                                       7.84 kB
+../../out/renderer/assets/ecl-CeuUgzaZ.js                                              7.94 kB
+../../out/renderer/assets/cpp-CcN6f0ik.js                                              8.22 kB
+../../out/renderer/assets/pug-BxCXwerb.js                                              8.26 kB
+../../out/renderer/assets/vb-Bm6ESA0Q.js                                               8.33 kB
+../../out/renderer/assets/scss-B42qMyAu.js                                             9.07 kB
+../../out/renderer/assets/wgsl-_KPae5vw.js                                             9.78 kB
+../../out/renderer/assets/st-C-b0Dh53.js                                              10.15 kB
+../../out/renderer/assets/twig-DvgEGWAV.js                                            10.26 kB
+../../out/renderer/assets/handlebars-fN3VxAMR.js                                      10.34 kB
+../../out/renderer/assets/julia-Cm3ItYL_.js                                           10.54 kB
+../../out/renderer/assets/scala-DbVzH-3O.js                                           10.70 kB
+../../out/renderer/assets/systemverilog-BOC0OOdC.js                                   11.63 kB
+../../out/renderer/assets/php-Bkx1qpkQ.js                                             12.48 kB
+../../out/renderer/assets/protobuf-CndvAUGu.js                                        12.68 kB
+../../out/renderer/assets/perl-DC0Z0tlO.js                                            12.82 kB
+../../out/renderer/assets/razor-ojXCziJC.js                                           13.27 kB
+../../out/renderer/assets/clojure-fcgFaMHx.js                                         13.94 kB
+../../out/renderer/assets/ruby-DCd4DmAr.js                                            15.31 kB
+../../out/renderer/assets/sql-BAGepFCR.js                                             15.56 kB
+../../out/renderer/assets/mysql-BWiizXSn.js                                           16.16 kB
+../../out/renderer/assets/redshift-CvYMMYZY.js                                        16.33 kB
+../../out/renderer/assets/pgsql-DaSGFTLp.js                                           18.25 kB
+../../out/renderer/assets/elixir-eLfY1jWH.js                                          18.74 kB
+../../out/renderer/assets/postiats-CVVurEnu.js                                        19.30 kB
+../../out/renderer/assets/powerquery-BQ_t1ZiQ.js                                      21.65 kB
+../../out/renderer/assets/abap-D5KwWAsZ.js                                            22.97 kB
+../../out/renderer/assets/solidity-yHOxYChb.js                                        26.03 kB
+../../out/renderer/assets/jsonMode-nlsZrf9Z.js                                        29.12 kB
+../../out/renderer/assets/tsMode-Cy3ymitH.js                                          40.32 kB
+../../out/renderer/assets/freemarker2-CrJjAoDE.js                                     42.10 kB
+../../out/renderer/assets/lspLanguageFeatures-BpcZWsOg.js                             61.69 kB
+../../out/renderer/assets/addon-webgl-BEDhrLCz.js                                    139.86 kB
+../../out/renderer/assets/index-CFXIps_v.js                                        9,642.74 kB
+✓ built in 1m 10s
+"Stats" is imported from external module "node:fs" but never used in "node_modules/chokidar/index.js".
+
+exit=0; error=none
+
+COMMAND: npm run e2e -- e2e/remote-launch.spec.ts e2e/onboarding-help.spec.ts e2e/terminal-ai-launch.spec.ts
+
+> polydesk@0.40.0 e2e
+> playwright test e2e/remote-launch.spec.ts e2e/onboarding-help.spec.ts e2e/terminal-ai-launch.spec.ts
+
+
+Running 6 tests using 1 worker
+
+  ok 1 e2e\onboarding-help.spec.ts:34:5 › 首次導覽會保存進度、續接並在完成後不再自動出現 (23.3s)
+  ok 2 e2e\onboarding-help.spec.ts:85:5 › schema v2 與舊導覽版本從第 1 步開始，缺少目標時提供不阻塞替代內容 (12.7s)
+  ok 3 e2e\onboarding-help.spec.ts:118:5 › 說明與設定共用入口可搜尋完整指南，手動導覽不改寫首次狀態 (11.9s)
+  ok 4 e2e\onboarding-help.spec.ts:186:5 › 導覽只還原自己顯示且未被使用者覆寫的區域 (7.5s)
+  ok 5 e2e\remote-launch.spec.ts:24:5 › 真 HTTP 手機配對與桌面批准，縮小後新增固定 Claude GUI 分頁且同操作不重複 (18.5s)
+  ok 6 e2e\terminal-ai-launch.spec.ts:38:5 › Claude bypass / Codex / Agy 按鈕會各開終端機並送出對應命令 (17.2s)
+
+  6 passed (1.5m)
+(node:35848) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+exit=0; error=none
+
+Lifecycle fix validation 2026-10-12T10:06:50.667Z
+
+COMMAND: npm run typecheck
+
+> polydesk@0.40.0 typecheck
+> tsc --noEmit
+
+
+exit=0; error=none
+
+COMMAND: npm test -- src/main/remote/RemoteService.test.ts src/main/remote/TailscaleGateway.test.ts
+
+> polydesk@0.40.0 test
+> vitest run src/main/remote/RemoteService.test.ts src/main/remote/TailscaleGateway.test.ts
+
+
+ RUN  v3.2.7 C:/polydesk-remote-dev
+
+ ✓ src/main/remote/TailscaleGateway.test.ts (7 tests) 22ms
+ ✓ src/main/remote/RemoteService.test.ts (12 tests) 2460ms
+
+ Test Files  2 passed (2)
+      Tests  19 passed (19)
+   Start at  18:07:23
+   Duration  5.05s (transform 399ms, setup 0ms, collect 744ms, tests 2.48s, environment 1ms, prepare 1.22s)
+
+
+exit=0; error=none
+
+COMMAND: npm run build
+
+> polydesk@0.40.0 build
+> electron-vite build
+
+vite v6.4.4 building SSR bundle for production...
+transforming...
+✓ 66 modules transformed.
+rendering chunks...
+out/main/index.js  432.83 kB
+✓ built in 2.13s
+vite v6.4.4 building SSR bundle for production...
+transforming...
+✓ 2 modules transformed.
+rendering chunks...
+out/preload/index.js  3.70 kB
+✓ built in 113ms
+vite v6.4.4 building for production...
+transforming...
+✓ 1348 modules transformed.
+rendering chunks...
+../../out/renderer/index.html                                                          0.41 kB
+../../out/renderer/assets/jetbrains-mono-greek-400-normal-C190GLew.woff2               4.23 kB
+../../out/renderer/assets/jetbrains-mono-greek-700-normal-C6CZE3T8.woff2               4.30 kB
+../../out/renderer/assets/source-code-pro-cyrillic-ext-700-normal-CsEcUHnW.woff2       4.48 kB
+../../out/renderer/assets/source-code-pro-cyrillic-ext-400-normal-DMj7z5uw.woff2       4.52 kB
+../../out/renderer/assets/source-code-pro-vietnamese-700-normal-CxyXxWvs.woff2         4.75 kB
+../../out/renderer/assets/source-code-pro-vietnamese-400-normal-Cp62Zi-a.woff2         4.75 kB
+../../out/renderer/assets/jetbrains-mono-cyrillic-400-normal-BEIGL1Tu.woff2            5.33 kB
+../../out/renderer/assets/jetbrains-mono-cyrillic-700-normal-BWTpRfYl.woff2            5.34 kB
+../../out/renderer/assets/jetbrains-mono-vietnamese-400-normal-CqNFfHCs.woff           5.37 kB
+../../out/renderer/assets/space-mono-vietnamese-400-normal-B0PMp_xB.woff               5.41 kB
+../../out/renderer/assets/space-mono-vietnamese-700-normal-D-KrLuLr.woff               5.45 kB
+../../out/renderer/assets/jetbrains-mono-vietnamese-700-normal-BDLVIk2r.woff           5.45 kB
+../../out/renderer/assets/source-code-pro-greek-700-normal-D3R3zC5Z.woff2              5.53 kB
+../../out/renderer/assets/source-code-pro-greek-400-normal-loYmywBR.woff2              5.53 kB
+../../out/renderer/assets/ibm-plex-mono-vietnamese-400-normal-DDuiU_S-.woff            5.62 kB
+../../out/renderer/assets/ibm-plex-mono-vietnamese-700-normal-Bs14ezHR.woff            5.64 kB
+../../out/renderer/assets/jetbrains-mono-greek-400-normal-B9oWc5Lo.woff                5.66 kB
+../../out/renderer/assets/jetbrains-mono-greek-700-normal-DEigVDxa.woff                5.70 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-ext-700-normal-CtgKGIh5.woff          5.75 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-ext-400-normal-DMdlQ8Kv.woff          5.82 kB
+../../out/renderer/assets/source-code-pro-cyrillic-ext-700-normal-Bgm39ugp.woff        5.82 kB
+../../out/renderer/assets/source-code-pro-cyrillic-ext-400-normal-C4HW5rAf.woff        5.86 kB
+../../out/renderer/assets/ibm-plex-mono-vietnamese-400-normal-BulugwFq.woff2           5.87 kB
+../../out/renderer/assets/ibm-plex-mono-vietnamese-700-normal-apsD3J7v.woff2           6.07 kB
+../../out/renderer/assets/source-code-pro-vietnamese-400-normal-DgY6bmny.woff          6.50 kB
+../../out/renderer/assets/source-code-pro-vietnamese-700-normal-DmKv_uoU.woff          6.63 kB
+../../out/renderer/assets/source-code-pro-cyrillic-400-normal-zAQh90eX.woff2           6.79 kB
+../../out/renderer/assets/source-code-pro-cyrillic-700-normal-BLgPr0kP.woff2           6.80 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-ext-400-normal-xuaO2J-f.woff2         6.91 kB
+../../out/renderer/assets/jetbrains-mono-cyrillic-400-normal-ugxPyKxw.woff             6.98 kB
+../../out/renderer/assets/jetbrains-mono-cyrillic-700-normal-CEoEElIJ.woff             7.02 kB
+../../out/renderer/assets/source-code-pro-greek-400-normal-BLt0TW07.woff               7.10 kB
+../../out/renderer/assets/source-code-pro-greek-700-normal-S96-jIG2.woff               7.11 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-ext-700-normal-BDQ-w_bc.woff2         7.18 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-400-normal-CEL4l2ZJ.woff              7.20 kB
+../../out/renderer/assets/space-mono-vietnamese-400-normal-BNOj0Qhp.woff2              7.27 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-700-normal-O_YjL27c.woff              7.28 kB
+../../out/renderer/assets/space-mono-vietnamese-700-normal-DWQgDHuA.woff2              7.33 kB
+../../out/renderer/assets/jetbrains-mono-latin-ext-400-normal-Bc8Ftmh3.woff2           7.34 kB
+../../out/renderer/assets/jetbrains-mono-latin-ext-700-normal-CZipNAKV.woff2           7.47 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-400-normal-BSMlKf0J.woff2             8.36 kB
+../../out/renderer/assets/source-code-pro-cyrillic-700-normal-DRMte6BP.woff            8.61 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-700-normal-Bp80XfeI.woff2             8.68 kB
+../../out/renderer/assets/source-code-pro-cyrillic-400-normal-BNPE9vbi.woff            8.73 kB
+../../out/renderer/assets/jetbrains-mono-latin-ext-400-normal-fXTG6kC5.woff           10.13 kB
+../../out/renderer/assets/jetbrains-mono-latin-ext-700-normal-CxPITLHs.woff           10.30 kB
+../../out/renderer/assets/source-code-pro-latin-700-normal-DKwZGtZT.woff2             11.54 kB
+../../out/renderer/assets/ibm-plex-mono-latin-ext-700-normal-Cwsjk1Jb.woff            11.65 kB
+../../out/renderer/assets/source-code-pro-latin-400-normal-DEXWLoHG.woff2             11.66 kB
+../../out/renderer/assets/ibm-plex-mono-latin-ext-400-normal-D3D2R8hC.woff            11.77 kB
+../../out/renderer/assets/space-mono-latin-400-normal-_3DlpgIW.woff                   12.31 kB
+../../out/renderer/assets/space-mono-latin-700-normal-D7A851RN.woff                   12.42 kB
+../../out/renderer/assets/space-mono-latin-ext-700-normal-B_E7P90g.woff               12.48 kB
+../../out/renderer/assets/space-mono-latin-ext-400-normal-D4cJI_B-.woff               12.61 kB
+../../out/renderer/assets/ibm-plex-mono-latin-400-normal-CvHOgSBP.woff                13.14 kB
+../../out/renderer/assets/ibm-plex-mono-latin-700-normal-CNHXzs6v.woff                13.21 kB
+../../out/renderer/assets/ibm-plex-mono-latin-ext-400-normal-BmRBH3aV.woff2           13.35 kB
+../../out/renderer/assets/ibm-plex-mono-latin-ext-700-normal-Dhimjc7-.woff2           13.38 kB
+../../out/renderer/assets/ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2               14.71 kB
+../../out/renderer/assets/ibm-plex-mono-latin-700-normal-7sUh57Bg.woff2               14.91 kB
+../../out/renderer/assets/source-code-pro-latin-700-normal-DQXC5bpC.woff              15.19 kB
+../../out/renderer/assets/source-code-pro-latin-400-normal-C5QriPt2.woff              15.33 kB
+../../out/renderer/assets/space-mono-latin-ext-700-normal-B2s3bDs2.woff2              15.81 kB
+../../out/renderer/assets/space-mono-latin-ext-400-normal-DTLbW2xa.woff2              15.83 kB
+../../out/renderer/assets/space-mono-latin-400-normal-Rg4St2Dn.woff2                  16.52 kB
+../../out/renderer/assets/space-mono-latin-700-normal-mWgeinG7.woff2                  16.72 kB
+../../out/renderer/assets/source-code-pro-latin-ext-700-normal-hx76J3qd.woff2         17.64 kB
+../../out/renderer/assets/source-code-pro-latin-ext-400-normal-C8wU-ygL.woff2         17.75 kB
+../../out/renderer/assets/jetbrains-mono-latin-400-normal-V6pRDFza.woff2              21.17 kB
+../../out/renderer/assets/jetbrains-mono-latin-700-normal-BYuf6tUa.woff2              21.91 kB
+../../out/renderer/assets/source-code-pro-latin-ext-700-normal-BD2lII8a.woff          23.70 kB
+../../out/renderer/assets/source-code-pro-latin-ext-400-normal-CB0vIBLK.woff          23.76 kB
+../../out/renderer/assets/jetbrains-mono-latin-400-normal-6-qcROiO.woff               27.50 kB
+../../out/renderer/assets/jetbrains-mono-latin-700-normal-D3wTyLJW.woff               28.21 kB
+../../out/renderer/assets/codicon-ngg6Pgfi.ttf                                       121.97 kB
+../../out/renderer/assets/editor.worker-BCR8tfx6.js                                  541.05 kB
+../../out/renderer/assets/json.worker-D4JVmXIe.js                                    840.01 kB
+../../out/renderer/assets/html.worker-BT47iy49.js                                  1,241.54 kB
+../../out/renderer/assets/css.worker-umuuUiIb.js                                   1,865.95 kB
+../../out/renderer/assets/ts.worker-C7hW3aY-.js                                   13,264.91 kB
+../../out/renderer/assets/index-BBwoSmcr.css                                         448.59 kB
+../../out/renderer/assets/azcli-BEAhqcuE.js                                            1.30 kB
+../../out/renderer/assets/javascript-BaVKedq2.js                                       1.30 kB
+../../out/renderer/assets/ini-BcQysCTb.js                                              1.67 kB
+../../out/renderer/assets/csp-D_3BK2Wp.js                                              1.70 kB
+../../out/renderer/assets/scheme-D7PxodDG.js                                           2.36 kB
+../../out/renderer/assets/bat-Bqkp9Cfu.js                                              2.66 kB
+../../out/renderer/assets/xml-D0yUMRoC.js                                              2.75 kB
+../../out/renderer/assets/flow9-ZSTChSMd.js                                            2.76 kB
+../../out/renderer/assets/sb-Chfc_wZF.js                                               2.81 kB
+../../out/renderer/assets/pla-DEV89yYj.js                                              2.87 kB
+../../out/renderer/assets/dockerfile--oxj0cAH.js                                       3.02 kB
+../../out/renderer/assets/pascaligo-VA_LQ1oU.js                                        3.25 kB
+../../out/renderer/assets/lua-hNsuGJkO.js                                              3.43 kB
+../../out/renderer/assets/bicep-DIlfshcM.js                                            3.44 kB
+../../out/renderer/assets/objective-c-B1L1C5EC.js                                      3.48 kB
+../../out/renderer/assets/cameligo-CLaaYNMV.js                                         3.51 kB
+../../out/renderer/assets/graphql-BeiGgjIU.js                                          3.77 kB
+../../out/renderer/assets/lexon-C1U0m2n9.js                                            3.81 kB
+../../out/renderer/assets/typespec-R77Ln7Jb.js                                         3.90 kB
+../../out/renderer/assets/sparql-DxuVdnRl.js                                           3.94 kB
+../../out/renderer/assets/mips-CJm71dS3.js                                             4.14 kB
+../../out/renderer/assets/m3-6ko6q9-_.js                                               4.15 kB
+../../out/renderer/assets/sophia-D7pU0Y1d.js                                           4.27 kB
+../../out/renderer/assets/shell-vZEubQ82.js                                            4.48 kB
+../../out/renderer/assets/go-brnMpFrj.js                                               4.49 kB
+../../out/renderer/assets/fsharp-D2uoxuLH.js                                           4.51 kB
+../../out/renderer/assets/pascal-DMQyD4Xk.js                                           4.71 kB
+../../out/renderer/assets/r-CtqYUQ6l.js                                                4.80 kB
+../../out/renderer/assets/less-B7Qaxw-O.js                                             5.00 kB
+../../out/renderer/assets/tcl-Bb4GCwBr.js                                              5.05 kB
+../../out/renderer/assets/liquid-D9455f9f.js                                           5.08 kB
+../../out/renderer/assets/qsharp-BWK6YLKm.js                                           5.14 kB
+../../out/renderer/assets/cypher-D0--_GAN.js                                           5.15 kB
+../../out/renderer/assets/java-Dt3iMn2o.js                                             5.16 kB
+../../out/renderer/assets/kotlin-Ddo1SjA5.js                                           5.20 kB
+../../out/renderer/assets/hcl-CrX1Es2W.js                                              5.21 kB
+../../out/renderer/assets/redis-O7gSt3oh.js                                            5.25 kB
+../../out/renderer/assets/restructuredtext-B-KQCVu_.js                                 5.33 kB
+../../out/renderer/assets/powershell-BXiKvz7Z.js                                       5.39 kB
+../../out/renderer/assets/coffee-CzJ5oEdj.js                                           5.51 kB
+../../out/renderer/assets/mdx-B24V2xZA.js                                              5.76 kB
+../../out/renderer/assets/yaml-DEPbL5Do.js                                             5.81 kB
+../../out/renderer/assets/css-i3rI3_64.js                                              6.10 kB
+../../out/renderer/assets/cssMode-bvrelrRp.js                                          6.15 kB
+../../out/renderer/assets/rust-B1c0VCeq.js                                             6.27 kB
+../../out/renderer/assets/apex-DVGUZ64i.js                                             6.39 kB
+../../out/renderer/assets/python-CU7tzX_U.js                                           6.43 kB
+../../out/renderer/assets/dart-vLMHv35g.js                                             6.48 kB
+../../out/renderer/assets/markdown-B0YTnTxW.js                                         6.65 kB
+../../out/renderer/assets/htmlMode-Dr92eZMh.js                                         6.89 kB
+../../out/renderer/assets/msdax-BBeIktCY.js                                            6.95 kB
+../../out/renderer/assets/csharp-BJeIuvde.js                                           6.98 kB
+../../out/renderer/assets/swift-BmOZGynf.js                                            7.18 kB
+../../out/renderer/assets/html-eVAoiB0O.js                                             7.56 kB
+../../out/renderer/assets/typescript-6IBV0EbZ.js                                       7.84 kB
+../../out/renderer/assets/ecl-CeuUgzaZ.js                                              7.94 kB
+../../out/renderer/assets/cpp-CcN6f0ik.js                                              8.22 kB
+../../out/renderer/assets/pug-BxCXwerb.js                                              8.26 kB
+../../out/renderer/assets/vb-Bm6ESA0Q.js                                               8.33 kB
+../../out/renderer/assets/scss-B42qMyAu.js                                             9.07 kB
+../../out/renderer/assets/wgsl-_KPae5vw.js                                             9.78 kB
+../../out/renderer/assets/st-C-b0Dh53.js                                              10.15 kB
+../../out/renderer/assets/twig-DvgEGWAV.js                                            10.26 kB
+../../out/renderer/assets/handlebars-fN3VxAMR.js                                      10.34 kB
+../../out/renderer/assets/julia-Cm3ItYL_.js                                           10.54 kB
+../../out/renderer/assets/scala-DbVzH-3O.js                                           10.70 kB
+../../out/renderer/assets/systemverilog-BOC0OOdC.js                                   11.63 kB
+../../out/renderer/assets/php-Bkx1qpkQ.js                                             12.48 kB
+../../out/renderer/assets/protobuf-CndvAUGu.js                                        12.68 kB
+../../out/renderer/assets/perl-DC0Z0tlO.js                                            12.82 kB
+../../out/renderer/assets/razor-ojXCziJC.js                                           13.27 kB
+../../out/renderer/assets/clojure-fcgFaMHx.js                                         13.94 kB
+../../out/renderer/assets/ruby-DCd4DmAr.js                                            15.31 kB
+../../out/renderer/assets/sql-BAGepFCR.js                                             15.56 kB
+../../out/renderer/assets/mysql-BWiizXSn.js                                           16.16 kB
+../../out/renderer/assets/redshift-CvYMMYZY.js                                        16.33 kB
+../../out/renderer/assets/pgsql-DaSGFTLp.js                                           18.25 kB
+../../out/renderer/assets/elixir-eLfY1jWH.js                                          18.74 kB
+../../out/renderer/assets/postiats-CVVurEnu.js                                        19.30 kB
+../../out/renderer/assets/powerquery-BQ_t1ZiQ.js                                      21.65 kB
+../../out/renderer/assets/abap-D5KwWAsZ.js                                            22.97 kB
+../../out/renderer/assets/solidity-yHOxYChb.js                                        26.03 kB
+../../out/renderer/assets/jsonMode-nlsZrf9Z.js                                        29.12 kB
+../../out/renderer/assets/tsMode-Cy3ymitH.js                                          40.32 kB
+../../out/renderer/assets/freemarker2-CrJjAoDE.js                                     42.10 kB
+../../out/renderer/assets/lspLanguageFeatures-BpcZWsOg.js                             61.69 kB
+../../out/renderer/assets/addon-webgl-BEDhrLCz.js                                    139.86 kB
+../../out/renderer/assets/index-CFXIps_v.js                                        9,642.74 kB
+✓ built in 2m 6s
+"Stats" is imported from external module "node:fs" but never used in "node_modules/chokidar/index.js".
+
+exit=0; error=none
+
+COMMAND: npm run e2e -- e2e/remote-launch.spec.ts
+
+> polydesk@0.40.0 e2e
+> playwright test e2e/remote-launch.spec.ts
+
+
+Running 1 test using 1 worker
+
+  ok 1 e2e\remote-launch.spec.ts:24:5 › 真 HTTP 手機配對與桌面批准，縮小後新增固定 Claude GUI 分頁且同操作不重複 (26.9s)
+
+  1 passed (28.7s)
+(node:40760) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+exit=0; error=none
+
+Queue capacity fix validation 2026-10-12T10:13:16.595Z
+
+COMMAND: npm run typecheck
+
+> polydesk@0.40.0 typecheck
+> tsc --noEmit
+
+
+exit=0; error=none
+
+COMMAND: npm test -- src/main/remote/RemoteService.test.ts src/main/remote/TailscaleGateway.test.ts
+
+> polydesk@0.40.0 test
+> vitest run src/main/remote/RemoteService.test.ts src/main/remote/TailscaleGateway.test.ts
+
+
+ RUN  v3.2.7 C:/polydesk-remote-dev
+
+ ✓ src/main/remote/TailscaleGateway.test.ts (7 tests) 20ms
+ ✓ src/main/remote/RemoteService.test.ts (14 tests) 2692ms
+   ✓ remote HTTP security and launch contracts > expires challenges, rejects requests until approval, bounds payload and rate, and closes startup timeout  328ms
+
+ Test Files  2 passed (2)
+      Tests  21 passed (21)
+   Start at  18:13:39
+   Duration  5.33s (transform 455ms, setup 0ms, collect 943ms, tests 2.71s, environment 1ms, prepare 1.72s)
+
+
+exit=0; error=none
+
+COMMAND: npm run build
+
+> polydesk@0.40.0 build
+> electron-vite build
+
+vite v6.4.4 building SSR bundle for production...
+transforming...
+✓ 66 modules transformed.
+rendering chunks...
+out/main/index.js  433.41 kB
+✓ built in 1.50s
+vite v6.4.4 building SSR bundle for production...
+transforming...
+✓ 2 modules transformed.
+rendering chunks...
+out/preload/index.js  3.70 kB
+✓ built in 65ms
+vite v6.4.4 building for production...
+transforming...
+✓ 1348 modules transformed.
+rendering chunks...
+../../out/renderer/index.html                                                          0.41 kB
+../../out/renderer/assets/jetbrains-mono-greek-400-normal-C190GLew.woff2               4.23 kB
+../../out/renderer/assets/jetbrains-mono-greek-700-normal-C6CZE3T8.woff2               4.30 kB
+../../out/renderer/assets/source-code-pro-cyrillic-ext-700-normal-CsEcUHnW.woff2       4.48 kB
+../../out/renderer/assets/source-code-pro-cyrillic-ext-400-normal-DMj7z5uw.woff2       4.52 kB
+../../out/renderer/assets/source-code-pro-vietnamese-700-normal-CxyXxWvs.woff2         4.75 kB
+../../out/renderer/assets/source-code-pro-vietnamese-400-normal-Cp62Zi-a.woff2         4.75 kB
+../../out/renderer/assets/jetbrains-mono-cyrillic-400-normal-BEIGL1Tu.woff2            5.33 kB
+../../out/renderer/assets/jetbrains-mono-cyrillic-700-normal-BWTpRfYl.woff2            5.34 kB
+../../out/renderer/assets/jetbrains-mono-vietnamese-400-normal-CqNFfHCs.woff           5.37 kB
+../../out/renderer/assets/space-mono-vietnamese-400-normal-B0PMp_xB.woff               5.41 kB
+../../out/renderer/assets/space-mono-vietnamese-700-normal-D-KrLuLr.woff               5.45 kB
+../../out/renderer/assets/jetbrains-mono-vietnamese-700-normal-BDLVIk2r.woff           5.45 kB
+../../out/renderer/assets/source-code-pro-greek-400-normal-loYmywBR.woff2              5.53 kB
+../../out/renderer/assets/source-code-pro-greek-700-normal-D3R3zC5Z.woff2              5.53 kB
+../../out/renderer/assets/ibm-plex-mono-vietnamese-400-normal-DDuiU_S-.woff            5.62 kB
+../../out/renderer/assets/ibm-plex-mono-vietnamese-700-normal-Bs14ezHR.woff            5.64 kB
+../../out/renderer/assets/jetbrains-mono-greek-400-normal-B9oWc5Lo.woff                5.66 kB
+../../out/renderer/assets/jetbrains-mono-greek-700-normal-DEigVDxa.woff                5.70 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-ext-700-normal-CtgKGIh5.woff          5.75 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-ext-400-normal-DMdlQ8Kv.woff          5.82 kB
+../../out/renderer/assets/source-code-pro-cyrillic-ext-700-normal-Bgm39ugp.woff        5.82 kB
+../../out/renderer/assets/source-code-pro-cyrillic-ext-400-normal-C4HW5rAf.woff        5.86 kB
+../../out/renderer/assets/ibm-plex-mono-vietnamese-400-normal-BulugwFq.woff2           5.87 kB
+../../out/renderer/assets/ibm-plex-mono-vietnamese-700-normal-apsD3J7v.woff2           6.07 kB
+../../out/renderer/assets/source-code-pro-vietnamese-400-normal-DgY6bmny.woff          6.50 kB
+../../out/renderer/assets/source-code-pro-vietnamese-700-normal-DmKv_uoU.woff          6.63 kB
+../../out/renderer/assets/source-code-pro-cyrillic-400-normal-zAQh90eX.woff2           6.79 kB
+../../out/renderer/assets/source-code-pro-cyrillic-700-normal-BLgPr0kP.woff2           6.80 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-ext-400-normal-xuaO2J-f.woff2         6.91 kB
+../../out/renderer/assets/jetbrains-mono-cyrillic-400-normal-ugxPyKxw.woff             6.98 kB
+../../out/renderer/assets/jetbrains-mono-cyrillic-700-normal-CEoEElIJ.woff             7.02 kB
+../../out/renderer/assets/source-code-pro-greek-400-normal-BLt0TW07.woff               7.10 kB
+../../out/renderer/assets/source-code-pro-greek-700-normal-S96-jIG2.woff               7.11 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-ext-700-normal-BDQ-w_bc.woff2         7.18 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-400-normal-CEL4l2ZJ.woff              7.20 kB
+../../out/renderer/assets/space-mono-vietnamese-400-normal-BNOj0Qhp.woff2              7.27 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-700-normal-O_YjL27c.woff              7.28 kB
+../../out/renderer/assets/space-mono-vietnamese-700-normal-DWQgDHuA.woff2              7.33 kB
+../../out/renderer/assets/jetbrains-mono-latin-ext-400-normal-Bc8Ftmh3.woff2           7.34 kB
+../../out/renderer/assets/jetbrains-mono-latin-ext-700-normal-CZipNAKV.woff2           7.47 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-400-normal-BSMlKf0J.woff2             8.36 kB
+../../out/renderer/assets/source-code-pro-cyrillic-700-normal-DRMte6BP.woff            8.61 kB
+../../out/renderer/assets/ibm-plex-mono-cyrillic-700-normal-Bp80XfeI.woff2             8.68 kB
+../../out/renderer/assets/source-code-pro-cyrillic-400-normal-BNPE9vbi.woff            8.73 kB
+../../out/renderer/assets/jetbrains-mono-latin-ext-400-normal-fXTG6kC5.woff           10.13 kB
+../../out/renderer/assets/jetbrains-mono-latin-ext-700-normal-CxPITLHs.woff           10.30 kB
+../../out/renderer/assets/source-code-pro-latin-700-normal-DKwZGtZT.woff2             11.54 kB
+../../out/renderer/assets/ibm-plex-mono-latin-ext-700-normal-Cwsjk1Jb.woff            11.65 kB
+../../out/renderer/assets/source-code-pro-latin-400-normal-DEXWLoHG.woff2             11.66 kB
+../../out/renderer/assets/ibm-plex-mono-latin-ext-400-normal-D3D2R8hC.woff            11.77 kB
+../../out/renderer/assets/space-mono-latin-400-normal-_3DlpgIW.woff                   12.31 kB
+../../out/renderer/assets/space-mono-latin-700-normal-D7A851RN.woff                   12.42 kB
+../../out/renderer/assets/space-mono-latin-ext-700-normal-B_E7P90g.woff               12.48 kB
+../../out/renderer/assets/space-mono-latin-ext-400-normal-D4cJI_B-.woff               12.61 kB
+../../out/renderer/assets/ibm-plex-mono-latin-400-normal-CvHOgSBP.woff                13.14 kB
+../../out/renderer/assets/ibm-plex-mono-latin-700-normal-CNHXzs6v.woff                13.21 kB
+../../out/renderer/assets/ibm-plex-mono-latin-ext-400-normal-BmRBH3aV.woff2           13.35 kB
+../../out/renderer/assets/ibm-plex-mono-latin-ext-700-normal-Dhimjc7-.woff2           13.38 kB
+../../out/renderer/assets/ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2               14.71 kB
+../../out/renderer/assets/ibm-plex-mono-latin-700-normal-7sUh57Bg.woff2               14.91 kB
+../../out/renderer/assets/source-code-pro-latin-700-normal-DQXC5bpC.woff              15.19 kB
+../../out/renderer/assets/source-code-pro-latin-400-normal-C5QriPt2.woff              15.33 kB
+../../out/renderer/assets/space-mono-latin-ext-700-normal-B2s3bDs2.woff2              15.81 kB
+../../out/renderer/assets/space-mono-latin-ext-400-normal-DTLbW2xa.woff2              15.83 kB
+../../out/renderer/assets/space-mono-latin-400-normal-Rg4St2Dn.woff2                  16.52 kB
+../../out/renderer/assets/space-mono-latin-700-normal-mWgeinG7.woff2                  16.72 kB
+../../out/renderer/assets/source-code-pro-latin-ext-700-normal-hx76J3qd.woff2         17.64 kB
+../../out/renderer/assets/source-code-pro-latin-ext-400-normal-C8wU-ygL.woff2         17.75 kB
+../../out/renderer/assets/jetbrains-mono-latin-400-normal-V6pRDFza.woff2              21.17 kB
+../../out/renderer/assets/jetbrains-mono-latin-700-normal-BYuf6tUa.woff2              21.91 kB
+../../out/renderer/assets/source-code-pro-latin-ext-700-normal-BD2lII8a.woff          23.70 kB
+../../out/renderer/assets/source-code-pro-latin-ext-400-normal-CB0vIBLK.woff          23.76 kB
+../../out/renderer/assets/jetbrains-mono-latin-400-normal-6-qcROiO.woff               27.50 kB
+../../out/renderer/assets/jetbrains-mono-latin-700-normal-D3wTyLJW.woff               28.21 kB
+../../out/renderer/assets/codicon-ngg6Pgfi.ttf                                       121.97 kB
+../../out/renderer/assets/editor.worker-BCR8tfx6.js                                  541.05 kB
+../../out/renderer/assets/json.worker-D4JVmXIe.js                                    840.01 kB
+../../out/renderer/assets/html.worker-BT47iy49.js                                  1,241.54 kB
+../../out/renderer/assets/css.worker-umuuUiIb.js                                   1,865.95 kB
+../../out/renderer/assets/ts.worker-C7hW3aY-.js                                   13,264.91 kB
+../../out/renderer/assets/index-BBwoSmcr.css                                         448.59 kB
+../../out/renderer/assets/azcli-BEAhqcuE.js                                            1.30 kB
+../../out/renderer/assets/javascript-BaVKedq2.js                                       1.30 kB
+../../out/renderer/assets/ini-BcQysCTb.js                                              1.67 kB
+../../out/renderer/assets/csp-D_3BK2Wp.js                                              1.70 kB
+../../out/renderer/assets/scheme-D7PxodDG.js                                           2.36 kB
+../../out/renderer/assets/bat-Bqkp9Cfu.js                                              2.66 kB
+../../out/renderer/assets/xml-D0yUMRoC.js                                              2.75 kB
+../../out/renderer/assets/flow9-ZSTChSMd.js                                            2.76 kB
+../../out/renderer/assets/sb-Chfc_wZF.js                                               2.81 kB
+../../out/renderer/assets/pla-DEV89yYj.js                                              2.87 kB
+../../out/renderer/assets/dockerfile--oxj0cAH.js                                       3.02 kB
+../../out/renderer/assets/pascaligo-VA_LQ1oU.js                                        3.25 kB
+../../out/renderer/assets/lua-hNsuGJkO.js                                              3.43 kB
+../../out/renderer/assets/bicep-DIlfshcM.js                                            3.44 kB
+../../out/renderer/assets/objective-c-B1L1C5EC.js                                      3.48 kB
+../../out/renderer/assets/cameligo-CLaaYNMV.js                                         3.51 kB
+../../out/renderer/assets/graphql-BeiGgjIU.js                                          3.77 kB
+../../out/renderer/assets/lexon-C1U0m2n9.js                                            3.81 kB
+../../out/renderer/assets/typespec-R77Ln7Jb.js                                         3.90 kB
+../../out/renderer/assets/sparql-DxuVdnRl.js                                           3.94 kB
+../../out/renderer/assets/mips-CJm71dS3.js                                             4.14 kB
+../../out/renderer/assets/m3-6ko6q9-_.js                                               4.15 kB
+../../out/renderer/assets/sophia-D7pU0Y1d.js                                           4.27 kB
+../../out/renderer/assets/shell-vZEubQ82.js                                            4.48 kB
+../../out/renderer/assets/go-brnMpFrj.js                                               4.49 kB
+../../out/renderer/assets/fsharp-D2uoxuLH.js                                           4.51 kB
+../../out/renderer/assets/pascal-DMQyD4Xk.js                                           4.71 kB
+../../out/renderer/assets/r-CtqYUQ6l.js                                                4.80 kB
+../../out/renderer/assets/less-B7Qaxw-O.js                                             5.00 kB
+../../out/renderer/assets/tcl-Bb4GCwBr.js                                              5.05 kB
+../../out/renderer/assets/liquid-D9455f9f.js                                           5.08 kB
+../../out/renderer/assets/qsharp-BWK6YLKm.js                                           5.14 kB
+../../out/renderer/assets/cypher-D0--_GAN.js                                           5.15 kB
+../../out/renderer/assets/java-Dt3iMn2o.js                                             5.16 kB
+../../out/renderer/assets/kotlin-Ddo1SjA5.js                                           5.20 kB
+../../out/renderer/assets/hcl-CrX1Es2W.js                                              5.21 kB
+../../out/renderer/assets/redis-O7gSt3oh.js                                            5.25 kB
+../../out/renderer/assets/restructuredtext-B-KQCVu_.js                                 5.33 kB
+../../out/renderer/assets/powershell-BXiKvz7Z.js                                       5.39 kB
+../../out/renderer/assets/coffee-CzJ5oEdj.js                                           5.51 kB
+../../out/renderer/assets/mdx-B24V2xZA.js                                              5.76 kB
+../../out/renderer/assets/yaml-DEPbL5Do.js                                             5.81 kB
+../../out/renderer/assets/css-i3rI3_64.js                                              6.10 kB
+../../out/renderer/assets/cssMode-bvrelrRp.js                                          6.15 kB
+../../out/renderer/assets/rust-B1c0VCeq.js                                             6.27 kB
+../../out/renderer/assets/apex-DVGUZ64i.js                                             6.39 kB
+../../out/renderer/assets/python-CU7tzX_U.js                                           6.43 kB
+../../out/renderer/assets/dart-vLMHv35g.js                                             6.48 kB
+../../out/renderer/assets/markdown-B0YTnTxW.js                                         6.65 kB
+../../out/renderer/assets/htmlMode-Dr92eZMh.js                                         6.89 kB
+../../out/renderer/assets/msdax-BBeIktCY.js                                            6.95 kB
+../../out/renderer/assets/csharp-BJeIuvde.js                                           6.98 kB
+../../out/renderer/assets/swift-BmOZGynf.js                                            7.18 kB
+../../out/renderer/assets/html-eVAoiB0O.js                                             7.56 kB
+../../out/renderer/assets/typescript-6IBV0EbZ.js                                       7.84 kB
+../../out/renderer/assets/ecl-CeuUgzaZ.js                                              7.94 kB
+../../out/renderer/assets/cpp-CcN6f0ik.js                                              8.22 kB
+../../out/renderer/assets/pug-BxCXwerb.js                                              8.26 kB
+../../out/renderer/assets/vb-Bm6ESA0Q.js                                               8.33 kB
+../../out/renderer/assets/scss-B42qMyAu.js                                             9.07 kB
+../../out/renderer/assets/wgsl-_KPae5vw.js                                             9.78 kB
+../../out/renderer/assets/st-C-b0Dh53.js                                              10.15 kB
+../../out/renderer/assets/twig-DvgEGWAV.js                                            10.26 kB
+../../out/renderer/assets/handlebars-fN3VxAMR.js                                      10.34 kB
+../../out/renderer/assets/julia-Cm3ItYL_.js                                           10.54 kB
+../../out/renderer/assets/scala-DbVzH-3O.js                                           10.70 kB
+../../out/renderer/assets/systemverilog-BOC0OOdC.js                                   11.63 kB
+../../out/renderer/assets/php-Bkx1qpkQ.js                                             12.48 kB
+../../out/renderer/assets/protobuf-CndvAUGu.js                                        12.68 kB
+../../out/renderer/assets/perl-DC0Z0tlO.js                                            12.82 kB
+../../out/renderer/assets/razor-ojXCziJC.js                                           13.27 kB
+../../out/renderer/assets/clojure-fcgFaMHx.js                                         13.94 kB
+../../out/renderer/assets/ruby-DCd4DmAr.js                                            15.31 kB
+../../out/renderer/assets/sql-BAGepFCR.js                                             15.56 kB
+../../out/renderer/assets/mysql-BWiizXSn.js                                           16.16 kB
+../../out/renderer/assets/redshift-CvYMMYZY.js                                        16.33 kB
+../../out/renderer/assets/pgsql-DaSGFTLp.js                                           18.25 kB
+../../out/renderer/assets/elixir-eLfY1jWH.js                                          18.74 kB
+../../out/renderer/assets/postiats-CVVurEnu.js                                        19.30 kB
+../../out/renderer/assets/powerquery-BQ_t1ZiQ.js                                      21.65 kB
+../../out/renderer/assets/abap-D5KwWAsZ.js                                            22.97 kB
+../../out/renderer/assets/solidity-yHOxYChb.js                                        26.03 kB
+../../out/renderer/assets/jsonMode-nlsZrf9Z.js                                        29.12 kB
+../../out/renderer/assets/tsMode-Cy3ymitH.js                                          40.32 kB
+../../out/renderer/assets/freemarker2-CrJjAoDE.js                                     42.10 kB
+../../out/renderer/assets/lspLanguageFeatures-BpcZWsOg.js                             61.69 kB
+../../out/renderer/assets/addon-webgl-BEDhrLCz.js                                    139.86 kB
+../../out/renderer/assets/index-CFXIps_v.js                                        9,642.74 kB
+✓ built in 1m 24s
+"Stats" is imported from external module "node:fs" but never used in "node_modules/chokidar/index.js".
+
+exit=0; error=none
+
+COMMAND: npm run e2e -- e2e/remote-launch.spec.ts
+
+> polydesk@0.40.0 e2e
+> playwright test e2e/remote-launch.spec.ts
+
+
+Running 1 test using 1 worker
+
+  ok 1 e2e\remote-launch.spec.ts:24:5 › 真 HTTP 手機配對與桌面批准，縮小後新增固定 Claude GUI 分頁且同操作不重複 (21.9s)
+
+  1 passed (23.1s)
+(node:7628) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+exit=0; error=none

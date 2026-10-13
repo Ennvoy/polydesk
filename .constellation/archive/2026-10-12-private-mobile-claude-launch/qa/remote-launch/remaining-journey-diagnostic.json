@@ -1,0 +1,105 @@
+{
+  "scope": "Scoped fix plus previously unexecuted independent journeys; not full ship evidence",
+  "results": [
+    {
+      "command": [
+        "e2e/git-branch-management.spec.ts",
+        "--grep",
+        "^分支管理：本地",
+        "--workers=1"
+      ],
+      "exitCode": 1,
+      "durationMs": 1483
+    },
+    {
+      "command": [
+        "--workers=1",
+        "--shard=4/12",
+        "--grep-invert",
+        "REQ-PERF-001"
+      ],
+      "exitCode": 0,
+      "durationMs": 342519
+    },
+    {
+      "command": [
+        "--workers=1",
+        "--shard=5/12",
+        "--grep-invert",
+        "REQ-PERF-001"
+      ],
+      "exitCode": 0,
+      "durationMs": 136209
+    },
+    {
+      "command": [
+        "--workers=1",
+        "--shard=6/12",
+        "--grep-invert",
+        "REQ-PERF-001"
+      ],
+      "exitCode": 0,
+      "durationMs": 157194
+    },
+    {
+      "command": [
+        "--workers=1",
+        "--shard=7/12",
+        "--grep-invert",
+        "REQ-PERF-001"
+      ],
+      "exitCode": 0,
+      "durationMs": 196672
+    },
+    {
+      "command": [
+        "--workers=1",
+        "--shard=8/12",
+        "--grep-invert",
+        "REQ-PERF-001"
+      ],
+      "exitCode": 0,
+      "durationMs": 170794
+    },
+    {
+      "command": [
+        "--workers=1",
+        "--shard=9/12",
+        "--grep-invert",
+        "REQ-PERF-001"
+      ],
+      "exitCode": 0,
+      "durationMs": 120886
+    },
+    {
+      "command": [
+        "--workers=1",
+        "--shard=10/12",
+        "--grep-invert",
+        "REQ-PERF-001"
+      ],
+      "exitCode": 0,
+      "durationMs": 133911
+    },
+    {
+      "command": [
+        "--workers=1",
+        "--shard=11/12",
+        "--grep-invert",
+        "REQ-PERF-001"
+      ],
+      "exitCode": 1,
+      "durationMs": 137352
+    },
+    {
+      "command": [
+        "--workers=1",
+        "--shard=12/12",
+        "--grep-invert",
+        "REQ-PERF-001"
+      ],
+      "exitCode": 0,
+      "durationMs": 315098
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "screens": [
+    {
+      "screen": "桌面設定中的手機遠端啟動",
+      "kind": "rework",
+      "sources": ["src/renderer/components/Settings/SettingsPanel.tsx"]
+    },
+    {
+      "screen": "手機配對與啟動",
+      "kind": "new",
+      "sources": []
+    },
+    {
+      "screen": "Claude 終端機與工作區切換",
+      "kind": "rework",
+      "sources": ["src/renderer/components/Terminal/TerminalPanel.tsx"]
+    },
+    {
+      "screen": "首次導覽與完整使用指南",
+      "kind": "rework",
+      "sources": [
+        "src/renderer/components/Help/GuidedTour.tsx",
+        "src/renderer/components/Help/HelpCenter.tsx"
+      ]
+    }
+  ]
+}

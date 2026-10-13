@@ -1,0 +1,12 @@
+{
+  "startedAt": "2026-10-12T12:44:17.371Z",
+  "args": [
+    "test",
+    "e2e/terminal-web-link.spec.ts",
+    "--repeat-each=3",
+    "--workers=1"
+  ],
+  "exitCode": 0,
+  "durationMs": 32961,
+  "scope": "Three actual GUI runs after link hover harness correction; not full ship evidence"
+}

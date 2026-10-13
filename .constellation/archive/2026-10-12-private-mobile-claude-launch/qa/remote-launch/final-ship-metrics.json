@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-10-12T14:51:15.167Z",
+  "seconds": 3396,
+  "signature": "ee8bc37f6d3110e2718b825ec4b236db6c7b53bc6703eb23c226a449b799c80a",
+  "commands": 20,
+  "unitFiles": 88,
+  "unitPassed": 723,
+  "unitSkipped": 0,
+  "e2ePassed": 128,
+  "e2eSkipped": 3,
+  "runResult": "C:/Users/ennvoy.lin/AppData/Local/Temp/polydesk-final-ship-2026-10-12T13-54-38-368Z.json",
+  "logPath": "C:\\Users\\ennvoy.lin\\AppData\\Local\\Temp\\polydesk-final-ship-2026-10-12T13-54-38-368Z.txt"
+}

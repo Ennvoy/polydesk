@@ -17,12 +17,13 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { createPortal } from 'react-dom';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { ipc } from '../../ipc/client';
-import { useAppState } from '../../state/appStore';
+import { appStore, useAppState } from '../../state/appStore';
 import { registerPanel, SLOT } from '../../layout/panelRegistry';
-import { toggleLayoutPanel } from '../../layout/DockLayout';
+import { toggleLayoutPanel, setLayoutPanelVisible } from '../../layout/DockLayout';
 import { TerminalView } from './TerminalView';
 import './terminal.css';
 import type { ShellKind } from '../../../shared/types';
+import { CLAUDE_BYPASS_COMMAND } from '../../../shared/remoteLaunch';
 
 interface TermEntry {
   termId: string;
@@ -52,7 +53,7 @@ type AiLauncher = 'claude' | 'codex' | 'agy';
 const AI_LAUNCHERS: Record<AiLauncher, { label: string; command: string; title: string }> = {
   claude: {
     label: 'Claude bypass',
-    command: 'claude --dangerously-skip-permissions',
+    command: CLAUDE_BYPASS_COMMAND,
     title: '開啟 Claude（bypass：略過所有權限確認，僅限信任的工作區）',
   },
   codex: { label: 'Codex', command: 'codex', title: '開啟 Codex' },
@@ -92,6 +93,15 @@ export function TerminalPanel(): React.JSX.Element {
   // 否則 Claude 等 TUI 會按 ConPTY 預設 80x24 或收斂前的中間尺寸繪製靜態歡迎橫幅，遲到的
   // resize 會把橫幅定格成殘影（動態區會重畫、靜態區不會）。穩定窗實作在 TerminalView。
   const pendingLaunchesRef = useRef<Map<string, string>>(new Map());
+  const remoteLaunchesRef = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => ipc.events.remote.launch(({ termId, wsId, shell, opId }) => {
+    remoteLaunchesRef.current.set(termId, opId);
+    appStore.setActiveWorkspace(wsId);
+    setLayoutPanelVisible('terminal', true);
+    // pty:list can race the event; replace the existing entry instead of creating duplicates.
+    setTerms(prev => [...prev.filter(t => t.termId !== termId), { termId, wsId, shell, alive: true, exitCode: null, name: 'Claude bypass' }]);
+  }), []);
 
   // 互動暫態
   const [showHideOpen, setShowHideOpen] = useState(false); // 顯示/隱藏複選清單開合
@@ -202,6 +212,14 @@ export function TerminalPanel(): React.JSX.Element {
   }, []);
 
   const launchWhenSized = useCallback((termId: string): void => {
+    const opId = remoteLaunchesRef.current.get(termId);
+    if (opId) {
+      remoteLaunchesRef.current.delete(termId);
+      void ipc.remote.ready({ opId, termId }).then(result => {
+        if ('error' in result) setCreateError(result.error);
+      }).catch(() => setCreateError('遠端啟動未完成，請查看手機結果。'));
+      return;
+    }
     const command = pendingLaunchesRef.current.get(termId);
     if (!command) return;
     pendingLaunchesRef.current.delete(termId);

@@ -25,6 +25,8 @@ import {
   registerEditorPasteFocusHandler,
 } from '../window/pasteShortcut';
 import { registerPlaywrightHandlers } from './stubHandlers';
+import { registerRemoteHandlers } from '../remote/remoteHandlers';
+import type { RemoteService } from '../remote/RemoteService';
 
 /** main 端服務（供 app 生命週期 teardown / 後續波次取用）。 */
 export interface MainServices {
@@ -34,9 +36,10 @@ export interface MainServices {
   fileWatcher: FileWatcher;
   monitor: ClaudeStatusMonitor;
   editorPasteFocus: EditorPasteFocusState;
+  remote: RemoteService;
 }
 
-export function registerIpcHandlers(store: StateStore, userDataDir: string): MainServices {
+export function registerIpcHandlers(store: StateStore, userDataDir: string, interactive: () => boolean = () => false): MainServices {
   const lifecycle = new WorkspaceLifecycle();
   const workspaces = new WorkspaceManager(store, lifecycle, userDataDir);
   const editorPasteFocus = new EditorPasteFocusState();
@@ -65,6 +68,7 @@ export function registerIpcHandlers(store: StateStore, userDataDir: string): Mai
   registerEditorPasteFocusHandler(ipcMain, editorPasteFocus);
   // 空樁：playwright（無接線、缺件偵測於 F-3 終端機提示）
   registerPlaywrightHandlers(ipcMain);
+  const remote = registerRemoteHandlers(ipcMain, workspaces, pty, userDataDir, interactive);
 
-  return { lifecycle, workspaces, pty, fileWatcher, monitor, editorPasteFocus };
+  return { lifecycle, workspaces, pty, fileWatcher, monitor, editorPasteFocus, remote };
 }

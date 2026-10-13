@@ -1,0 +1,353 @@
+
+DIAGNOSTIC ONLY 2026-10-12T11:32:32.982Z playwright test ["e2e/git-branch-management.spec.ts","--grep","^分支管理：本地","--workers=1"]
+Error: No tests found.
+Make sure that arguments are regular expressions matching test files.
+You may need to escape symbols like "$" or "*" and quote the arguments.
+
+
+DIAGNOSTIC RESULT {"command":["e2e/git-branch-management.spec.ts","--grep","^分支管理：本地","--workers=1"],"exitCode":1,"durationMs":1483}
+
+DIAGNOSTIC ONLY 2026-10-12T11:32:34.471Z playwright test ["--workers=1","--shard=4/12","--grep-invert","REQ-PERF-001"]
+
+Running 14 tests using 1 worker, shard 4 of 12
+
+(node:16964) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+warning: in the working copy of 'f.txt', LF will be replaced by CRLF the next time Git touches it
+  ok  1 e2e\git-commit-actions.spec.ts:11:5 › commit hover 卡片 + 右鍵選單（開啟此 commit 變更 / 從此 commit 建分支） (18.3s)
+  ok  2 e2e\git-fetch-behind.spec.ts:38:5 › PE-4：遠端進新 commit → fetch 後線圖可見遠端版本，並顯示 ↓1 未拉取 (28.1s)
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'other.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to a new branch 'feature'
+warning: in the working copy of 'feat.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to branch 'main'
+  ok  3 e2e\git-graph-branch.spec.ts:32:5 › A 線圖：分支+合併多 lane，且列高=SVG高（跨列無縫、線不斷） (18.5s)
+warning: in the working copy of 'a.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'a.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'b.txt', LF will be replaced by CRLF the next time Git touches it
+  ok  4 e2e\git-graph-branch.spec.ts:68:5 › C ref 徽章：本地 main（HEAD）與遠端 origin/main 各標在所在 commit（like VSCode） (14.2s)
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to a new branch 'dev'
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to branch 'main'
+  ok  5 e2e\git-graph-branch.spec.ts:101:5 › B 切換分支：未提交變更 → 彈窗 Stash 並切換、變更不丟 (24.6s)
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to a new branch 'dev'
+warning: in the working copy of 'conflict.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to branch 'main'
+  ok  6 e2e\git-graph-branch.spec.ts:135:5 › B2 切換分支：untracked 檔擋 checkout → stash -u 並切換、檔案不丟（審查 HIGH 修復） (30.0s)
+  ok  7 e2e\git-operation-errors.spec.ts:36:5 › 拉取覆蓋防護：tracked 與 untracked 原檔保留，長診斷預設折疊且刷新不清錯誤 (40.9s)
+  ok  8 e2e\git-operation-errors.spec.ts:67:5 › pull 真合併衝突：失敗後立即列出 U，保留 MERGE_HEAD 與診斷 (25.0s)
+  ok  9 e2e\git-operation-errors.spec.ts:87:5 › stash pop 真衝突：失敗後顯示 U 並保留原 stash (25.2s)
+  ok 10 e2e\git-operation-errors.spec.ts:107:5 › 外部 stage 只修改 Git 索引、變更筆數相同，SCM 仍更新暫存狀態 (19.9s)
+  ok 11 e2e\git-operation-errors.spec.ts:123:5 › worktree 分支載入遇到真 Git 錯誤時結束 loading，顯示重新開啟的處理方式 (21.2s)
+  ok 12 e2e\git-operation-errors.spec.ts:141:5 › worktree 遠端名稱含斜線：正確建立 topic 本地分支並追蹤完整遠端身分 (30.8s)
+  ok 13 e2e\git-operation-errors.spec.ts:166:5 › 切換工作區：A 真 Git 歷史延遲回包不污染 B，提交草稿各自保留 (29.5s)
+SCM metadata test: fixture ready
+SCM metadata test: Electron ready
+SCM metadata test: workspace ready
+SCM metadata test: snapshot gated
+SCM metadata test: history ready
+SCM metadata test: branches ready
+SCM metadata test: worktrees ready
+  ok 14 e2e\git-operation-errors.spec.ts:214:5 › SCM 初次狀態掃描未完成時可讀歷史、分支與 worktree (12.0s)
+
+  14 passed (5.7m)
+
+DIAGNOSTIC RESULT {"command":["--workers=1","--shard=4/12","--grep-invert","REQ-PERF-001"],"exitCode":0,"durationMs":342519}
+
+DIAGNOSTIC ONLY 2026-10-12T11:38:16.997Z playwright test ["--workers=1","--shard=5/12","--grep-invert","REQ-PERF-001"]
+
+Running 6 tests using 1 worker, shard 5 of 12
+
+(node:6308) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 e2e\git-publish.spec.ts:36:5 › 沒 upstream 的新分支按 push → 自動 push -u 設 upstream（全真鏈路） (20.9s)
+  ok 2 e2e\git-publish.spec.ts:75:5 › 無 remote → 同步列顯示「發佈」；名稱驗證；gh 缺席給安裝引導 (11.9s)
+  ok 3 e2e\git-publish.spec.ts:116:5 › 發佈成功路徑：gh shim 收到完整參數、UI 顯示已發佈 URL (16.1s)
+  ok 4 e2e\git.spec.ts:35:5 › REQ-E2E-003：編輯→變更出現→stage→commit→清空、ahead+1 (19.7s)
+  ok 5 e2e\git.spec.ts:65:5 › 整合終端或外部 push 後 SCM 自動清除過期的未推送數字 (26.7s)
+  ok 6 e2e\history-pagination.spec.ts:12:5 › 真 Electron 歷史初載 20 筆，使用者每次捲到底追加 10 筆並保留切頁位置 (36.0s)
+
+  6 passed (2.2m)
+
+DIAGNOSTIC RESULT {"command":["--workers=1","--shard=5/12","--grep-invert","REQ-PERF-001"],"exitCode":0,"durationMs":136209}
+
+DIAGNOSTIC ONLY 2026-10-12T11:40:33.214Z playwright test ["--workers=1","--shard=6/12","--grep-invert","REQ-PERF-001"]
+
+Running 11 tests using 1 worker, shard 6 of 12
+
+(node:9464) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 e2e\image-view.spec.ts:12:5 › png 開啟為圖片預覽（非 Monaco 亂碼），像素真的載入 (7.4s)
+  ok  2 e2e\layout-close-size.spec.ts:19:5 › dockview 標頭 × 原地隱藏編輯器或終端機，側欄尺寸維持 (7.8s)
+  ok  3 e2e\lsp.spec.ts:18:5 › REQ-E2E-002 後半：開 .py（無 LSP）→ 缺件提示 + 仍可編輯存檔 (12.2s)
+  ok  4 e2e\onboarding-help.spec.ts:34:5 › 首次導覽會保存進度、續接並在完成後不再自動出現 (21.3s)
+  ok  5 e2e\onboarding-help.spec.ts:85:5 › schema v2 與舊導覽版本從第 1 步開始，缺少目標時提供不阻塞替代內容 (13.9s)
+  ok  6 e2e\onboarding-help.spec.ts:118:5 › 說明與設定共用入口可搜尋完整指南，手動導覽不改寫首次狀態 (14.2s)
+  ok  7 e2e\onboarding-help.spec.ts:186:5 › 導覽只還原自己顯示且未被使用者覆寫的區域 (8.4s)
+  ok  8 e2e\overview.spec.ts:6:5 › 總覽面板：開 → 用量卡片 + 工作區狀態 → 關閉 (7.0s)
+  ok  9 e2e\perf.spec.ts:76:5 › REQ-PERF-002/003/004 切換 / 開檔 / 按鍵 p95 (17.5s)
+
+=== PERF REPORT ===
+{
+  "machine": {
+    "cpu": "Intel(R) Core(TM) Ultra 5 235U",
+    "cores": 14,
+    "totalMemGB": 34
+  },
+  "note": "務實 N 量測（嚴謹 30 次 p95 + 基準機規格留 ship 量一次）",
+  "budgets": {
+    "coldStart": 3000,
+    "wsSwitch": 200,
+    "fileOpen": 500,
+    "keyLatency": 50,
+    "idleCpuPct": 10
+  },
+  "wsSwitch": {
+    "p95": 0,
+    "n": 13,
+    "budget": 200
+  },
+  "fileOpen": {
+    "p95": 70,
+    "n": 8,
+    "budget": 500
+  },
+  "keyLatency": {
+    "p95": 18,
+    "n": 20,
+    "budget": 50
+  },
+  "idleCpu": {
+    "pct": 8.1,
+    "workspaces": 10,
+    "windowMs": 18000,
+    "budget": 10
+  }
+}
+  ok 10 e2e\perf.spec.ts:156:5 › REQ-MON-006 N=10 背景閒置監控 CPU 低水位 (31.0s)
+  ok 11 e2e\rail-resize.spec.ts:11:5 › 工作區欄可拖曳調寬 + 重啟持久化 (12.7s)
+
+  11 passed (2.6m)
+
+DIAGNOSTIC RESULT {"command":["--workers=1","--shard=6/12","--grep-invert","REQ-PERF-001"],"exitCode":0,"durationMs":157194}
+
+DIAGNOSTIC ONLY 2026-10-12T11:43:10.416Z playwright test ["--workers=1","--shard=7/12","--grep-invert","REQ-PERF-001"]
+
+Running 13 tests using 1 worker, shard 7 of 12
+
+(node:32820) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 e2e\remote-launch.spec.ts:24:5 › 真 HTTP 手機配對與桌面批准，縮小後新增固定 Claude GUI 分頁且同操作不重複 (24.1s)
+  ok  2 e2e\reset-layout-terminal.spec.ts:9:5 › 開終端機 → 重設版面 → 終端機面板不被重建（分頁/PTY 保留） (8.8s)
+warning: in the working copy of 'f.txt', LF will be replaced by CRLF the next time Git touches it
+  ok  3 e2e\scm-dogfood2.spec.ts:24:5 › untracked diff 整檔新增 + 右鍵加 .gitignore + 右鍵取消變更 (21.7s)
+warning: in the working copy of 'f.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'f.txt', LF will be replaced by CRLF the next time Git touches it
+  ok  4 e2e\scm-dogfood2.spec.ts:61:5 › 點 commit 展開變更檔案清單 → 點檔開單檔 commit diff (18.7s)
+
+=== SCM PERFORMANCE ===
+{
+  "changes": 600,
+  "initialRenderedRows": 200,
+  "eventWaves": 4,
+  "snapshotRequests": 3,
+  "snapshotRequestBudget": 5,
+  "extraGitLogRequests": 0
+}
+  ok  5 e2e\scm-performance.spec.ts:21:5 › 大量變更分批渲染，檔案事件不重複掃 Git 或重載歷史 (28.5s)
+  ok  6 e2e\search.spec.ts:19:5 › REQ-E2E-006：全域搜尋串流結果（排除 node_modules）→點命中跳檔 (11.9s)
+  ok  7 e2e\search.spec.ts:45:5 › 檔名搜尋：命中列「檔案」群組點了開檔；內容命中點擊跳行並反白命中片段 (12.4s)
+  ok  8 e2e\sheet-view.spec.ts:8:5 › xlsx 開啟為表格預覽（非亂碼），儲存格值正確 (8.4s)
+  ok  9 e2e\shell.spec.ts:6:5 › 外殼渲染 + 主題即時切換 + 重啟沿用 (REQ-E2E-007) (15.7s)
+  ok 10 e2e\splash.spec.ts:32:5 › 主視窗就緒前不顯示 Electron loading 視窗，renderer 握手後才顯示主畫面 (10.4s)
+  ok 11 e2e\splash.spec.ts:60:5 › 主畫面首次載入失敗時顯示安全原因，重試後可進入主程式 (12.2s)
+  ok 12 e2e\splash.spec.ts:76:5 › 主畫面載入失敗時可從 splash 確實退出 (7.5s)
+  ok 13 e2e\splash.spec.ts:85:5 › 初始化首次失敗後在同一程序重試成功 (12.2s)
+
+  13 passed (3.3m)
+
+DIAGNOSTIC RESULT {"command":["--workers=1","--shard=7/12","--grep-invert","REQ-PERF-001"],"exitCode":0,"durationMs":196672}
+
+DIAGNOSTIC ONLY 2026-10-12T11:46:27.095Z playwright test ["--workers=1","--shard=8/12","--grep-invert","REQ-PERF-001"]
+
+Running 9 tests using 1 worker, shard 8 of 12
+
+(node:12672) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+  ok 1 e2e\stash-untracked.spec.ts:11:5 › 手動 Stash 含 untracked：收起新檔 + Stash Pop 取回 (24.7s)
+  ok 2 e2e\terminal-ai-launch.spec.ts:38:5 › Claude bypass / Codex / Agy 按鈕會各開終端機並送出對應命令 (24.1s)
+  ok 3 e2e\terminal-bottom-visibility.spec.ts:54:5 › 終端機底列可視性：xterm/ConPTY/DOM 三方一致，填滿整屏後最後一列可見 (17.4s)
+  ok 4 e2e\terminal-clipboard.spec.ts:43:5 › Ctrl+V 把剪貼簿內容貼進終端機（真 shell 執行建檔） (15.3s)
+  ok 5 e2e\terminal-clipboard.spec.ts:71:5 › 右鍵（無選取）貼上剪貼簿內容進終端機 (22.4s)
+  ok 6 e2e\terminal-clipboard.spec.ts:100:5 › 同工作區兩個終端機：A 選取後 Ctrl+C 可複製到 B，無選取仍保留 SIGINT (16.9s)
+  ok 7 e2e\terminal-clipboard.spec.ts:182:5 › OSC52 寫入：真 shell 發序列 → 系統剪貼簿更新（Claude Code 選取複製鏈路） (13.1s)
+  ok 8 e2e\terminal-clipboard.spec.ts:213:5 › 右鍵貼上防抖：300ms 內第二次右鍵只貼一次；窗過後可再貼 (15.2s)
+[基準] buffer=normal mouseEventsActive=false
+[alt-screen] ?1049h 抵達 xterm：buffer=alternate
+[mouse] ?1003h/?1006h 抵達 xterm：mouseEventsActive=true
+  ok 9 e2e\terminal-conpty-passthrough.spec.ts:80:5 › PTY 子程序送的 alt-screen／滑鼠追蹤序列必須真的抵達 xterm（ConPTY 不可吞掉） (16.4s)
+
+  9 passed (2.8m)
+
+DIAGNOSTIC RESULT {"command":["--workers=1","--shard=8/12","--grep-invert","REQ-PERF-001"],"exitCode":0,"durationMs":170794}
+
+DIAGNOSTIC ONLY 2026-10-12T11:49:17.897Z playwright test ["--workers=1","--shard=9/12","--grep-invert","REQ-PERF-001"]
+
+Running 10 tests using 1 worker, shard 9 of 12
+
+(node:29620) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 e2e\terminal-drop.spec.ts:45:5 › 側欄拖檔到終端機：貼上絕對路徑；含空白檔名自動包引號；裸 text/plain 不誤貼 (15.6s)
+  ok  2 e2e\terminal-file-link.spec.ts:8:5 › Ctrl+點擊終端機工作區路徑：在 Polydesk 編輯器開檔並跳到行欄 (13.3s)
+  ok  3 e2e\terminal-file-link.spec.ts:78:5 › Ctrl+點擊 Claude Read 工具輸出：開啟括號內路徑並套用 lines 起始行 (14.9s)
+  ok  4 e2e\terminal-file-link.spec.ts:152:5 › 工作區外檔案：主程序確認後才外開，危險腳本一律封鎖 (8.3s)
+  ok  5 e2e\terminal-fit-clip.spec.ts:39:5 › 終端機放大/小幅縮放後，最後一列不被裁切（畫布不溢出 host） (8.9s)
+  ok  6 e2e\terminal-fit-clip.spec.ts:102:5 › 切主題時已開的終端機即時跟隨（dogfood 回報：切風格終端機不變） (11.3s)
+  ok  7 e2e\terminal-fit-clip.spec.ts:132:5 › 終端機容器底色＝xterm 背景色（整數格剩餘空間不露出主題底色＝無留白框） (11.0s)
+  ok  8 e2e\terminal-font.spec.ts:9:5 › 終端機字型：預設 Consolas 14 → 面板切 JetBrains Mono 即時套用並持久化；unicode11 生效 (9.9s)
+  ok  9 e2e\terminal-header.spec.ts:11:5 › 面板 ✕ 隱藏（setVisible，不 dispose）+ 工具列再開即現 (12.0s)
+  ok 10 e2e\terminal-keycap.spec.ts:35:5 › REQ-TERM-009：真 PTY 輸出 keycap 1️⃣ → buffer 退化成純數字、無 U+20E3 圍框 (11.6s)
+
+  10 passed (2.0m)
+
+DIAGNOSTIC RESULT {"command":["--workers=1","--shard=9/12","--grep-invert","REQ-PERF-001"],"exitCode":0,"durationMs":120886}
+
+DIAGNOSTIC ONLY 2026-10-12T11:51:18.790Z playwright test ["--workers=1","--shard=10/12","--grep-invert","REQ-PERF-001"]
+
+Running 10 tests using 1 worker, shard 10 of 12
+
+(node:36188) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 e2e\terminal-manage.spec.ts:13:5 › 顯示/隱藏：隱藏一個終端機＝移出並排但不關閉（同一 xterm DOM 存活），再顯示即回來 (11.8s)
+  ok  2 e2e\terminal-manage.spec.ts:55:5 › 雙擊迷你標頭 → 就地改名，未命名時自動編號 (9.6s)
+  ok  3 e2e\terminal-manage.spec.ts:86:5 › 拖曳迷你標頭 → 調整並排順序 (12.6s)
+  ok  4 e2e\terminal-manage.spec.ts:125:5 › 拖曳排序（往後拖）：把前面的 pane 拖到後面也要能動 (12.4s)
+  ok  5 e2e\terminal-manage.spec.ts:162:5 › 改名按 Escape 取消 → 不保存（沿用原名） (11.8s)
+
+=== FOUR WORKSPACE TERMINAL PERF ===
+{
+  "workspaces": 4,
+  "activeStreams": 4,
+  "frameSamples": 120,
+  "frameP95Ms": 17.8,
+  "rendererCpuPct": 2.1,
+  "rendererWorkingSetMb": 183.1,
+  "budgets": {
+    "frameP95Ms": 50,
+    "rendererCpuPct": 25
+  }
+}
+  ok  6 e2e\terminal-multi-workspace-perf.spec.ts:47:5 › 四工作區 AI 串流時 renderer 維持可互動且資源成本有上限 (25.9s)
+  ok  7 e2e\terminal-path-regression.spec.ts:9:5 › System32 位於 PATH 最後且沒有尾分號時仍可建立 PowerShell (8.0s)
+  ok  8 e2e\terminal-path-regression.spec.ts:34:5 › shell 不存在時顯示結構化錯誤，不再像按鈕沒有反應 (7.8s)
+  ok  9 e2e\terminal-resize-heal.spec.ts:40:5 › PTY 尺寸漂移後持續輸出即自癒（不必重新點擊，ConPTY rows 回到 xterm rows） (14.5s)
+  ok 10 e2e\terminal-rightclick-tui.spec.ts:26:5 › TUI 滑鼠模式下右鍵貼上：PTY 不收滑鼠回報、marker 恰寫入一次 (14.7s)
+
+  10 passed (2.2m)
+
+DIAGNOSTIC RESULT {"command":["--workers=1","--shard=10/12","--grep-invert","REQ-PERF-001"],"exitCode":0,"durationMs":133911}
+
+DIAGNOSTIC ONLY 2026-10-12T11:53:32.707Z playwright test ["--workers=1","--shard=11/12","--grep-invert","REQ-PERF-001"]
+
+Running 10 tests using 1 worker, shard 11 of 12
+
+(node:16436) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 e2e\terminal-scroll-follow.spec.ts:59:5 › 孤兒 isUserScrolling 旗標下大量輸出，viewport 仍跟到底（展開不再吃掉底部） (20.6s)
+  ok  2 e2e\terminal-split.spec.ts:8:5 › 多開終端機 → 並排同時顯示 + 拖曳分隔條 + 切上下 + 關閉 (16.2s)
+[基準線] 未開滑鼠追蹤：捲上去 2 行，mouseEventsActive=false
+[狀態] 送出 ?1003h 後 mouseEventsActive=true
+[症狀] 滑鼠追蹤開啟時滾輪：捲上去 6 行（0 = 滾不動＝重現 bug）
+[逃生口] Shift+滾輪：捲上去 6 行（>0 = 逃生口有效）
+  ok  3 e2e\terminal-tui-wheel-scroll.spec.ts:91:5 › TUI 開啟滑鼠追蹤（?1003）時，使用者仍應能用滾輪往上捲 scrollback (16.4s)
+  x   4 e2e\terminal-web-link.spec.ts:7:5 › Ctrl+點擊終端機 HTTP 網址：由系統瀏覽器外開，一般點擊不觸發 (15.7s)
+(node:26424) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  5 e2e\terminal.spec.ts:15:5 › REQ-E2E-008：跑中終端機 → 移除工作區彈關閉確認 → 確認後移除 (11.6s)
+  ok  6 e2e\toggle-terminal.spec.ts:9:5 › toggle 終端機顯隱：setVisible 不 dispose、隱藏騰出空間、再開原地重現 (14.1s)
+  ok  7 e2e\workspace-rail.spec.ts:10:5 › 工作區列可 toggle 顯隱 (7.8s)
+  ok  8 e2e\workspace-rail.spec.ts:25:5 › 重設版面也還原工作區 rail 寬度 (7.5s)
+  ok  9 e2e\workspace-switch-badge.spec.ts:9:5 › 點工作區列項的徽章格（非名字按鈕）也能切換工作區（整列可點） (8.8s)
+  ok 10 e2e\workspace-switch-stale.spec.ts:10:5 › bug1：快速切換時前一工作區的慢 git 載入不覆蓋當前（取消 stale） (12.8s)
+
+
+  1) e2e\terminal-web-link.spec.ts:7:5 › Ctrl+點擊終端機 HTTP 網址：由系統瀏覽器外開，一般點擊不觸發 ───────────────────────
+
+    Error: xterm LinkProvider 未在滑鼠位置啟用網址連結
+
+    xterm LinkProvider 未在滑鼠位置啟用網址連結
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "http://localhost:3000"
+    Received: ""
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+      84 |         { timeout: 5_000, message: 'xterm LinkProvider 未在滑鼠位置啟用網址連結' },
+      85 |       )
+    > 86 |       .toBe('http://localhost:3000');
+         |        ^
+      87 |
+      88 |     const screen = page.locator('.pd-term-view .xterm-screen').first();
+      89 |     await page.keyboard.down('Control');
+        at C:\polydesk-remote-dev\e2e\terminal-web-link.spec.ts:86:8
+
+    Error Context: test-results\terminal-web-link-Ctrl-點擊終端機-HTTP-網址：由系統瀏覽器外開，一般點擊不觸發\error-context.md
+
+  1 failed
+    e2e\terminal-web-link.spec.ts:7:5 › Ctrl+點擊終端機 HTTP 網址：由系統瀏覽器外開，一般點擊不觸發 ────────────────────────
+  9 passed (2.3m)
+
+DIAGNOSTIC RESULT {"command":["--workers=1","--shard=11/12","--grep-invert","REQ-PERF-001"],"exitCode":1,"durationMs":137352}
+
+DIAGNOSTIC ONLY 2026-10-12T11:55:50.067Z playwright test ["--workers=1","--shard=12/12","--grep-invert","REQ-PERF-001"]
+
+Running 10 tests using 1 worker, shard 12 of 12
+
+(node:27260) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 e2e\workspace.spec.ts:17:5 › REQ-E2E-001：歡迎頁→新增 A→新增 B→切 A→切 B（真實點擊） (18.6s)
+  ok  2 e2e\workspace.spec.ts:42:5 › 空白歡迎頁可開啟 Clone Git Repository 對話框 (11.1s)
+  ok  3 e2e\workspace.spec.ts:55:5 › F-1-A1：惡意名稱（含 <img onerror>）改名後不產生 DOM 節點（無 XSS） (8.2s)
+  ok  4 e2e\workspace.spec.ts:82:5 › REQ-E2E-002（前半）：開 TS 檔→輸入→Ctrl+S 存檔，磁碟更新 (11.7s)
+  ok  5 e2e\worktree-perf.spec.ts:89:5 › REQ-PERF-005：worktree 分頁載入 p95 < 300ms (19.6s)
+
+=== WORKTREE PERF ===
+{
+  "machine": {
+    "cpu": "Intel(R) Core(TM) Ultra 5 235U",
+    "cores": 14,
+    "totalMemGB": 34
+  },
+  "note": "務實 N 量測（嚴謹 30 次 p95 + 基準機規格留 ship 量一次）；listLoad/create 各用獨立 app 隔離佇列",
+  "budgets": {
+    "worktreeListLoad": 300,
+    "worktreeCreate": 5000
+  },
+  "worktreeListLoad": {
+    "p50": 609,
+    "p95": 846,
+    "n": 3,
+    "budget": 300
+  },
+  "worktreeCreate": {
+    "p50": 2533,
+    "p95": 2533,
+    "n": 1,
+    "budget": 5000
+  }
+}
+  ok  6 e2e\worktree-perf.spec.ts:130:5 › REQ-PERF-006：建立 worktree p95 < 5s（UI 不凍結） (18.4s)
+  ok  7 e2e\worktree.spec.ts:33:5 › REQ-E2E-012：分支→建立 worktree→納管開啟→終端機 cwd＝worktree→切回主 repo (19.9s)
+  ok  8 e2e\worktree.spec.ts:74:5 › REQ-E2E-013：移除 worktree——dirty 兩段確認→連同刪除；僅移出保留資料夾 (1.6m)
+  ok  9 e2e\worktree.spec.ts:173:5 › worktree 移除相容舊資料：一般工作區加入時兩種移除都有效 (1.4m)
+  ok 10 e2e\worktree.spec.ts:222:5 › F-13：分支分頁「在新 worktree 開啟」建立；checkout 衝突→跳到該 worktree (24.7s)
+
+  10 passed (5.2m)
+
+DIAGNOSTIC RESULT {"command":["--workers=1","--shard=12/12","--grep-invert","REQ-PERF-001"],"exitCode":0,"durationMs":315098}

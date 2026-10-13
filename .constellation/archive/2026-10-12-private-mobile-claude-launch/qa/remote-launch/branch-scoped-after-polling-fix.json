@@ -1,0 +1,13 @@
+{
+  "startedAt": "2026-10-12T12:37:21.866Z",
+  "args": [
+    "test",
+    "e2e/git-branch-management.spec.ts",
+    "--grep",
+    "分支管理：本地",
+    "--workers=1"
+  ],
+  "exitCode": 0,
+  "durationMs": 372770,
+  "scope": "Original branch journey after bounded cleanup polling correction; not full ship evidence"
+}

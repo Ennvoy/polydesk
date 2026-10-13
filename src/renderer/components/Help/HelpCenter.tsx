@@ -21,6 +21,20 @@ interface HelpArticle {
 
 const ARTICLES: HelpArticle[] = [
   {
+    id: 'remote-launch', category: '終端機與 AI', title: '手機遠端啟動 Claude bypass',
+    summary: '透過 Tailscale 私人 HTTPS，手機一鍵在自己的 Poly 新增 Claude bypass 分頁。',
+    steps: ['在電腦與手機安裝 Tailscale 並登入同一私人網路，依設定內連結啟用私人 HTTPS。公司使用請確認適用方案。', '開啟設定 → 手機遠端啟動，啟用後逐一勾選信任的工作區；新增工作區不會自動授權。', '產生兩分鐘一次性 QR／手動配對碼。手機輸入名稱送出，核對兩邊識別碼後在電腦批准，期限可選 7 天、30 天或永久。', '手機只顯示授權工作區；按「開啟 Claude bypass」會恢復電腦視窗、切到該工作區並新增分頁。配對的同事各自設定自己的 Poly。'],
+    states: [
+      { label: '已停用', detail: '預設關閉且不監聽網路；每次重開 Poly 需在電腦重新啟用，配對與工作區授權會保留。' },
+      { label: '無法連線', detail: '確認電腦、Poly 與 Tailscale 保持開啟。手機可能需切換其他 VPN。離線不排程、不自動重送啟動。' },
+      { label: '結果不確定', detail: '使用「查詢同一操作的結果」，恢復連線後只查詢。先查看電腦再決定建立新操作，避免重複啟動。' },
+      { label: '已送出啟動命令', detail: '代表已新增分頁並送出固定命令；不代表 Claude 已登入或就緒。CLI 缺少、登入與後續錯誤請查看電腦終端機。' },
+      { label: '到期／撤銷／路徑改變', detail: '到期或撤銷需重新配對；期限從電腦批准時計算，改期限請先撤銷。工作區路徑改變需重新授權。已啟動的 Claude 不會因撤銷而強制結束。' },
+      { label: '公開入口或設定衝突', detail: 'Poly 只接受 Tailscale 私人 Serve，拒絕 Funnel；8443 已由其他服務使用或私有連線改變時停用遠端功能。處理後在電腦重新啟用。' },
+    ],
+    tips: ['bypass 略過權限確認，並不是工作區沙箱；Claude 可能讀寫電腦其他資源，僅授權完全信任的工作區。', '手機憑證不會包含在設定匯出中。更換瀏覽器、清除瀏覽資料或瀏覽器清除永久配對憑證後需重新配對。Windows 鎖定不會被遠端功能解鎖。'],
+  },
+  {
     id: 'startup', category: '開始使用', title: '啟動與開啟畫面',
     summary: '雙擊 portable 程式後，無轉圈的靜態畫面會提示程式正在啟動。',
     steps: ['雙擊 Polydesk portable EXE。', '靜態開啟畫面會在自解壓與工作區準備期間持續顯示。', '主畫面可操作後，開啟畫面會自動關閉。'],

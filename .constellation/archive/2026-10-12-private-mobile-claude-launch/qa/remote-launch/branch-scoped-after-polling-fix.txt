@@ -1,0 +1,28 @@
+
+Running 1 test using 1 worker
+
+(node:31400) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+warning: in the working copy of 'base.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to a new branch 'unfinished'
+warning: in the working copy of 'unfinished.txt', LF will be replaced by CRLF the next time Git touches it
+Switched to branch 'main'
+Preparing worktree (checking out 'busy-worktree')
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-U7FrFw\upstream.git
+ * [new branch]      main -> main
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-U7FrFw\upstream.git
+ * [new branch]      remote-delete -> remote-delete
+To C:\Users\ennvoy.lin\AppData\Local\Temp\pd-branch-manage-U7FrFw\upstream.git
+ * [new branch]      profile -> deployed-profile
+[branch-management] setup: 29635ms
+[branch-management] profile/upstream: 89808ms
+[branch-management] merged: 68293ms
+[branch-management] remote: 99996ms
+[branch-management] unfinished: 79322ms
+  ok 1 e2e\git-branch-management.spec.ts:50:5 › 分支管理：本地／遠端分組與兩階段完整清理真鏈路 (6.2m)
+
+  Slow test file: e2e\git-branch-management.spec.ts (6.2m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  1 passed (6.2m)
+
+SCOPED RESULT {"startedAt":"2026-10-12T12:37:21.866Z","args":["test","e2e/git-branch-management.spec.ts","--grep","分支管理：本地","--workers=1"],"exitCode":0,"durationMs":372770,"scope":"Original branch journey after bounded cleanup polling correction; not full ship evidence"}

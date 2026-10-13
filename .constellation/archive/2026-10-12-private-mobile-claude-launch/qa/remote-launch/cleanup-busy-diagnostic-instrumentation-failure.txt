@@ -1,0 +1,8 @@
+Isolated real Electron/UI/IPC/Git diagnostic; no response mocks
+{"stage":"fixture","durationMs":7051}
+electronApplication.evaluate: ReferenceError: require is not defined
+    at eval (eval at evaluate (:370:30), <anonymous>:4:18)
+    at UtilityScript.evaluate (<anonymous>:372:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+    at C:\Users\ennvoy.lin\AppData\Local\Temp\polydesk-cleanup-busy-diagnostic.cjs:70:15
+{"evidence":"C:\\polydesk-remote-dev\\.constellation\\qa\\remote-launch\\cleanup-busy-isolated-diagnostic.json","status":"FAIL","ownedAppClosed":true}

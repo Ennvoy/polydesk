@@ -1,0 +1,531 @@
+{
+  "cpuPct": 26.127777777777776,
+  "counts": {
+    "jsonCalls": 2228,
+    "jsonCharacters": 4842868,
+    "readFileCalls": 1383,
+    "readFileBytes": 249759,
+    "openCalls": 187,
+    "openReadCalls": 363,
+    "openReadBytes": 6379648,
+    "readdirCalls": 38,
+    "statCalls": 370,
+    "execCalls": 4,
+    "execReturned": 4,
+    "codexOpens": 187,
+    "claudeReads": 1383,
+    "agyReads": 0
+  },
+  "profileMs": 18122.217,
+  "topSelf": [
+    {
+      "fn": "(idle)",
+      "url": "",
+      "line": 0,
+      "ms": 16936
+    },
+    {
+      "fn": "(program)",
+      "url": "",
+      "line": 0,
+      "ms": 173
+    },
+    {
+      "fn": "existsSync",
+      "url": "",
+      "line": 0,
+      "ms": 135
+    },
+    {
+      "fn": "post",
+      "url": "node:inspector",
+      "line": 112,
+      "ms": 91
+    },
+    {
+      "fn": "stat",
+      "url": "",
+      "line": 0,
+      "ms": 80
+    },
+    {
+      "fn": "fstat",
+      "url": "",
+      "line": 0,
+      "ms": 37
+    },
+    {
+      "fn": "spawn",
+      "url": "",
+      "line": 0,
+      "ms": 37
+    },
+    {
+      "fn": "spawn",
+      "url": "",
+      "line": 0,
+      "ms": 32
+    },
+    {
+      "fn": "openFileHandle",
+      "url": "",
+      "line": 0,
+      "ms": 28
+    },
+    {
+      "fn": "readFileHandle",
+      "url": "node:internal/fs/promises",
+      "line": 510,
+      "ms": 28
+    },
+    {
+      "fn": "open",
+      "url": "node:internal/fs/promises",
+      "line": 635,
+      "ms": 27
+    },
+    {
+      "fn": "readFileHandle",
+      "url": "node:internal/fs/promises",
+      "line": 510,
+      "ms": 23
+    },
+    {
+      "fn": "JSON.parse",
+      "url": "",
+      "line": 54,
+      "ms": 18
+    },
+    {
+      "fn": "fs.<computed>",
+      "url": "",
+      "line": 30,
+      "ms": 18
+    },
+    {
+      "fn": "close",
+      "url": "node:internal/fs/promises",
+      "line": 237,
+      "ms": 18
+    },
+    {
+      "fn": "(garbage collector)",
+      "url": "",
+      "line": 0,
+      "ms": 16
+    },
+    {
+      "fn": "read",
+      "url": "",
+      "line": 0,
+      "ms": 14
+    },
+    {
+      "fn": "close",
+      "url": "",
+      "line": 0,
+      "ms": 13
+    },
+    {
+      "fn": "matchWorkspace",
+      "url": "file:///C:/polydesk-remote-dev/out/main/index.js",
+      "line": 9043,
+      "ms": 12
+    },
+    {
+      "fn": "FastBuffer",
+      "url": "node:internal/buffer",
+      "line": 960,
+      "ms": 11
+    },
+    {
+      "fn": "JSON.parse",
+      "url": "",
+      "line": 54,
+      "ms": 10
+    },
+    {
+      "fn": "slice",
+      "url": "node:buffer",
+      "line": 633,
+      "ms": 10
+    },
+    {
+      "fn": "read",
+      "url": "node:internal/fs/promises",
+      "line": 647,
+      "ms": 10
+    },
+    {
+      "fn": "MixedEventEmitter",
+      "url": "node:internal/event_target",
+      "line": 1170,
+      "ms": 9
+    },
+    {
+      "fn": "open",
+      "url": "node:internal/fs/promises",
+      "line": 635,
+      "ms": 9
+    },
+    {
+      "fn": "readFile",
+      "url": "node:internal/fs/promises",
+      "line": 1237,
+      "ms": 8
+    },
+    {
+      "fn": "EventEmitter",
+      "url": "node:events",
+      "line": 219,
+      "ms": 8
+    },
+    {
+      "fn": "FastBuffer",
+      "url": "node:internal/buffer",
+      "line": 960,
+      "ms": 8
+    },
+    {
+      "fn": "defaultReadSessions",
+      "url": "file:///C:/polydesk-remote-dev/out/main/index.js",
+      "line": 9603,
+      "ms": 8
+    },
+    {
+      "fn": "norm",
+      "url": "file:///C:/polydesk-remote-dev/out/main/index.js",
+      "line": 9040,
+      "ms": 7
+    },
+    {
+      "fn": "JSTransferable",
+      "url": "",
+      "line": 0,
+      "ms": 7
+    },
+    {
+      "fn": "resolve",
+      "url": "node:path",
+      "line": 191,
+      "ms": 6
+    },
+    {
+      "fn": "read",
+      "url": "",
+      "line": 0,
+      "ms": 6
+    },
+    {
+      "fn": "FileHandle",
+      "url": "node:internal/fs/promises",
+      "line": 157,
+      "ms": 6
+    },
+    {
+      "fn": "getStatsFromBinding",
+      "url": "node:internal/fs/utils",
+      "line": 515,
+      "ms": 6
+    }
+  ],
+  "topInclusive": [
+    {
+      "fn": "(root)",
+      "url": "",
+      "line": 0,
+      "ms": 18122
+    },
+    {
+      "fn": "(idle)",
+      "url": "",
+      "line": 0,
+      "ms": 16936
+    },
+    {
+      "fn": "runOnce",
+      "url": "file:///C:/polydesk-remote-dev/out/main/index.js",
+      "line": 9516,
+      "ms": 252
+    },
+    {
+      "fn": "list",
+      "url": "file:///C:/polydesk-remote-dev/out/main/index.js",
+      "line": 492,
+      "ms": 228
+    },
+    {
+      "fn": "(program)",
+      "url": "",
+      "line": 0,
+      "ms": 173
+    },
+    {
+      "fn": "existsSync",
+      "url": "",
+      "line": 0,
+      "ms": 135
+    },
+    {
+      "fn": "existsSync",
+      "url": "node:fs",
+      "line": 286,
+      "ms": 135
+    },
+    {
+      "fn": "defaultReadSessions",
+      "url": "file:///C:/polydesk-remote-dev/out/main/index.js",
+      "line": 9603,
+      "ms": 126
+    },
+    {
+      "fn": "fs.<computed>",
+      "url": "",
+      "line": 30,
+      "ms": 97
+    },
+    {
+      "fn": "t.promises.readFile",
+      "url": "node:electron/js2c/node_init",
+      "line": 2,
+      "ms": 95
+    },
+    {
+      "fn": "post",
+      "url": "node:inspector",
+      "line": 112,
+      "ms": 91
+    },
+    {
+      "fn": "",
+      "url": "",
+      "line": 6,
+      "ms": 91
+    },
+    {
+      "fn": "post",
+      "url": "",
+      "line": 6,
+      "ms": 91
+    },
+    {
+      "fn": "",
+      "url": "",
+      "line": 1,
+      "ms": 91
+    },
+    {
+      "fn": "readFile",
+      "url": "node:internal/fs/promises",
+      "line": 1237,
+      "ms": 89
+    },
+    {
+      "fn": "statSync",
+      "url": "node:fs",
+      "line": 1665,
+      "ms": 89
+    },
+    {
+      "fn": "stat",
+      "url": "",
+      "line": 0,
+      "ms": 80
+    },
+    {
+      "fn": "open",
+      "url": "node:internal/fs/promises",
+      "line": 635,
+      "ms": 75
+    },
+    {
+      "fn": "readFileHandle",
+      "url": "node:internal/fs/promises",
+      "line": 510,
+      "ms": 67
+    },
+    {
+      "fn": "readFile",
+      "url": "node:internal/fs/promises",
+      "line": 1237,
+      "ms": 67
+    },
+    {
+      "fn": "readFileHandle",
+      "url": "node:internal/fs/promises",
+      "line": 510,
+      "ms": 62
+    },
+    {
+      "fn": "readFirstLine",
+      "url": "file:///C:/polydesk-remote-dev/out/main/index.js",
+      "line": 7754,
+      "ms": 47
+    },
+    {
+      "fn": "",
+      "url": "node:internal/fs/promises",
+      "line": 428,
+      "ms": 46
+    },
+    {
+      "fn": "open",
+      "url": "node:internal/fs/promises",
+      "line": 635,
+      "ms": 45
+    },
+    {
+      "fn": "readCodexSessions",
+      "url": "file:///C:/polydesk-remote-dev/out/main/index.js",
+      "line": 7787,
+      "ms": 44
+    },
+    {
+      "fn": "processTicksAndRejections",
+      "url": "node:internal/process/task_queues",
+      "line": 67,
+      "ms": 43
+    },
+    {
+      "fn": "close",
+      "url": "node:internal/fs/promises",
+      "line": 237,
+      "ms": 41
+    },
+    {
+      "fn": "processTimers",
+      "url": "node:internal/timers",
+      "line": 504,
+      "ms": 41
+    },
+    {
+      "fn": "listOnTimeout",
+      "url": "node:internal/timers",
+      "line": 524,
+      "ms": 39
+    },
+    {
+      "fn": "_read",
+      "url": "file:///C:/polydesk-remote-dev/out/main/index.js",
+      "line": 777,
+      "ms": 39
+    },
+    {
+      "fn": "fstat",
+      "url": "",
+      "line": 0,
+      "ms": 37
+    },
+    {
+      "fn": "spawn",
+      "url": "",
+      "line": 0,
+      "ms": 37
+    },
+    {
+      "fn": "ChildProcess.spawn",
+      "url": "node:internal/child_process",
+      "line": 354,
+      "ms": 37
+    },
+    {
+      "fn": "spawn",
+      "url": "node:child_process",
+      "line": 769,
+      "ms": 37
+    },
+    {
+      "fn": "execFile",
+      "url": "node:child_process",
+      "line": 328,
+      "ms": 37
+    }
+  ],
+  "samples": [
+    {
+      "elapsedMs": 999,
+      "user": 2906000,
+      "system": 3562000
+    },
+    {
+      "elapsedMs": 2000,
+      "user": 2984000,
+      "system": 4000000
+    },
+    {
+      "elapsedMs": 3001,
+      "user": 3031000,
+      "system": 4109000
+    },
+    {
+      "elapsedMs": 4002,
+      "user": 3109000,
+      "system": 4531000
+    },
+    {
+      "elapsedMs": 5016,
+      "user": 3109000,
+      "system": 4578000
+    },
+    {
+      "elapsedMs": 6017,
+      "user": 3109000,
+      "system": 4625000
+    },
+    {
+      "elapsedMs": 7032,
+      "user": 3187000,
+      "system": 4828000
+    },
+    {
+      "elapsedMs": 8035,
+      "user": 3187000,
+      "system": 4859000
+    },
+    {
+      "elapsedMs": 9063,
+      "user": 3187000,
+      "system": 5140000
+    },
+    {
+      "elapsedMs": 10079,
+      "user": 3437000,
+      "system": 5640000
+    },
+    {
+      "elapsedMs": 11084,
+      "user": 3453000,
+      "system": 5640000
+    },
+    {
+      "elapsedMs": 12089,
+      "user": 3453000,
+      "system": 5687000
+    },
+    {
+      "elapsedMs": 13099,
+      "user": 3515000,
+      "system": 6015000
+    },
+    {
+      "elapsedMs": 14108,
+      "user": 3515000,
+      "system": 6031000
+    },
+    {
+      "elapsedMs": 15111,
+      "user": 3515000,
+      "system": 6062000
+    },
+    {
+      "elapsedMs": 16123,
+      "user": 3609000,
+      "system": 6546000
+    },
+    {
+      "elapsedMs": 17134,
+      "user": 3703000,
+      "system": 6750000
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "status": "FAIL",
+  "diagnosticOnly": true,
+  "noResponseMocks": true,
+  "stageTimes": {
+    "fixture": 7051
+  },
+  "observations": [],
+  "finalState": {
+    "ipc": [],
+    "git": []
+  },
+  "error": "Error: electronApplication.evaluate: ReferenceError: require is not defined\n    at eval (eval at evaluate (:370:30), <anonymous>:4:18)\n    at UtilityScript.evaluate (<anonymous>:372:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)"
+}

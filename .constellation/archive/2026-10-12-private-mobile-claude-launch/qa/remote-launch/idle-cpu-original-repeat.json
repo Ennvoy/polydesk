@@ -1,0 +1,13 @@
+{
+  "startedAt": "2026-10-12T13:39:01.054Z",
+  "args": [
+    "test",
+    "e2e/perf.spec.ts",
+    "--grep",
+    "REQ-MON-006",
+    "--workers=1"
+  ],
+  "exitCode": 1,
+  "durationMs": 42403,
+  "scope": "Unmodified original idle CPU case; diagnosis only, not full ship evidence"
+}

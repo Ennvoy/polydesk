@@ -1,0 +1,33 @@
+
+Running 1 test using 1 worker
+
+(node:33952) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+=== PERF REPORT ===
+{
+  "machine": {
+    "cpu": "Intel(R) Core(TM) Ultra 5 235U",
+    "cores": 14,
+    "totalMemGB": 34
+  },
+  "note": "務實 N 量測（嚴謹 30 次 p95 + 基準機規格留 ship 量一次）",
+  "budgets": {
+    "coldStart": 3000,
+    "wsSwitch": 200,
+    "fileOpen": 500,
+    "keyLatency": 50,
+    "idleCpuPct": 10
+  },
+  "idleCpu": {
+    "pct": 0.8,
+    "workspaces": 10,
+    "windowMs": 18000,
+    "budget": 10
+  }
+}
+  ok 1 e2e\perf.spec.ts:156:5 › REQ-MON-006 N=10 背景閒置監控 CPU 低水位 (32.3s)
+
+  1 passed (33.5s)
+
+SCOPED RESULT {"startedAt":"2026-10-12T13:50:46.060Z","args":["test","e2e/perf.spec.ts","--grep","REQ-MON-006","--workers=1"],"exitCode":0,"durationMs":34863,"scope":"Unmodified original idle CPU case after zero-PTY monitoring fix; not full ship evidence"}
