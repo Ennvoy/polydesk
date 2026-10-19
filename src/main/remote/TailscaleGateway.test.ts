@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const mock = vi.hoisted(() => ({ installed: true, commands: [] as string[][], funnel: false, conflict: false, serves: false, foreground: undefined as unknown, failOff: false }));
+const mock = vi.hoisted(() => ({ installed: true, commands: [] as string[][], funnel: false, conflict: false, serves: false, foreground: undefined as unknown, failOff: false, commandError: null as (Error & { killed?: boolean }) | null, backend: 'Running', malformed: false, configOverride: undefined as Record<string, unknown> | undefined }));
 vi.mock('node:fs', () => ({ existsSync: () => mock.installed }));
 vi.mock('node:child_process', () => ({ execFile: (_file: string, args: string[], _opts: unknown, cb: (e: Error | null, out: string) => void) => {
   mock.commands.push(args);
-  if (args[0] === 'status') return cb(null, JSON.stringify({ BackendState: 'Running', Self: { DNSName: 'desktop.team.ts.net.' } }));
+  if (mock.commandError) return cb(mock.commandError, 'secret raw diagnostic');
+  if (mock.malformed) return cb(null, 'secret malformed output');
+  if (args[0] === 'status') return cb(null, JSON.stringify({ BackendState: mock.backend, Self: { DNSName: 'desktop.team.ts.net.' } }));
+  if (args.join(' ') === 'serve status --json' && mock.configOverride !== undefined) return cb(null, JSON.stringify(mock.configOverride));
   if (args.join(' ') === 'serve status --json') return cb(null, JSON.stringify({
     TCP: mock.serves || mock.conflict ? { '8443': { HTTPS: true } } : {},
     Web: mock.serves || mock.conflict ? { 'desktop.team.ts.net:8443': { Handlers: { '/': { Proxy: mock.conflict ? 'http://127.0.0.1:9999' : 'http://127.0.0.1:49387' } } } } : {},
@@ -15,8 +18,35 @@ vi.mock('node:child_process', () => ({ execFile: (_file: string, args: string[],
   cb(null, '');
 } }));
 import { TailscaleGateway } from './TailscaleGateway';
-beforeEach(() => { mock.installed = true; mock.commands = []; mock.funnel = false; mock.conflict = false; mock.serves = false; mock.foreground = undefined; mock.failOff = false; });
+beforeEach(() => { mock.installed = true; mock.commands = []; mock.funnel = false; mock.conflict = false; mock.serves = false; mock.foreground = undefined; mock.failOff = false; mock.commandError = null; mock.backend = 'Running'; mock.malformed = false; mock.configOverride = undefined; });
 describe('private Tailscale gateway', () => {
+  it.each([
+    { TCP: null },
+    { Web: [] },
+    { TCP: { '8443': true } },
+    { Web: { 'desktop.team.ts.net:8443': 'unknown-handler' } },
+  ])('rejects malformed Serve structure without publishing or overwriting an endpoint: %j', async config => {
+    mock.configOverride = config;
+    await expect(new TailscaleGateway().enable()).rejects.toMatchObject({ kind: 'unsafe' });
+    expect(mock.commands.some(command => command.includes('--bg'))).toBe(false);
+    expect(mock.commands.some(command => command.includes('off') || command.includes('reset'))).toBe(false);
+  });
+  it('classifies CLI failure, timeout and disconnected state as temporary without raw diagnostics', async () => {
+    const g = new TailscaleGateway(); const url = await g.enable();
+    mock.commandError = Object.assign(new Error('secret stderr'), { killed: true });
+    await expect(g.verify(url)).rejects.toMatchObject({ kind: 'temporary', message: expect.stringContaining('逾時') });
+    mock.commandError = new Error('secret stderr');
+    await expect(g.verify(url)).rejects.toMatchObject({ kind: 'temporary', message: expect.not.stringContaining('secret') });
+    mock.commandError = null; mock.backend = 'Stopped';
+    await expect(g.verify(url)).rejects.toMatchObject({ kind: 'temporary' });
+    mock.backend = 'Running'; mock.funnel = true;
+    await expect(g.verify(url)).rejects.toMatchObject({ kind: 'unsafe' });
+    mock.funnel = false; mock.malformed = true;
+    await expect(g.verify(url)).rejects.toMatchObject({ kind: 'unsafe', message: expect.not.stringContaining('secret') });
+    await expect(new TailscaleGateway().enable()).rejects.toMatchObject({ kind: 'unsafe', message: expect.not.stringContaining('secret') });
+    mock.malformed = false; mock.backend = '';
+    await expect(g.verify(url)).rejects.toMatchObject({ kind: 'unsafe' });
+  });
   it('uses fixed loopback target and removes only its own port', async () => {
     const g = new TailscaleGateway(); expect(await g.enable()).toBe('https://desktop.team.ts.net:8443');
     expect(mock.commands).toContainEqual(['serve', '--bg', '--https=8443', 'http://127.0.0.1:49387']);

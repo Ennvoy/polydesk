@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, readFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request } from 'node:http';
+import { GatewayFailure } from './GatewayFailure';
 import { RemoteService, type RemoteDeps } from './RemoteService';
 
 const dirs: string[] = [];
@@ -181,5 +182,103 @@ describe('remote HTTP security and launch contracts', () => {
     const first = call(f.service, '/api/launch', { wsId: 'ws1', opId: crypto.randomUUID() }, a.cookie, { 'X-CSRF-Token': a.csrf }).catch(() => null); await entering;
     await f.service.disable(); f.deps.gateway.verify = async () => undefined; await f.service.enable();
     release(); await first; await new Promise(r => setTimeout(r, 20)); expect(f.counts().spawned).toBe(0);
+  });
+});
+
+describe('gateway recovery', () => {
+  it('rejects a slow pairing body that crosses a pause and recovery', async () => {
+    const f = fixture(); await f.service.enable();
+    const challenge = f.service.createChallenge();
+    const body = JSON.stringify({ code: challenge.code, label: 'phone' });
+    let proceed!: () => void;
+    const ready = new Promise<void>(resolve => { proceed = resolve; });
+    const req = request({ hostname: '127.0.0.1', port: f.service.listeningPort(), path: '/api/pair', method: 'POST', headers: {
+      Host: 'poly.test:8443', 'X-Forwarded-Proto': 'https', Origin: 'https://poly.test:8443',
+      'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), Expect: '100-continue',
+    } });
+    const response = new Promise<number>((resolve, reject) => {
+      req.on('error', reject); req.on('continue', proceed);
+      req.on('response', res => { res.resume(); res.on('end', () => resolve(res.statusCode!)); });
+    });
+    req.flushHeaders(); await ready;
+    req.write(body.slice(0, 10));
+    f.deps.gateway.verify = async () => { throw new GatewayFailure('temporary', 'Tailscale timeout.'); };
+    await f.service.checkGateway();
+    f.deps.gateway.verify = async () => undefined; await f.service.checkGateway();
+    req.end(body.slice(10));
+    expect(await response).toBe(503);
+    expect(f.service.status().pending).toHaveLength(0);
+    expect(f.counts().spawned).toBe(0);
+  });
+  it('clears the retry warning when the user manually stops a paused service', async () => {
+    const f = fixture(); await f.service.enable();
+    f.deps.gateway.verify = async () => { throw new GatewayFailure('temporary', 'Tailscale timeout.'); };
+    await f.service.checkGateway(); expect(f.service.status().error).toContain('1/3');
+    await f.service.disable();
+    expect(f.service.status().enabled).toBe(false);
+    expect(f.service.status().error).toBeNull();
+  });
+  it('does not let an older monitor success clear a launch failure warning', async () => {
+    const f = fixture(); await f.service.enable(); f.service.allowWorkspace('ws1', true);
+    const a = await pair(f.service); let release!: () => void;
+    f.deps.gateway.verify = () => new Promise<void>(r => { release = r; });
+    const monitor = f.service.checkGateway();
+    f.deps.gateway.verify = async () => { throw new GatewayFailure('temporary', 'Tailscale timeout.'); };
+    expect((await call(f.service, '/api/launch', { wsId: 'ws1', opId: crypto.randomUUID() }, a.cookie, { 'X-CSRF-Token': a.csrf })).code).toBe(503);
+    release(); await monitor;
+    expect(f.service.status().error).toContain('1/3');
+    expect((await call(f.service, '/api/session')).code).toBe(503);
+    expect(f.counts().spawned).toBe(0);
+  });
+  it('never launches a request whose verification crossed a pause and recovery', async () => {
+    const f = fixture(); await f.service.enable(); f.service.allowWorkspace('ws1', true);
+    const a = await pair(f.service); let release!: () => void; let entered!: () => void;
+    const entering = new Promise<void>(r => { entered = r; });
+    f.deps.gateway.verify = () => new Promise<void>(r => { release = r; entered(); });
+    const launch = call(f.service, '/api/launch', { wsId: 'ws1', opId: crypto.randomUUID() }, a.cookie, { 'X-CSRF-Token': a.csrf });
+    await entering;
+    f.deps.gateway.verify = async () => { throw new GatewayFailure('temporary', 'Tailscale temporarily unavailable.'); };
+    await f.service.checkGateway();
+    f.deps.gateway.verify = async () => undefined; await f.service.checkGateway();
+    release(); expect((await launch).code).toBe(403); expect(f.counts().spawned).toBe(0);
+  });
+  it('preserves the stop reason when cleanup fails and sanitizes unknown errors', async () => {
+    const f = fixture(); await f.service.enable();
+    f.deps.gateway.verify = async () => { throw new Error('secret stderr'); };
+    f.deps.gateway.disable = async () => { throw new Error('secret cleanup'); };
+    await f.service.checkGateway();
+    expect(f.service.status().enabled).toBe(false);
+    expect(f.service.status().error).toContain('無法安全確認');
+    expect(f.service.status().error).toContain('清理失敗');
+    expect(JSON.stringify(f.service.status())).not.toContain('secret');
+  });
+  it('pauses on transient failure, rejects requests, and recovers without replay', async () => {
+    const f = fixture(); await f.service.enable();
+    f.deps.gateway.verify = async () => { throw new GatewayFailure('temporary', 'Tailscale temporarily unavailable.'); };
+    await f.service.checkGateway();
+    expect(f.service.status().enabled).toBe(true);
+    expect(f.service.status().error).toContain('1/3');
+    expect((await call(f.service, '/api/session')).code).toBe(503);
+    f.deps.gateway.verify = async () => undefined; await f.service.checkGateway();
+    expect(f.service.status().error).toBeNull(); expect(f.counts().spawned).toBe(0);
+    expect(f.service.status().audit.some(a => a.result.includes('恢復'))).toBe(true);
+  });
+  it('disables on third transient failure and persists a readable reason', async () => {
+    const f = fixture(); await f.service.enable();
+    f.deps.gateway.verify = async () => { throw new GatewayFailure('temporary', 'Tailscale timeout.'); };
+    await f.service.checkGateway(); await f.service.checkGateway(); expect(f.service.status().enabled).toBe(true);
+    await f.service.checkGateway(); expect(f.service.status().enabled).toBe(false);
+    expect(f.service.status().error).toContain('timeout');
+    const restored = new RemoteService(f.deps); services.push(restored);
+    expect(restored.status().audit.some(a => a.result.includes('timeout'))).toBe(true);
+  });
+  it('does not let stale success erase a newer warning after re-enable', async () => {
+    const f = fixture(); await f.service.enable(); let release!: () => void;
+    f.deps.gateway.verify = () => new Promise<void>(r => { release = r; });
+    const checking = f.service.checkGateway(); await f.service.disable();
+    f.deps.gateway.verify = async () => undefined; await f.service.enable();
+    f.deps.gateway.verify = async () => { throw new GatewayFailure('temporary', 'Tailscale temporarily unavailable.'); };
+    await f.service.checkGateway(); release(); await checking;
+    expect(f.service.status().error).toContain('1/3');
   });
 });

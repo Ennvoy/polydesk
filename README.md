@@ -1,6 +1,6 @@
 # Polydesk
 
-![version](https://img.shields.io/badge/version-v0.40.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
+![version](https://img.shields.io/badge/version-v0.41.0-blue) ![platform](https://img.shields.io/badge/platform-Windows-informational)
 
 > 多工作區開發終端機 — 把「多個專案的終端機、編輯器、Git、AI 狀態」收進同一個桌面工具。
 
@@ -58,6 +58,12 @@ Polydesk 是以 Electron 打造的桌面應用，專為「同時開多個專案�
 手機的「已送出啟動命令」只表示已建立真實分頁並送出固定命令，不表示 Claude 已登入或就緒。CLI 缺失、登入及後續錯誤請查看電腦終端機。離線操作不排隊、不自動重送；送出後連線中斷時可查詢原操作，若結果無法確認，先檢查電腦分頁，再決定是否重新啟動。
 
 連線使用 [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve) 的私人 HTTPS，預設使用 8443 連入及 loopback 49387 轉接。Polydesk 不使用公開 Funnel，也不會重設其他 Serve 服務；若該埠已有其他服務，須先處理衝突。手機仍須獨立配對，私網連線本身不等於取得啟動授權。bypass 會略過 Claude 的權限確認，工作區授權不是檔案系統沙箱，只允許完全信任的專案。
+
+Polydesk 每 10 秒檢查私人連線。Tailscale 暫時逾時、讀取失敗或尚未連線時，會先暫停受理手機請求與啟動操作；設定會顯示具體原因和重試進度。檢查成功後自動恢復，連續 3 次失敗才停用。Funnel、位址或代理設定改變，以及無法確認安全的設定會立即停用。停用後先依原因處理，再於電腦重新啟用。
+
+恢復連線不會重送暫停期間的操作；請先查詢原操作結果並查看電腦，確認後再決定是否重試。在設定展開「近期操作紀錄」可查看暫停、恢復與停用原因，紀錄在重新啟動後仍保留。程式內「使用說明」搜尋「暫停受理」也能找到處理步驟。
+
+v0.41.0 已通過 41 項遠端、版本與封裝契約測試，以及 6 項分批 Electron 測試；涵蓋導覽、手機啟動、暫停／恢復與重開後查閱原因。驗證範圍、首輪失敗與重跑結果見 [遠端恢復驗證紀錄](specs/remote-recovery-2026-10-19.md)。更新後請關閉舊版，再開啟新版 portable；每次啟動仍須在電腦重新啟用遠端功能，既有配對與工作區授權保留。
 
 需求、安全邊界與驗收方式見 [手機啟動規格](specs/remote-launch.md)。
 

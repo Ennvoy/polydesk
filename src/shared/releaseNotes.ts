@@ -15,6 +15,16 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.41.0',
+    date: '2026-10-19',
+    highlights: [
+      '手機遠端連線每 10 秒檢查；暫時失敗先暫停受理，連續 3 次失敗才停用',
+      '私人連線檢查成功後自動恢復，暫停期間的啟動操作不會自動重送',
+      '設定顯示暫停原因與重試進度，近期操作紀錄保留暫停、恢復與停用原因',
+      'Funnel、位址或代理設定改變等安全問題仍立即停用，完整指南補上處理方式',
+    ],
+  },
+  {
     version: '0.40.0',
     date: '2026-10-12',
     highlights: [

@@ -21,7 +21,7 @@ async function terminalText(page: Page) {
     if (!t) return ''; return Array.from({ length: t.buffer.active.length }, (_, y) => t.buffer.active.getLine(y)?.translateToString(true) ?? '').join('\n');
   }).join('\n'));
 }
-test('真 HTTP 手機配對與桌面批准，縮小後新增固定 Claude GUI 分頁且同操作不重複', async () => {
+test('真 HTTP 手機配對與桌面批准，縮小後新增固定 Claude GUI 分頁且同操作不重複', async ({}, testInfo) => {
   test.setTimeout(120000);
   const root = mkdtempSync(join(tmpdir(), 'pd-remote-e2e-')); const bin = join(root, 'bin');
   const ws1 = join(root, 'remote-workspace'); const ws2 = join(root, 'other-workspace');
@@ -99,5 +99,19 @@ test('真 HTTP 手機配對與桌面批准，縮小後新增固定 Claude GUI �
     copyFileSync(join(process.cwd(), 'test-results', 'remote-desktop-settings.png'), join(qa, 'desktop-revoked.png'));
     await page.getByRole('button', { name: '停用手機遠端啟動' }).click();
     await expect(page.getByText('已停用 · 無遠端監聽')).toBeVisible();
+  } catch (error) {
+    // Preserve only visible UI state and the public status API. Never capture
+    // cookies, pairing codes, browser storage, or the raw authorization file.
+    const diagnostic = await Promise.allSettled([
+      terminalText(page),
+      mobile.locator('#result').textContent(),
+      mobile.locator('#status').textContent(),
+      page.evaluate(() => window.polydesk.remote.status()),
+      page.screenshot({ path: testInfo.outputPath('remote-launch-failure-desktop.png'), mask: [page.locator('section[aria-label="手機遠端啟動"] code'), page.getByAltText('手機配對 QR code')] }),
+      mobile.screenshot({ path: testInfo.outputPath('remote-launch-failure-mobile.png'), fullPage: true, mask: [mobile.locator('input')] }),
+    ]);
+    const safe = diagnostic.slice(0, 4).map(result => result.status === 'fulfilled' ? result.value : { unavailable: String(result.reason) });
+    writeFileSync(testInfo.outputPath('remote-launch-failure.json'), JSON.stringify({ terminalText: safe[0], mobileResult: safe[1], mobileStatus: safe[2], remoteStatus: safe[3] }, null, 2), 'utf8');
+    throw error;
   } finally { await mobileContext.close(); await browser.close(); await app.close(); rmSync(root, { recursive: true, force: true }); rmSync(userData, { recursive: true, force: true }); }
 });

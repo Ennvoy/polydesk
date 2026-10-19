@@ -41,7 +41,8 @@ export function RemoteSettings(): React.JSX.Element {
       <button className="pd-btn" onClick={() => void ipc.app.openExternalUrl({ url: 'https://tailscale.com/download' })}>Tailscale 安裝</button>
       <button className="pd-btn" onClick={() => void ipc.app.openExternalUrl({ url: 'https://tailscale.com/docs/features/tailscale-serve' })}>私人 HTTPS 設定說明</button>
     </div>
-    <p role="status" style={textStyle}>{status?.enabled ? '已啟用 · 僅 Tailscale 私人 HTTPS' : '已停用 · 無遠端監聽'}{status?.error ? ` · ${status.error}` : ''}</p>
+    <p role="status" style={textStyle}>{status?.enabled ? status.error ? '暫停受理 · 正在檢查私人連線' : '已啟用 · 僅 Tailscale 私人 HTTPS' : '已停用 · 無遠端監聽'}{status?.error ? ` · ${status.error}` : ''}</p>
+    <p style={textStyle}>每 10 秒檢查私人連線。暫時讀取失敗會先暫停受理，檢查成功後恢復；連續 3 次失敗才停用。Funnel、位址或代理設定改變等安全問題會立即停用。暫停期間的操作不會在恢復後自動重送。</p>
     <button className="pd-btn" disabled={busy || !status} onClick={() => void run(() => status?.enabled ? ipc.remote.disable() : ipc.remote.enable())}>{status?.enabled ? '停用手機遠端啟動' : '啟用手機遠端啟動'}</button>
     {status?.enabled && <>
       <p style={{ ...textStyle, overflowWrap: 'anywhere' }}>手機入口：{status.url}</p>

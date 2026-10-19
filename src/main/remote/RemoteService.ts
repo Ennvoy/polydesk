@@ -1,3 +1,4 @@
+import { gatewayFailure } from './GatewayFailure';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomBytes, randomUUID, createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync, realpathSync } from 'node:fs';
@@ -45,7 +46,10 @@ export class RemoteService {
   private csrfKey = secret();
   private timer: ReturnType<typeof setInterval> | null = null;
   private rates = new Map<string, { at: number; n: number }>();
-  private checking = false;
+  private checking: number | null = null;
+  private gatewayFailures = 0;
+  private gatewayRevision = 0;
+  private paused = false;
   private lifecycle = 0;
   private enabling = false;
   private startingServer: Server | null = null;
@@ -125,7 +129,7 @@ export class RemoteService {
       await this.deps.gateway.verify(url);
       if (gen !== this.lifecycle) throw new Error('啟用已取消。');
       this.url = u.origin;
-      this.server = server; this.error = null;
+      this.server = server; this.error = null; this.paused = false; this.gatewayFailures = 0;
       this.startingServer = null;
       this.startingListening = false;
       this.timer = setInterval(() => { this.prune(); void this.checkGateway(); }, 10000); this.timer.unref();
@@ -142,8 +146,12 @@ export class RemoteService {
     finally { this.enabling = false; this.enableFinished = null; finishEnable(); }
   }
   disable(): Promise<void> {
+    if (this.paused && this.server && !this.disableTask) this.error = null;
+    return this.stop();
+  }
+  private stop(): Promise<void> {
     if (this.disableTask) return this.disableTask;
-    ++this.lifecycle;
+    ++this.lifecycle; this.checking = null; this.paused = false; this.gatewayFailures = 0;
     if (this.timer) clearInterval(this.timer); this.timer = null;
     // close() before the listen callback cancels that callback in Node. Let the
     // enable path observe cancellation and close its own socket after bind settles.
@@ -157,19 +165,39 @@ export class RemoteService {
         // An in-flight enable may finish creating Serve after cancellation. It must
         // clean up first; new enables stay blocked until this shutdown completes.
         if (enableFinished) await enableFinished;
-        await this.deps.gateway.disable().catch(() => { this.error = '手機入口已停止，但 Tailscale 入口清理失敗；請檢查 Tailscale Serve 設定。'; });
+        await this.deps.gateway.disable().catch(() => { const detail = 'Tailscale 入口清理失敗；請檢查 Tailscale Serve 設定。'; this.error = this.error ? `${this.error} ${detail}` : detail; this.audit('remote', detail); });
         this.audit('remote', '已停用'); this.save();
       } finally { this.disableTask = null; }
     };
     this.disableTask = run(); return this.disableTask;
   }
+  private async gatewayRejected(error: unknown, gen: number): Promise<void> {
+    if (gen !== this.lifecycle || !this.server) return;
+    const failure = gatewayFailure(error);
+    ++this.gatewayRevision;
+    const count = ++this.gatewayFailures;
+    const stopping = failure.kind === 'unsafe' || count >= 3;
+    this.error = stopping
+      ? `${failure.message} 遠端功能已停用，請檢查後重新啟用。`
+      : `${failure.message} 已暫停受理遠端請求；重試 ${count}/3，約 10 秒後再次檢查。`;
+    this.paused = true;
+    this.cancel(() => true, '私人連線暫停，啟動已取消，請確認電腦後重新操作。');
+    this.audit('remote', this.error); this.save();
+    if (stopping) await this.stop();
+  }
   async checkGateway(): Promise<void> {
-    if (!this.url || this.checking) return;
-    this.checking = true;
+    if (!this.url || this.checking === this.lifecycle) return;
     const gen = this.lifecycle;
-    try { await this.deps.gateway.verify(this.url); }
-    catch { if (gen === this.lifecycle) { this.error = 'Tailscale 私有連線狀態改變；遠端功能已停用，請檢查後重新啟用。'; await this.disable(); } }
-    finally { this.checking = false; }
+    const revision = this.gatewayRevision;
+    this.checking = gen;
+    try {
+      await this.deps.gateway.verify(this.url);
+      if (gen === this.lifecycle && revision === this.gatewayRevision && this.server) {
+        if (this.paused) { this.audit('remote', '私人連線已恢復，重新受理遠端請求；已取消的啟動不會重播。'); this.save(); }
+        this.paused = false; this.gatewayFailures = 0; this.error = null;
+      }
+    } catch (error) { await this.gatewayRejected(error, gen); }
+    finally { if (this.checking === gen) this.checking = null; }
   }
   createChallenge(): { code: string; url: string; expiresAt: number } {
     if (!this.url || !this.server) throw new Error('請先啟用遠端功能。');
@@ -213,9 +241,11 @@ export class RemoteService {
   private csrf(d: Device): string { return createHmac('sha256', this.csrfKey).update(d.hash).digest('base64url'); }
   private cookie(res: ServerResponse, token: string, ttl: number): void { res.setHeader('Set-Cookie', `${COOKIE}=${token}; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.max(0, Math.floor(ttl / 1000))}`); }
   private async json(req: IncomingMessage): Promise<unknown> {
+    const generation = this.lifecycle; const revision = this.gatewayRevision;
     if (req.headers['content-type'] !== 'application/json') throw new HttpError(415, '僅接受 JSON。');
     if (Number(req.headers['content-length'] ?? 0) > 2048) throw new HttpError(413, '請求過大。');
     let text = ''; for await (const chunk of req) { text += String(chunk); if (Buffer.byteLength(text) > 2048) throw new HttpError(413, '請求過大。'); }
+    if (this.paused || generation !== this.lifecycle || revision !== this.gatewayRevision) throw new HttpError(503, '私人連線已暫停或變更，請重新操作。');
     try { return JSON.parse(text); } catch { throw new HttpError(400, '請求格式不正確。'); }
   }
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -224,6 +254,7 @@ export class RemoteService {
     res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Cache-Control', 'no-store'); res.setHeader('Referrer-Policy', 'no-referrer');
     try {
       this.prune();
+      if (this.paused) throw new HttpError(503, this.error ?? '私人連線暫停受理。');
       if (!this.url || req.headers.host !== new URL(this.url).host || req.headers['x-forwarded-proto'] !== 'https' || req.headers['tailscale-funnel-request']) throw new HttpError(403, '此連線不是核准的私有 HTTPS 入口。');
       if (req.headers.origin && req.headers.origin !== this.url) throw new HttpError(403, '來源不正確。');
       if (req.headers['sec-fetch-site'] === 'cross-site') throw new HttpError(403, '來源不正確。');
@@ -285,8 +316,10 @@ export class RemoteService {
     const old = this.saved.operations.find(o => o.opId === opId);
     if (old) { if (old.deviceId !== deviceId || old.wsId !== wsId) throw new HttpError(409, '操作識別碼已使用。'); return old; }
     const generation = this.lifecycle;
-    await this.deps.gateway.verify(this.url!);
-    if (generation !== this.lifecycle) throw new HttpError(403, '遠端功能已停用；原啟動請求已取消。');
+    const revision = this.gatewayRevision;
+    if (this.paused) throw new HttpError(503, this.error ?? '私人連線暫停受理。');
+    try { await this.deps.gateway.verify(this.url!); } catch (error) { await this.gatewayRejected(error, generation); throw new HttpError(503, this.error ?? '私人連線驗證失敗。'); }
+    if (this.paused || revision !== this.gatewayRevision || generation !== this.lifecycle) throw new HttpError(403, '遠端功能已停用或曾暫停；原啟動請求已取消。');
     const w = this.authorize(deviceId, wsId);
     if (this.saved.operations.some(o => o.state === 'pending') || this.saved.operations.some(o => o.at > this.now() - 2000)) throw new HttpError(429, '上一個啟動仍在處理，請稍候。');
     if (this.deps.terminalCount() >= 30) throw new HttpError(429, '終端機已達 30 個上限，請在電腦關閉不使用的分頁。');
@@ -305,8 +338,11 @@ export class RemoteService {
   async rendererReady(opId: string, termId: string): Promise<void> {
     const op = this.saved.operations.find(o => o.opId === opId && o.termId === termId);
     if (!op || op.state !== 'pending') return;
+    const generation = this.lifecycle;
     try {
-      await this.deps.gateway.verify(this.url!);
+      if (this.paused) throw new Error('私人連線暫停受理。');
+      try { await this.deps.gateway.verify(this.url!); } catch (error) { await this.gatewayRejected(error, generation); throw error; }
+      if (generation !== this.lifecycle || this.paused) throw new Error('私人連線狀態已變更。');
       if (op.state !== 'pending') return;
       const w = this.authorize(op.deviceId, op.wsId);
       if (!op.path || this.pathIdentity(w) !== op.path) throw new Error('工作區路徑與建立終端機時不同。');

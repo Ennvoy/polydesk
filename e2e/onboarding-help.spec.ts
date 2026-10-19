@@ -157,6 +157,12 @@ test('說明與設定共用入口可搜尋完整指南，手動導覽不改寫�
     await expect(page.getByText('到期／撤銷／路徑改變', { exact: true })).toBeVisible();
     await expect(page.getByText('bypass 略過權限確認，並不是工作區沙箱', { exact: false })).toBeVisible();
     await expect(page.getByText('已啟動的 Claude 不會因撤銷而強制結束。', { exact: false })).toBeVisible();
+    // A user seeing a paused connection must be able to find the recovery steps by that state.
+    await page.getByLabel('搜尋使用說明').fill('暫停受理');
+    await expect(page.getByRole('heading', { name: '手機遠端啟動 Claude bypass', exact: true })).toBeVisible();
+    await expect(page.getByText('暫停受理／自動恢復', { exact: true })).toBeVisible();
+    await expect(page.getByText('先查看原操作結果與電腦狀態', { exact: false })).toBeVisible();
+    await expect(page.getByText('先確認 Tailscale 已連線', { exact: false })).toBeVisible();
     await page.getByLabel('搜尋使用說明').fill('');
     await page.getByLabel('使用說明分類').getByRole('button', { name: /問題排除/ }).click();
     await expect(page.getByText('信任、確認與安全限制', { exact: true })).toBeVisible();
