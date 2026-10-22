@@ -78,5 +78,5 @@
 
 - portable 解壓期間由 electron-builder `portable.splashImage` 顯示 420×230、24-bit RGB、沒有圓圈的靜態 BMP。`build/portableBuilder.js` 複製 builder 25.1.8 的 NSIS 模板，強制每次啟動使用 `$PLUGINSDIR/app`（此版 builder 的 `unpackDirName=false` 仍會產生打包時固定的 KSUID），並在 NSIS 自動顯示標準框前將該框移出可見桌面；品牌 BMP 留在中央。交接區段讓原生 BMP 保持到 Electron 主視窗已顯示或失敗視窗已顯示，透過本次獨立解壓目錄中的固定就緒標記收尾；正常路徑不建立 Electron splash。解壓器仍等 app 結束再清理，僅對自己的解壓目錄做最多 50 次／100ms 的有界重試；持續占用時以失敗狀態退出，程序狀態未知則保留檔案。啟動前 Windows 驗簽、防毒與排程仍可延後首個畫面（決議 119）。
 - renderer 先載入工作區狀態再 render，`App` commit 後以固定白名單 `app:rendererReady` 握手；main 同時取得正確 webContents 的 `ready-to-show` 與 renderer-ready 才顯示主窗、寫入 portable 就緒標記，隨後由原生解壓器關閉 BMP 並記錄 `window:interactive`。
-- 主畫面載入／初始化失敗時才建立 sandbox、無 Node 整合、禁止外部導航的本機 `data:` 失敗視窗，顯示具名原因並提供重試或退出；主視窗尚未 interactive 時，第二實例事件不會提前把隱藏主窗顯示出來。
+- 主畫面載入／初始化失敗，或主視窗 renderer 異常結束時才建立（後者置頂、重試後重新握手並記 `recovered`）sandbox、無 Node 整合、禁止外部導航的本機 `data:` 失敗視窗，顯示具名原因並提供重試或退出；主視窗尚未 interactive 時，第二實例事件不會提前把隱藏主窗顯示出來。
 - `e2e/perf.spec.ts` 的冷啟動 p95 3 秒門檻維持未放寬；既有環境豁免必須在出貨證據中明確記錄，不得把 splash 首次顯示當成可互動時間。

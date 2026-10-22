@@ -58,6 +58,12 @@ export function TitleBar(): React.JSX.Element {
     };
   }, [openMenu]);
 
+  const openDiagnosticsFolder = async (): Promise<void> => {
+    const res = await ipc.app.openDiagnosticsDir().catch(() => ({ error: 'open-failed' as const }));
+    if ('error' in res) {
+      await dialog.confirm({ title: '無法開啟資料夾', body: '無法開啟診斷記錄資料夾，請稍後再試。', confirmText: '知道了' });
+    }
+  };
   const openSettings = (): void => void dialog.open((close) => <SettingsPanel onClose={() => close()} />);
 
   const menus: MenuDef[] = [
@@ -96,6 +102,7 @@ export function TitleBar(): React.JSX.Element {
       items: [
         { label: '教學導覽…', onClick: () => tourBus.start('manual') },
         { label: '使用說明…', onClick: openHelpCenter },
+        { label: '開啟診斷記錄資料夾', onClick: () => void openDiagnosticsFolder() },
         { label: '', separator: true },
         // 版本可視化（PE-3）：版本號/更新重點的唯一入口之一（另一個在狀態列右下）。
         { label: '關於 Polydesk', onClick: () => void dialog.open((close) => <AboutDialog onClose={() => close()} />) },

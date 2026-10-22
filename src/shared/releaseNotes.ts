@@ -15,6 +15,16 @@ export interface ReleaseNote {
 /** 由新到舊排列；[0] 即目前版本。 */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.42.0',
+    date: '2026-10-22',
+    highlights: [
+      '新增本機崩潰診斷：啟用 crash reporter 於本機保存 minidump（不上傳）',
+      '主程序事件（啟動、主視窗可互動、renderer／子程序異常結束、螢幕移除、結束前）寫入 userData 的 logs/main.log，超過 2 MB 輪替並保留一代',
+      '主視窗 renderer 異常結束時不再只剩全黑視窗，改顯示失敗視窗說明原因，可「重試」重新載入主畫面或「退出」',
+      '「說明」選單新增「開啟診斷記錄資料夾」；完整使用說明新增「畫面全黑或出現失敗視窗」一節',
+    ],
+  },
+  {
     version: '0.41.0',
     date: '2026-10-19',
     highlights: [

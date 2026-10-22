@@ -28,6 +28,8 @@ export interface SplashController {
   complete(): void;
   fail(reason: string): void;
   retrying(): void;
+  /** 置頂（renderer 崩潰時黑底主視窗仍在畫面上，失敗視窗須壓在它上面）。 */
+  raise(): void;
 }
 
 export function createSplashWindow(actions: { retry: () => void; exit: () => void }, reason: string): SplashController {
@@ -102,6 +104,9 @@ export function createSplashWindow(actions: { retry: () => void; exit: () => voi
           win.focus();
         }
       });
+    },
+    raise(): void {
+      if (!win.isDestroyed()) win.setAlwaysOnTop(true);
     },
     retrying(): void {
       if (done || win.isDestroyed()) return;

@@ -70,6 +70,10 @@ export interface InvokeChannels {
     req: { url: string };
     res: { opened: true } | { error: 'invalid-url' | 'open-failed' };
   };
+  'app:openDiagnosticsDir': {
+    req: void;
+    res: { opened: true } | { error: 'open-failed' };
+  };
   // 工作區管理
   'workspace:list': { req: void; res: Workspace[] };
   'workspace:add': { req: WorkspaceInput; res: Workspace | { error: 'duplicate' | 'invalid' } };

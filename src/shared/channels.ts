@@ -15,6 +15,7 @@ export const INVOKE_CHANNELS = [
   'remote:ready',
   'app:rendererReady',
   'app:openExternalUrl',
+  'app:openDiagnosticsDir',
   'workspace:list',
   'workspace:add',
   'workspace:remove',

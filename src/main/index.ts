@@ -1,6 +1,6 @@
 // Polydesk main 入口：單一實例 + 安全基線 BrowserWindow + CSP + 狀態持久化 + perf 埋點。
 
-import { app, BrowserWindow, ipcMain, Menu, screen, session, shell } from 'electron';
+import { app, BrowserWindow, crashReporter, ipcMain, Menu, screen, session, shell } from 'electron';
 import { join } from 'node:path';
 import { StateStore } from './store/StateStore';
 import { registerIpcHandlers, type MainServices } from './ipc/router';
@@ -16,6 +16,7 @@ import { isEditorPasteShortcut } from './window/pasteShortcut';
 import { normalizeExternalHttpUrl } from '../shared/externalUrl';
 import { createSplashWindow, type SplashController } from './window/splashWindow';
 import { markPortableStartupReady } from './window/portableStartup';
+import { errorText, logDiagnostic } from './diagnostics/diagnosticsLog';
 
 mark('main:start'); // 冷啟動量測起點（REQ-PERF-001）
 // 診斷 seam（X-1 perf harness 經 electronApp.evaluate 讀 main 埋點；非 IPC、不影響執行期）。
@@ -45,6 +46,7 @@ let store: StateStore;
 let services: MainServices;
 let splash: SplashController | null = null;
 let mainInteractive = false;
+let quitting = false;
 
 function stateFilePath(): string {
   return join(app.getPath('userData'), STATE_FILE_NAME);
@@ -146,6 +148,7 @@ function createWindow(): void {
   let readyToShow = false;
   let rendererReady = false;
   let interactive = false;
+  let recovered = false; // renderer 崩潰後重載：冷啟動量測只計首次
   const finishInteractive = (): void => {
     if (interactive || !readyToShow || !rendererReady || !mainWindow) return;
     interactive = true;
@@ -154,8 +157,13 @@ function createWindow(): void {
     markPortableStartupReady();
     splash?.complete();
     splash = null;
+    if (recovered) {
+      logDiagnostic('window:interactive', { recovered });
+      return;
+    }
     mark('window:interactive');
     const coldMs = measure('coldStart', 'main:start', 'window:interactive');
+    logDiagnostic('window:interactive', { recovered, coldStartMs: Math.round(coldMs) });
     // eslint-disable-next-line no-console
     console.log(`[Polydesk] cold-start to interactive: ${coldMs.toFixed(1)} ms`);
   };
@@ -188,7 +196,19 @@ function createWindow(): void {
   mainWindow.webContents.on('did-fail-load', (_event, _code, description, _url, isMainFrame) => {
     if (isMainFrame) { void services.remote.disable(); showStartupFailure(description || '主畫面載入失敗，請重試或退出程式。'); }
   });
-  mainWindow.webContents.on('render-process-gone', () => { mainInteractive = false; void services.remote.disable(); });
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    logDiagnostic('render-process-gone', { reason: details.reason, exitCode: details.exitCode });
+    mainInteractive = false;
+    services.editorPasteFocus.clear(webContentsId); // webContents.id 崩潰後不變；不清會讓終端機 Ctrl+V 被誤判為 Monaco 焦點
+    void services.remote.disable();
+    // 正常關閉或結束流程中的 renderer 終止不是故障。
+    if (details.reason === 'clean-exit' || quitting || !mainWindow || mainWindow.isDestroyed()) return;
+    // 重載後要重新走一次「renderer 握手 → 顯示主窗 → 關閉失敗視窗」；ready-to-show 只在首次繪製發一次，沿用舊旗標。
+    interactive = false;
+    rendererReady = false;
+    recovered = true;
+    showStartupFailure(`主畫面程序異常結束（原因：${details.reason}，代碼 ${details.exitCode}），請重試或退出程式。`, true);
+  });
 
   // 外開連結一律拒絕 app 內導航，改丟系統瀏覽器（REQ-SEC-001）
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -233,9 +253,10 @@ function createWindow(): void {
   loadMainContent(mainWindow);
 }
 
-function showStartupFailure(reason: string): void {
+function showStartupFailure(reason: string, raise = false): void {
   if (splash) {
     splash.fail(reason);
+    if (raise) splash.raise();
     return;
   }
   splash = createSplashWindow({
@@ -252,6 +273,7 @@ function showStartupFailure(reason: string): void {
     },
     exit: () => app.quit(),
   }, reason);
+  if (raise) splash.raise(); // 黑底主視窗仍在畫面上時，失敗視窗須壓在它上面
   void splash.whenShown.then(markPortableStartupReady);
 }
 
@@ -277,6 +299,22 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
+  crashReporter.start({ uploadToServer: false });
+  logDiagnostic('app:start', {
+    appVersion: app.getVersion(),
+    electronVersion: process.versions.electron,
+    crashDumps: app.getPath('crashDumps'),
+    packaged: app.isPackaged,
+  });
+  // 不註冊 uncaughtException。Electron 33 主程序的未處理 rejection 預設會轉成 uncaughtException 並跳出錯誤框；
+  // 掛 listener 會取代該預設，所以先記 log，再於下一個 tick 重新拋出，讓它回到原本的預設路徑。
+  process.on('unhandledRejection', (reason) => {
+    logDiagnostic('unhandledRejection', { reason: errorText(reason) });
+    process.nextTick(() => { throw reason; });
+  });
+  app.on('child-process-gone', (_event, details) => {
+    logDiagnostic('child-process-gone', { type: details.type, reason: details.reason, exitCode: details.exitCode, name: details.name });
+  });
   app.on('second-instance', () => {
     if (mainWindow && mainInteractive) {
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -289,6 +327,9 @@ if (!gotTheLock) {
   app.setAppUserModelId('com.polydesk.app');
 
   app.whenReady().then(() => {
+    screen.on('display-removed', () => {
+      logDiagnostic('display-removed', { bounds: mainWindow && !mainWindow.isDestroyed() ? mainWindow.getBounds() : null });
+    });
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
@@ -305,11 +346,11 @@ if (!gotTheLock) {
   // 必須「等 teardown 真的做完」才退出：原本射後不理，taskkill 常來不及跑 → PTY shell 變孤兒、
   // ConPTY 原生 handle 未釋放 → 打包版整棵程序樹卡在工作管理員。故攔下第一次 quit、await 全部
   // teardown（保底逾時，清理卡死也不留殭屍）後 app.exit(0) 硬退（quit 事件仍會發，updater 掛勾不受影響）。
-  let quitting = false;
   app.on('before-quit', (e) => {
     if (quitting) return;
     e.preventDefault();
     quitting = true;
+    logDiagnostic('app:before-quit');
     void shutdownAndExit();
   });
 }
